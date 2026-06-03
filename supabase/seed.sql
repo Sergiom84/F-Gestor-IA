@@ -1,0 +1,2 @@
+-- Seed data intentionally left minimal for now.
+-- Add non-secret reference data here after the initial schema is validated locally.

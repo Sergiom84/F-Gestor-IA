@@ -1,0 +1,33 @@
+{
+  "name": "gfiscal",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "worker:documents": "tsx src/workers/document-worker/index.ts",
+    "worker:extract-local": "tsx src/workers/document-worker/extract-local-pdf.ts",
+    "worker:extract-invoice": "tsx src/workers/document-worker/extract-document-invoice.ts",
+    "review:invoice-local": "tsx src/workers/document-worker/review-invoice-local.ts",
+    "dashboard:local": "tsx src/workers/document-worker/dashboard-local.ts",
+    "worker:ocr-plan-local": "tsx src/workers/document-worker/ocr-plan-local.ts",
+    "regulatory:local": "tsx src/workers/document-worker/regulatory-local.ts",
+    "test": "npm run test:regulatory",
+    "test:regulatory": "node --import tsx --test src/workers/document-worker/regulatory/regulatory-ledger.test.ts"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.87.1",
+    "dotenv": "^17.2.3",
+    "pdfjs-dist": "^5.4.394",
+    "postgres": "^3.4.7",
+    "zod": "^4.1.13"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
