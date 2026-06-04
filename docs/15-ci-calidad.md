@@ -9,7 +9,7 @@ La Fase 14 deja una primera puerta de calidad automatizable sin depender de cred
 
 Se separan dos niveles:
 
-- CI rapido: TypeScript y tests unitarios.
+- CI rapido: TypeScript, tests unitarios y build Next.js.
 - CI Supabase local: migraciones, lint y pgTAP sobre Postgres local de Supabase.
 - Smoke MVP remoto: ejecucion manual contra Supabase cloud con fixture efimero y cleanup.
 
@@ -21,7 +21,7 @@ npm run ci:supabase-local
 npm run ci:full
 ```
 
-`ci:static` ejecuta `typecheck` y tests unitarios.  
+`ci:static` ejecuta `typecheck`, tests unitarios y `next build`.
 `ci:supabase-local` delega en `supabase:validate-local`.  
 `ci:full` encadena ambos niveles.
 
@@ -40,7 +40,7 @@ Hace:
 - `actions/checkout@v6`.
 - `actions/setup-node@v6` con Node 22 y cache npm.
 - `npm ci`.
-- `npm run ci:static`.
+- `npm run ci:static`, que incluye build web.
 
 ### `.github/workflows/supabase-local.yml`
 
@@ -93,7 +93,7 @@ Queda manual porque toca Supabase remoto y usa `service_role` en un proceso cont
 
 ## Seguridad
 
-- `ci.yml` no usa secretos.
+- `ci.yml` no usa secretos y no necesita `service_role`.
 - `supabase-local.yml` no conecta a Supabase remoto, no usa `service_role`, no ejecuta `db push` y corre contra Postgres local efimero.
 - `smoke-mvp-remote.yml` usa secretos solo en GitHub Actions, no imprime valores y ejecuta cleanup por defecto.
 

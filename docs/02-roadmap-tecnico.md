@@ -501,8 +501,49 @@ Resultado:
 Siguiente prioridad alta:
 
 - Preparar fixture de factura real para repetir el smoke completo sin depender solo del PDF sintetico.
-- Empezar superficie Next.js minima: Auth Supabase SSR, organizacion activa y bandeja documental.
+- Completar Fase 1/2 de producto: crear organizacion, cliente, entidad fiscal y subida PDF desde UI.
 - Promocionar validaciones manuales a PR cuando Supabase local y smoke remoto hayan pasado de forma repetible en GitHub Actions.
+
+## Fase 16 - Superficie Next.js minima
+
+Objetivo:
+
+- Abrir una primera superficie de producto real sobre Supabase Auth/RLS.
+
+Estado:
+
+- Iniciada.
+- Next.js App Router instalado con React.
+- `@supabase/ssr` integrado con `getAll`/`setAll`.
+- `proxy.ts` refresca sesion con `supabase.auth.getUser()`.
+- `/login` usa server action con email/password.
+- `/dashboard` requiere usuario autenticado, resuelve organizacion activa y muestra bandeja documental/revisiones de lectura.
+- `ci:static` incluye `next build`.
+- `postcss` queda forzado por override a `8.5.10`; `npm audit --omit=dev` queda limpio.
+
+Incluye:
+
+- Auth Supabase SSR.
+- Login y logout.
+- Selector de organizacion activa por query.
+- Metricas de documentos, revision, clientes y entidades fiscales.
+- Lista de documentos y tareas de revision bajo RLS.
+
+No incluye todavia:
+
+- Registro de usuarios.
+- Crear organizacion desde UI.
+- CRUD de clientes/entidades fiscales desde UI.
+- Upload PDF desde UI.
+- Revision/aprobacion de factura desde UI.
+
+Criterio de salida:
+
+- Un usuario con membresia activa puede entrar y ver su bandeja documental sin usar `service_role` en frontend.
+
+Resultado:
+
+- `npm run typecheck`, `npm run ci:static` y `npm run build` pasan localmente.
 
 ## Backlog consciente
 

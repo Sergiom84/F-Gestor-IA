@@ -30,6 +30,7 @@ La base tecnica inicial esta documentada y parcialmente implementada:
 - Fase 13 iniciada con runner de validacion local Supabase para migraciones, lint y pgTAP.
 - Fase 14 iniciada con CI rapido y workflow manual de validacion Supabase local.
 - Smoke MVP remoto validado con aprobacion DB y cobertura unitaria de dispatcher, dedupe documental, presupuesto IA y revision humana.
+- Superficie Next.js minima iniciada: Supabase Auth SSR, proxy de sesion, login, organizacion activa y bandeja documental de lectura.
 
 Pendiente importante: Supabase local sigue pendiente porque Docker Desktop no esta operativo en el entorno actual.
 La conexion real a Supabase remoto ya esta vinculada y las migraciones estan aplicadas.
@@ -39,7 +40,7 @@ Estado de publicacion: las fases 10-14 estan publicadas en el remoto principal e
 ## Prioridad alta inmediata
 
 1. Preparar un fixture de factura real ademas del PDF sintetico del smoke.
-2. Empezar superficie Next.js minima: Auth Supabase SSR, organizacion activa y bandeja documental.
+2. Completar Fase 1/2 de producto: crear organizacion, cliente, entidad fiscal y subida PDF desde UI.
 3. Promocionar validaciones manuales a PR cuando Supabase local y smoke remoto hayan pasado de forma repetible en GitHub Actions.
 
 ## Documentacion inicial
@@ -72,7 +73,7 @@ Estado de publicacion: las fases 10-14 estan publicadas en el remoto principal e
 
 ## Fuera de alcance por ahora
 
-- No hay codigo de aplicacion/frontend todavia.
+- La UI aun no crea organizaciones, clientes, entidades fiscales ni sube PDFs.
 - Supabase local queda pendiente de validar con Docker Desktop.
 - El proveedor IA se invoca desde worker/CLI cuando `OPENAI_API_KEY` esta configurada.
 
@@ -82,6 +83,8 @@ La Fase 3 tiene un worker TypeScript inicial para PDFs con texto embebido:
 
 ```powershell
 npm run typecheck
+npm run dev
+npm run build
 npm run worker:extract-local -- C:\ruta\factura.pdf
 npm run worker:documents
 npm run worker:extract-invoice -- <document_id>
@@ -140,6 +143,6 @@ Estos comandos requieren Docker Desktop en ejecucion.
 
 La Fase 14 deja workflows GitHub Actions para CI rapido, Supabase local y smoke remoto manual:
 
-- `.github/workflows/ci.yml`: `npm ci` + `npm run ci:static` en push/PR.
+- `.github/workflows/ci.yml`: `npm ci` + `npm run ci:static` en push/PR (`typecheck`, tests unitarios y `next build`).
 - `.github/workflows/supabase-local.yml`: validacion Supabase local manual con CLI `2.104.0`.
 - `.github/workflows/smoke-mvp-remote.yml`: smoke MVP remoto manual contra Supabase cloud; requiere `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `DATABASE_URL` y, si `run_ai=true`, `OPENAI_API_KEY`. Ejecuta con `--cleanup` por defecto.

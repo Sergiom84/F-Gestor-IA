@@ -5,6 +5,9 @@
   "type": "module",
   "scripts": {
     "typecheck": "tsc --noEmit",
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
     "worker:documents": "tsx src/workers/document-worker/index.ts",
     "worker:extract-local": "tsx src/workers/document-worker/extract-local-pdf.ts",
     "worker:extract-invoice": "tsx src/workers/document-worker/extract-document-invoice.ts",
@@ -16,7 +19,7 @@
     "regulatory:persist-invoice": "tsx src/workers/document-worker/regulatory-persist-invoice.ts",
     "supabase:validate-local": "tsx src/tools/supabase-local-validate.ts",
     "smoke:mvp-remote": "tsx src/tools/smoke-mvp-remote.ts",
-    "ci:static": "npm run typecheck && npm test",
+    "ci:static": "npm run typecheck && npm test && npm run build",
     "ci:supabase-local": "npm run supabase:validate-local",
     "ci:full": "npm run ci:static && npm run ci:supabase-local",
     "db:test": "npx supabase test db --local",
@@ -25,18 +28,27 @@
     "test:regulatory": "node --import tsx --test src/workers/document-worker/regulatory/regulatory-ledger.test.ts"
   },
   "dependencies": {
+    "@supabase/ssr": "^0.10.3",
     "@supabase/supabase-js": "^2.87.1",
     "dotenv": "^17.2.3",
+    "next": "^16.2.7",
     "pdfjs-dist": "^5.4.394",
     "postgres": "^3.4.7",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
     "zod": "^4.1.13"
   },
   "devDependencies": {
     "@types/node": "^24.10.1",
+    "@types/react": "^19.2.16",
+    "@types/react-dom": "^19.2.3",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3"
   },
   "engines": {
     "node": ">=22"
+  },
+  "overrides": {
+    "postcss": "8.5.10"
   }
 }
