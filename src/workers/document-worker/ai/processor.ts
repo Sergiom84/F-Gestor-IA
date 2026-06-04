@@ -8,6 +8,7 @@ import {
   markDocumentAiFailed,
   markDocumentAiProcessing,
   saveReceivedInvoiceExtraction,
+  type AiBudgetState,
   type DocumentAiInput,
   type SavedInvoiceExtraction
 } from "./repository.js";
@@ -79,13 +80,20 @@ export async function processReceivedInvoiceExtraction(
 async function assertAiBudgetAvailable(db: DbClient, documentInput: DocumentAiInput): Promise<void> {
   const budgetState = await getOrganizationAiBudgetState(db, documentInput.organizationId);
 
+  assertAiBudgetStateAvailable(documentInput.organizationId, budgetState);
+}
+
+export function assertAiBudgetStateAvailable(
+  organizationId: string,
+  budgetState: AiBudgetState
+): void {
   if (budgetState.monthlyBudgetCents === 0) {
     return;
   }
 
   if (budgetState.spentThisMonthCents >= budgetState.monthlyBudgetCents) {
     throw new Error(
-      `AI monthly budget exhausted for organization ${documentInput.organizationId}: ` +
+      `AI monthly budget exhausted for organization ${organizationId}: ` +
       `${budgetState.spentThisMonthCents}/${budgetState.monthlyBudgetCents} cents`
     );
   }

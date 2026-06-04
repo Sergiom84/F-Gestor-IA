@@ -20,6 +20,12 @@ export type ExtractedTextSaveResult = {
   duplicateFileDocumentIds: string[];
 };
 
+export type ExtractedTextNextStep = {
+  documentStatus: DocumentStatus;
+  shouldCreateDuplicateReviewTask: boolean;
+  shouldEnqueueAiExtraction: boolean;
+};
+
 type ProcessingJobRow = {
   id: string;
   organization_id: string;
@@ -229,21 +235,20 @@ export async function saveExtractedText(
     `;
     duplicateFileDocumentIds.push(...duplicateRows.map((row) => row.document_id));
 
-    const nextDocumentStatus: DocumentStatus = duplicateFileDocumentIds.length > 0
-      ? "needs_review"
-      : chunks.length > 0
-        ? "text_extracted"
-        : "ocr_required";
+    const nextStep = decideExtractedTextNextStep({
+      duplicateFileDocumentIds,
+      chunkCount: chunks.length
+    });
 
     await tx`
       update public.documents
-      set status = ${nextDocumentStatus},
+      set status = ${nextStep.documentStatus},
           failure_reason = null,
           updated_at = now()
       where id = ${documentId}
     `;
 
-    if (duplicateFileDocumentIds.length > 0) {
+    if (nextStep.shouldCreateDuplicateReviewTask) {
       await tx`
         insert into public.review_tasks (
           organization_id,
@@ -270,7 +275,7 @@ export async function saveExtractedText(
       `;
     }
 
-    if (chunks.length > 0 && duplicateFileDocumentIds.length === 0) {
+    if (nextStep.shouldEnqueueAiExtraction) {
       nextJob = await enqueueAiExtractionJob(tx, queueName, documentId);
     }
 
@@ -287,6 +292,33 @@ export async function saveExtractedText(
       duplicateFileDocumentIds
     };
   });
+}
+
+export function decideExtractedTextNextStep(args: {
+  duplicateFileDocumentIds: string[];
+  chunkCount: number;
+}): ExtractedTextNextStep {
+  if (args.duplicateFileDocumentIds.length > 0) {
+    return {
+      documentStatus: "needs_review",
+      shouldCreateDuplicateReviewTask: true,
+      shouldEnqueueAiExtraction: false
+    };
+  }
+
+  if (args.chunkCount > 0) {
+    return {
+      documentStatus: "text_extracted",
+      shouldCreateDuplicateReviewTask: false,
+      shouldEnqueueAiExtraction: true
+    };
+  }
+
+  return {
+    documentStatus: "ocr_required",
+    shouldCreateDuplicateReviewTask: false,
+    shouldEnqueueAiExtraction: false
+  };
 }
 
 export async function markJobSucceeded(db: DbClient, jobId: string, documentId: string): Promise<void> {

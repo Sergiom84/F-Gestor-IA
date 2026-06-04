@@ -12,8 +12,10 @@ import {
   saveExtractedText
 } from "./repository.js";
 import { downloadStorageObject, type StorageClient } from "./storage.js";
-import type { ProcessingJobRecord } from "./types.js";
+import type { ProcessingJobRecord, ProcessingJobType } from "./types.js";
 import type { QueueMessage } from "./types.js";
+
+export type ProcessingJobRoute = "extract_text" | "ai_extract";
 
 export async function processQueueMessage(
   config: WorkerConfig,
@@ -34,7 +36,7 @@ export async function processQueueMessage(
       return { shouldRetry: false };
     }
 
-    switch (job.job_type) {
+    switch (resolveProcessingJobRoute(job.job_type)) {
       case "extract_text":
         await processExtractTextJob(config, db, supabase, job);
         return { shouldRetry: false };
@@ -42,9 +44,6 @@ export async function processQueueMessage(
       case "ai_extract":
         await processAiExtractJob(db, job);
         return { shouldRetry: false };
-
-      default:
-        throw new Error(`Unsupported document job type: ${job.job_type}`);
     }
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
@@ -58,6 +57,19 @@ export async function processQueueMessage(
       shouldRetry: true,
       retryDelaySeconds: config.retryBaseSeconds * failure.attemptCount
     };
+  }
+}
+
+export function resolveProcessingJobRoute(jobType: ProcessingJobType): ProcessingJobRoute {
+  switch (jobType) {
+    case "extract_text":
+      return "extract_text";
+
+    case "ai_extract":
+      return "ai_extract";
+
+    default:
+      throw new Error(`Unsupported document job type: ${jobType}`);
   }
 }
 

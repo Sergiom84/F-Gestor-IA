@@ -21,7 +21,7 @@
     "ci:full": "npm run ci:static && npm run ci:supabase-local",
     "db:test": "npx supabase test db --local",
     "test": "npm run test:unit",
-    "test:unit": "node --import tsx --test src/workers/document-worker/regulatory/regulatory-ledger.test.ts src/workers/document-worker/review/invoice-review.test.ts src/tools/supabase-local-validate.test.ts",
+    "test:unit": "node --import tsx --test src/workers/document-worker/ai/processor.test.ts src/workers/document-worker/processor.test.ts src/workers/document-worker/regulatory/regulatory-ledger.test.ts src/workers/document-worker/repository.test.ts src/workers/document-worker/review/invoice-review.test.ts src/tools/supabase-local-validate.test.ts",
     "test:regulatory": "node --import tsx --test src/workers/document-worker/regulatory/regulatory-ledger.test.ts"
   },
   "dependencies": {

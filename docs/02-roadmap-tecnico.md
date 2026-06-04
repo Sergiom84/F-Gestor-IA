@@ -470,7 +470,7 @@ Estado:
 - Script `npm run smoke:mvp-remote` creado.
 - Smoke remoto con `--cleanup` validado: Storage, PGMQ, `extract_text`, paginas/chunks, `ai_extract`, `review_task`, aprobacion DB, `invoice` y limpieza de fixtures.
 - Variante `--skip-ai --cleanup` validada para entornos sin `OPENAI_API_KEY`.
-- Cobertura unitaria inicial de `applyInvoiceReview`: aprobacion con correcciones humanas y bloqueo por campos fiscales obligatorios.
+- Cobertura unitaria de dispatcher por `job_type`, dedupe documental por hash, presupuesto IA y `applyInvoiceReview`.
 
 Incluye:
 
@@ -494,12 +494,13 @@ Criterio de salida:
 Resultado:
 
 - Cumplido el 2026-06-04 contra Supabase remoto con PDF sintetico y cleanup. Queda pendiente repetir con factura real.
-- `npm run ci:static` cubre ya el test unitario de aprobacion humana, ademas de ledger normativo y validacion local Supabase.
+- `npm run ci:static` cubre ya dispatcher, dedupe documental, presupuesto IA, aprobacion humana, ledger normativo y validacion local Supabase.
 
 Siguiente prioridad alta:
 
-- Ampliar tests del flujo nuevo: dispatcher por `job_type`, dedupe por hash y presupuesto IA.
 - Preparar fixture de factura real para repetir el smoke completo sin depender solo del PDF sintetico.
+- Decidir si el smoke remoto completo debe entrar como workflow manual en GitHub Actions.
+- Empezar superficie Next.js minima: Auth Supabase SSR, organizacion activa y bandeja documental.
 
 ## Backlog consciente
 
