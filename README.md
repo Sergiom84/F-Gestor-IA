@@ -16,10 +16,10 @@ El producto se disenara alrededor de cuatro principios:
 La base tecnica inicial esta documentada y parcialmente implementada:
 
 - Modelo de datos Supabase documentado.
-- Migracion inicial Supabase creada, con RLS, Storage privado y cola `document_processing`.
-- Worker documental TypeScript creado para extraer texto embebido de PDFs.
-- Fase 4 iniciada con contrato Zod/JSON Schema y extractor IA de facturas recibidas.
-- Fase 5 iniciada con motor local de revision humana y aprobacion/rechazo sin depender aun de Supabase remoto.
+- Migraciones Supabase aplicadas al remoto `F_Gestor-IA`, con RLS, Storage privado, cola `document_processing` y ledger normativo.
+- Worker documental TypeScript creado para extraer texto embebido de PDFs y encadenar `ai_extract`.
+- Fase 4 conectada al worker con contrato Zod/JSON Schema, extractor IA de facturas recibidas, control de presupuesto y deteccion de duplicados.
+- Fase 5 conectada a Supabase con adaptador transaccional de revision humana y aprobacion/rechazo.
 - Fase 6 iniciada con motor local de dashboard MVP para snapshot documental/fiscal desde JSON.
 - Fase 7 iniciada con planificador local de OCR para PDFs dificiles, coste por pagina y reintentos.
 - Fase 8 iniciada con ledger normativo offline, hash chain y preparacion interna VERI*FACTU/B2B.
@@ -30,10 +30,17 @@ La base tecnica inicial esta documentada y parcialmente implementada:
 - Fase 13 iniciada con runner de validacion local Supabase para migraciones, lint y pgTAP.
 - Fase 14 iniciada con CI rapido y workflow manual de validacion Supabase local.
 
-Pendiente importante: la migracion y el worker contra Supabase local no se han podido validar porque Docker Desktop no esta operativo en el entorno actual.
-La conexion real a Supabase remoto queda deliberadamente para el final, cuando esten disponibles URL y claves.
+Pendiente importante: Supabase local sigue pendiente porque Docker Desktop no esta operativo en el entorno actual.
+La conexion real a Supabase remoto ya esta vinculada y las migraciones estan aplicadas.
 
-Estado de publicacion: las fases 10-14 estan publicadas en el remoto principal en la rama `main`.
+Estado de publicacion: las fases 10-14 estan publicadas en el remoto principal en la rama `main`; el flujo MVP Supabase remoto queda preparado localmente para commit/publicacion.
+
+## Prioridad alta inmediata
+
+1. Ejecutar smoke test remoto completo con PDF real o fixture controlado.
+2. Configurar `OPENAI_API_KEY` para que `ai_extract` complete el flujo real.
+3. Automatizar el seed/smoke remoto: organizacion, cliente, entidad fiscal, documento, archivo, job y mensaje PGMQ.
+4. Anadir tests del flujo nuevo: dispatcher por `job_type`, dedupe por hash, presupuesto IA y aprobacion DB.
 
 ## Documentacion inicial
 
@@ -65,10 +72,9 @@ Estado de publicacion: las fases 10-14 estan publicadas en el remoto principal e
 
 ## Fuera de alcance por ahora
 
-- No hay codigo de aplicacion todavia.
-- Hay una primera migracion Supabase local, pendiente de validar con Docker Desktop.
-- No hay configuracion real de Supabase todavia.
-- No hay proveedores de IA conectados todavia.
+- No hay codigo de aplicacion/frontend todavia.
+- Supabase local queda pendiente de validar con Docker Desktop.
+- El proveedor IA se invoca desde worker/CLI cuando `OPENAI_API_KEY` esta configurada.
 
 ## Worker documental
 
@@ -80,6 +86,7 @@ npm run worker:extract-local -- C:\ruta\factura.pdf
 npm run worker:documents
 npm run worker:extract-invoice -- <document_id>
 npm run review:invoice-local -- C:\ruta\extraccion.json C:\ruta\revision.json
+npm run review:invoice-db -- <review_task_id> C:\ruta\revision.json
 npm run dashboard:local -- C:\ruta\dashboard-data.json 2026-01-01 2026-12-31
 npm run worker:ocr-plan-local -- C:\ruta\documento.pdf 100 2.5 25
 npm run regulatory:local -- C:\ruta\regulatory-input.json
@@ -93,9 +100,13 @@ npm run ci:full
 
 Para usar `worker:documents` hace falta configurar `.env` segun `.env.example` y tener Supabase/Postgres accesible.
 
+Para usar `worker:documents`, la app o una prueba debe crear un `processing_job` tipo `extract_text` y enviar un mensaje a `pgmq`. Al terminar texto, el worker crea y encola el job `ai_extract` si hay texto suficiente y no detecta duplicado exacto por hash.
+
 Para usar `worker:extract-invoice`, el documento debe tener chunks en `document_text_chunks`, `DATABASE_URL` debe apuntar a la base y `OPENAI_API_KEY` debe estar configurada.
 
 `review:invoice-local` no usa Supabase: toma una extraccion IA en JSON y un comando de revision humana en JSON, y devuelve el resultado auditable.
+
+`review:invoice-db` usa Supabase/Postgres: lee `review_tasks` + `document_extractions`, aplica la revision, inserta `invoices`, `invoice_lines` y `tax_breakdowns` cuando se aprueba, actualiza estados y guarda `audit_logs` en una transaccion.
 
 `dashboard:local` no usa Supabase: toma datos exportados o mock en JSON y devuelve un snapshot documental/fiscal para una organizacion.
 

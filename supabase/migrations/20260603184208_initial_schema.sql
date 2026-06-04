@@ -48,6 +48,7 @@ create type public.processing_job_status as enum ('queued', 'running', 'succeede
 create or replace function app_private.set_updated_at()
 returns trigger
 language plpgsql
+set search_path = public, pg_temp
 as $$
 begin
   new.updated_at = now();
@@ -943,6 +944,7 @@ create or replace function app_private.storage_object_organization_id(object_nam
 returns uuid
 language plpgsql
 stable
+set search_path = public, pg_temp
 as $$
 declare
   organization_text text;
@@ -967,6 +969,7 @@ create or replace function app_private.storage_object_fiscal_entity_id(object_na
 returns uuid
 language plpgsql
 stable
+set search_path = public, pg_temp
 as $$
 declare
   fiscal_entity_text text;
@@ -1421,7 +1424,20 @@ set
   file_size_limit = excluded.file_size_limit,
   allowed_mime_types = excluded.allowed_mime_types;
 
-alter table storage.objects enable row level security;
+do $$
+begin
+  if exists (
+    select 1
+    from pg_class c
+    join pg_namespace n on n.oid = c.relnamespace
+    where n.nspname = 'storage'
+      and c.relname = 'objects'
+      and pg_has_role(c.relowner, 'USAGE')
+  ) then
+    alter table storage.objects enable row level security;
+  end if;
+end;
+$$;
 
 create policy storage_document_files_select_allowed
   on storage.objects

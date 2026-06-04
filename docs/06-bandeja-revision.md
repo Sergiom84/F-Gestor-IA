@@ -1,7 +1,7 @@
 # Bandeja de revision
 
 Fecha: 2026-06-03  
-Estado: Fase 5 iniciada sin dependencia de Supabase remoto
+Estado: Fase 5 conectada a Supabase remoto
 
 ## Objetivo
 
@@ -29,12 +29,19 @@ La regla central se mantiene: ningun dato fiscal entra como factura o gasto sin 
 - Conversion local a `invoiceDraft` para factura recibida.
 - Generacion de `auditEvent` con before/after.
 - CLI local que no requiere Supabase.
+- Adaptador transaccional Supabase/Postgres.
+- CLI DB para aprobar/rechazar una `review_task` real.
+- Persistencia de factura aprobada en `invoices`, `invoice_lines` y `tax_breakdowns`.
+- Actualizacion de `review_tasks`, `documents` y `document_extractions`.
+- Insercion de `audit_logs` en la misma transaccion.
 
 ## Archivos
 
 - `src/workers/document-worker/review/review-schema.ts`: contrato de revision.
 - `src/workers/document-worker/review/invoice-review.ts`: motor de aprobacion/rechazo/cambios.
+- `src/workers/document-worker/review/repository.ts`: adaptador transaccional Supabase/Postgres.
 - `src/workers/document-worker/review-invoice-local.ts`: CLI local para probar el flujo.
+- `src/workers/document-worker/review-invoice-db.ts`: CLI contra Supabase/Postgres por `review_task_id`.
 
 ## Comando local
 
@@ -114,24 +121,27 @@ El comando devuelve:
 - `invoiceDraft` si se aprueba;
 - `auditEvent` listo para persistir.
 
-## Por que Supabase queda para el final
+## Comando DB
 
-La integracion real requiere URL, claves y entorno operativo. Mientras eso no este, conviene avanzar en las reglas de producto como codigo puro y verificable.
+```powershell
+npm run review:invoice-db -- <review_task_id> C:\ruta\revision.json
+```
 
-Cuando Supabase este listo, esta fase debe anadir un adaptador que:
+El comando DB:
 
-1. lea `review_tasks` + `document_extractions`;
-2. aplique `applyInvoiceReview`;
-3. actualice `review_tasks`;
-4. actualice `documents`;
-5. inserte `invoices`, `invoice_lines` y `tax_breakdowns` si hay aprobacion valida;
-6. inserte `audit_logs`;
-7. ejecute todo en una transaccion.
+1. lee `review_tasks` + `document_extractions`;
+2. fuerza `organization_id`, `document_id`, `extraction_id` y `review_task_id` desde la base;
+3. aplica `applyInvoiceReview`;
+4. actualiza `review_tasks`;
+5. actualiza `documents`;
+6. actualiza `document_extractions`;
+7. inserta `invoices`, `invoice_lines` y `tax_breakdowns` si hay aprobacion valida;
+8. inserta `audit_logs`;
+9. ejecuta todo en una transaccion.
 
 ## Pendiente para cerrar Fase 5
 
-- Crear adaptador transaccional Supabase/Postgres.
 - Conectar UI de revision con PDF, propuesta y campos editables.
-- Probar aprobacion, rechazo y cambios con datos reales.
+- Probar aprobacion, rechazo y cambios con datos reales en Supabase remoto.
 - Decidir si la factura aprobada nace como `draft` o `booked`.
 - Anadir tests del motor de revision.

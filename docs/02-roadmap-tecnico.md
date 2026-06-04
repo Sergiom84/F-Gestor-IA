@@ -6,8 +6,8 @@ Estado: plan vivo sincronizado con July y remoto principal
 Nota operativa:
 
 - July es la memoria mas reciente del proyecto.
-- Este roadmap ya refleja que varias fases se han iniciado como nucleos offline verificables.
-- La conexion real a Supabase remoto, URL, claves y validacion end-to-end quedan deliberadamente para el final, cuando el entorno este disponible.
+- Este roadmap ya refleja que varias fases se han iniciado como nucleos offline verificables y que el MVP documental ya esta conectado a Supabase remoto.
+- Supabase remoto `F_Gestor-IA` esta vinculado y tiene migraciones aplicadas. Supabase local sigue pendiente por Docker Desktop.
 - Remoto principal: https://github.com/Sergiom84/F-Gestor-IA.
 
 Este roadmap evita construir todo de golpe. Cada fase debe terminar con una superficie usable y verificable.
@@ -90,8 +90,10 @@ Objetivo:
 
 Estado:
 
-- Esqueleto TypeScript creado.
-- Pendiente de validacion contra Supabase local cuando Docker Desktop este disponible.
+- Worker TypeScript conectado a Supabase remoto.
+- Despacha por `processing_jobs.job_type`.
+- `extract_text` crea paginas/chunks, detecta duplicados exactos por hash y encadena `ai_extract`.
+- Pendiente de validacion local cuando Docker Desktop este disponible.
 
 Incluye:
 
@@ -101,6 +103,8 @@ Incluye:
 - Extraccion de texto por pagina.
 - Estados: `queued`, `extracting_text`, `text_extracted`, `failed`.
 - Logs de errores.
+- Encadenado PGMQ `extract_text` -> `ai_extract`.
+- Dedupe exacto por `sha256_hash`.
 
 No incluye:
 
@@ -119,8 +123,9 @@ Objetivo:
 
 Estado:
 
-- Iniciada con capa OpenAI, contrato Zod/JSON Schema, validacion fiscal basica y persistencia preparada para tablas IA existentes.
-- Pendiente de prueba end-to-end con documentos reales cuando Supabase local/remoto este operativo.
+- Conectada al worker MVP.
+- Capa OpenAI, contrato Zod/JSON Schema, validacion fiscal basica y persistencia IA operativas contra Supabase remoto.
+- Pendiente de prueba end-to-end con factura real y `OPENAI_API_KEY`.
 
 Incluye:
 
@@ -131,6 +136,8 @@ Incluye:
 - `ai_requests`, `ai_responses`, `ai_cost_events`.
 - `document_extractions`.
 - Validacion fiscal basica.
+- Control de presupuesto mensual por organizacion.
+- Deteccion de duplicados fiscales contra `invoices`.
 - Fallback preparado, aunque no necesariamente activo en produccion.
 
 No incluye:
@@ -150,8 +157,9 @@ Objetivo:
 
 Estado:
 
-- Iniciada como nucleo offline: contrato de decision humana, aprobacion/rechazo/cambios, conversion a factura preliminar y evento de auditoria.
-- La persistencia real en Supabase y la UI quedan para una fase final de integracion, cuando esten disponibles URL y claves.
+- Conectada a Supabase remoto.
+- Contrato de decision humana, aprobacion/rechazo/cambios, conversion a factura y evento de auditoria.
+- Adaptador transaccional DB implementado; UI queda pendiente.
 
 Incluye:
 
@@ -160,6 +168,7 @@ Incluye:
 - Aprobar/rechazar.
 - Crear factura/gasto desde extraccion aprobada.
 - Audit log de aprobacion.
+- CLI DB `review:invoice-db`.
 
 Criterio de salida:
 
@@ -293,8 +302,9 @@ Objetivo:
 
 Estado:
 
-- Iniciada como migracion preparada: `public.regulatory_events` con RLS, triggers de no mutacion, validacion de append y shape alineado con `regulatory_event_row_v1`.
-- Pendiente de aplicar contra Supabase local/remoto cuando haya Docker o entorno operativo.
+- Aplicada en Supabase remoto.
+- `public.regulatory_events` con RLS, triggers de no mutacion, validacion de append y shape alineado con `regulatory_event_row_v1`.
+- Pendiente de validar en Supabase local cuando Docker este disponible.
 
 Incluye:
 
@@ -309,9 +319,8 @@ Incluye:
 
 No incluye todavia:
 
-- Aplicar migracion en Supabase local/remoto.
+- Aplicar migracion en Supabase local.
 - Adapter server-side de insercion.
-- Advisors Supabase.
 - Tests SQL de acceso cruzado.
 - Payload oficial, firma, certificado o envio.
 
@@ -328,7 +337,8 @@ Objetivo:
 Estado:
 
 - Iniciada como adaptador de worker: carga factura y eventos previos desde Postgres, prepara el siguiente evento, valida readiness/cadena y lo inserta en `regulatory_events`.
-- Pendiente de prueba end-to-end porque Supabase local sigue sin Postgres activo en `127.0.0.1:54322`.
+- Supabase remoto disponible; prueba end-to-end queda pendiente tras aprobar una factura real.
+- Supabase local sigue sin Postgres activo en `127.0.0.1:54322`.
 
 Incluye:
 
@@ -358,8 +368,9 @@ Objetivo:
 
 Estado:
 
-- Iniciada como test SQL preparado en `supabase/tests/database/regulatory_events.test.sql`.
+- Test SQL preparado en `supabase/tests/database/regulatory_events.test.sql`.
 - Pendiente de ejecutar porque Supabase local no esta levantado.
+- Advisors remotos security/performance pasan sin issues.
 
 Incluye:
 
@@ -391,6 +402,7 @@ Estado:
 
 - Iniciada con `npm run supabase:validate-local`: primero comprueba conectividad a Postgres local y despues ejecuta `migration list`, `db lint` y `test db` en modo local.
 - Sigue pendiente de ejecucion completa porque Supabase local no esta levantado.
+- Validacion remota manual realizada con `supabase migration list`, `db advisors` security/performance y consultas de humo.
 
 Incluye:
 
@@ -404,7 +416,6 @@ No incluye todavia:
 
 - Levantar Docker Desktop desde el runner.
 - Ejecutar `db reset` automaticamente.
-- Validacion remota.
 - CI.
 
 Criterio de salida:
@@ -445,6 +456,36 @@ Criterio de salida:
 - `ci:static` pasa localmente y en GitHub Actions.
 - El workflow manual Supabase puede levantar Postgres local, aplicar migraciones y ejecutar lint/pgTAP.
 - Una vez validado, el job Supabase se puede activar para PRs que cambien schema, tests DB o codigo regulatorio.
+
+## Fase 15 - Smoke test MVP remoto
+
+Objetivo:
+
+- Demostrar el flujo real de punta a punta con Supabase remoto.
+
+Estado:
+
+- Prioridad alta inmediata.
+- Migraciones remotas aplicadas.
+- Falta `OPENAI_API_KEY` para completar `ai_extract` real.
+
+Incluye:
+
+- Script de smoke remoto que cree organizacion, cliente, entidad fiscal, documento, archivo, `processing_job` y mensaje PGMQ.
+- Upload de PDF de prueba a Storage privado.
+- Ejecucion controlada de `worker:documents`.
+- Comprobacion de `document_pages`, `document_text_chunks`, `processing_jobs`, `document_extractions` y `review_tasks`.
+- Aprobacion con `review:invoice-db` cuando haya extraccion real.
+
+No incluye todavia:
+
+- UI.
+- OCR real.
+- Automatizacion fiscal oficial.
+
+Criterio de salida:
+
+- Una factura PDF atraviesa `extract_text` -> `ai_extract` -> `review_task` -> `review:invoice-db` y crea una fila en `invoices` con auditoria.
 
 ## Backlog consciente
 

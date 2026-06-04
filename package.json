@@ -9,6 +9,7 @@
     "worker:extract-local": "tsx src/workers/document-worker/extract-local-pdf.ts",
     "worker:extract-invoice": "tsx src/workers/document-worker/extract-document-invoice.ts",
     "review:invoice-local": "tsx src/workers/document-worker/review-invoice-local.ts",
+    "review:invoice-db": "tsx src/workers/document-worker/review-invoice-db.ts",
     "dashboard:local": "tsx src/workers/document-worker/dashboard-local.ts",
     "worker:ocr-plan-local": "tsx src/workers/document-worker/ocr-plan-local.ts",
     "regulatory:local": "tsx src/workers/document-worker/regulatory-local.ts",

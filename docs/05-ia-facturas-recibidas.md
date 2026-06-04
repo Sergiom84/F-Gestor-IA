@@ -1,7 +1,7 @@
 # IA para facturas recibidas
 
 Fecha: 2026-06-03  
-Estado: Fase 4 iniciada
+Estado: Fase 4 conectada al worker MVP
 
 ## Objetivo
 
@@ -29,6 +29,9 @@ La salida de IA no crea facturas ni gastos directamente. Siempre queda como `doc
   - `document_extractions`;
   - `review_tasks`;
   - `ai_cost_events` solo si se configuran precios por token.
+- Ejecucion desde CLI o desde `processing_jobs.job_type = 'ai_extract'`.
+- Control de presupuesto mensual por organizacion cuando `ai_monthly_budget_cents > 0`.
+- Deteccion de duplicados fiscales contra `invoices` por proveedor, numero, fecha e importe.
 
 ## Archivos
 
@@ -37,6 +40,7 @@ La salida de IA no crea facturas ni gastos directamente. Siempre queda como `doc
 - `src/workers/document-worker/ai/repository.ts`: lectura de chunks y escritura de logs/extracciones.
 - `src/workers/document-worker/ai/processor.ts`: orquestacion de Fase 4 para un documento.
 - `src/workers/document-worker/extract-document-invoice.ts`: CLI operativo por `document_id`.
+- `src/workers/document-worker/processor.ts`: encadena `ai_extract` desde la cola documental.
 
 ## Variables de entorno
 
@@ -76,22 +80,24 @@ Requisitos:
 
 ## Flujo
 
-1. Lee el documento y concatena `document_text_chunks` por orden.
-2. Marca el documento como `ai_processing`.
-3. Llama a OpenAI con Structured Outputs.
-4. Valida la salida con Zod.
-5. Ejecuta validaciones fiscales basicas.
-6. Inserta request, response y extraccion.
-7. Actualiza `documents.current_extraction_id`.
-8. Pasa el documento a `needs_review`.
-9. Crea una tarea abierta en `review_tasks`.
+1. El worker recibe un mensaje de cola con `job_id`.
+2. Lee `processing_jobs.job_type`.
+3. Para `ai_extract`, concatena `document_text_chunks` por orden.
+4. Marca el documento como `ai_processing`.
+5. Comprueba presupuesto mensual si esta configurado.
+6. Llama a OpenAI con Structured Outputs.
+7. Valida la salida con Zod.
+8. Ejecuta validaciones fiscales basicas.
+9. Busca duplicados fiscales contra facturas existentes.
+10. Inserta request, response y extraccion.
+11. Actualiza `documents.current_extraction_id`.
+12. Pasa el documento a `needs_review`.
+13. Crea una tarea abierta en `review_tasks`.
 
 ## Pendiente para cerrar Fase 4
 
-- Validar el comando contra Supabase local/remoto con una factura real.
-- Conectar la creacion de `processing_jobs` tipo `ai_extract`.
-- Decidir si la Fase 3 debe encadenar IA automaticamente o dejarlo como job separado.
+- Validar el flujo completo contra Supabase remoto con una factura real.
 - Anadir tests de schema y validacion fiscal.
 - Afinar campos exactos de factura recibida MVP.
-- Definir politica de coste por modelo y presupuesto por organizacion.
+- Definir precios por modelo en entorno para que `ai_cost_events` tenga coste real.
 - Preparar fallback de proveedor, aunque quede inactivo.

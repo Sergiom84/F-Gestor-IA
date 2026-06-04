@@ -1,21 +1,112 @@
+import type postgres from "postgres";
 import type { DbClient } from "./db.js";
-import type { DocumentFileRecord, ExtractedPdf, TextChunk } from "./types.js";
+import type {
+  DocumentFileRecord,
+  DocumentStatus,
+  ExtractedPdf,
+  ProcessingJobRecord,
+  ProcessingJobType,
+  TextChunk
+} from "./types.js";
 
-export async function markJobRunning(db: DbClient, jobId: string, documentId: string): Promise<void> {
+export type ExtractedTextSaveResult = {
+  nextJob: {
+    id: string;
+    organizationId: string;
+    documentId: string;
+    jobType: "ai_extract";
+    queueMessageId: number | null;
+  } | null;
+  duplicateFileDocumentIds: string[];
+};
+
+type ProcessingJobRow = {
+  id: string;
+  organization_id: string;
+  document_id: string | null;
+  job_type: ProcessingJobType;
+  status: ProcessingJobRecord["status"];
+  attempt_count: number;
+  max_attempts: number;
+};
+
+type DuplicateFileRow = {
+  document_id: string;
+};
+
+type AiJobRow = {
+  id: string;
+  organization_id: string;
+  inserted: boolean;
+};
+
+type QueueSendRow = {
+  send: number | string | null;
+};
+
+export async function getProcessingJob(
+  db: DbClient,
+  jobId: string,
+  documentId: string
+): Promise<ProcessingJobRecord> {
+  const rows = await db<ProcessingJobRow[]>`
+    select
+      id,
+      organization_id,
+      document_id,
+      job_type,
+      status,
+      attempt_count,
+      max_attempts
+    from public.processing_jobs
+    where id = ${jobId}
+      and document_id = ${documentId}
+    limit 1
+  `;
+  const row = rows[0];
+
+  if (!row) {
+    throw new Error(`Processing job ${jobId} for document ${documentId} was not found`);
+  }
+
+  return {
+    id: row.id,
+    organization_id: row.organization_id,
+    document_id: row.document_id,
+    job_type: row.job_type,
+    status: row.status,
+    attempt_count: Number(row.attempt_count),
+    max_attempts: Number(row.max_attempts)
+  };
+}
+
+export async function markJobRunning(
+  db: DbClient,
+  jobId: string,
+  documentId: string,
+  documentStatus: DocumentStatus
+): Promise<void> {
   await db.begin(async (tx) => {
-    await tx`
+    const updatedJobs = await tx<{ id: string }[]>`
       update public.processing_jobs
       set status = 'running',
           started_at = coalesce(started_at, now()),
+          finished_at = null,
           attempt_count = attempt_count + 1,
           updated_at = now()
       where id = ${jobId}
         and document_id = ${documentId}
+        and status in ('queued', 'retrying', 'running')
+      returning id
     `;
+
+    if (updatedJobs.length === 0) {
+      throw new Error(`Processing job ${jobId} is not queued/retryable`);
+    }
 
     await tx`
       update public.documents
-      set status = 'extracting_text',
+      set status = ${documentStatus},
           failure_reason = null,
           updated_at = now()
       where id = ${documentId}
@@ -46,13 +137,17 @@ export async function getDocumentFiles(db: DbClient, documentId: string): Promis
 
 export async function saveExtractedText(
   db: DbClient,
+  queueName: string,
   jobId: string,
   documentId: string,
   documentFileId: string,
   extracted: ExtractedPdf,
   chunks: TextChunk[]
-): Promise<void> {
-  await db.begin(async (tx) => {
+): Promise<ExtractedTextSaveResult> {
+  return db.begin(async (tx) => {
+    let nextJob: ExtractedTextSaveResult["nextJob"] = null;
+    const duplicateFileDocumentIds: string[] = [];
+
     await tx`delete from public.document_text_chunks where document_id = ${documentId}`;
     await tx`delete from public.document_pages where document_id = ${documentId}`;
 
@@ -118,13 +213,66 @@ export async function saveExtractedText(
         and deleted_at is null
     `;
 
+    const duplicateRows = await tx<DuplicateFileRow[]>`
+      select distinct other.document_id
+      from public.document_files current_file
+      join public.document_files other
+        on other.organization_id = current_file.organization_id
+       and other.sha256_hash = ${extracted.sha256Hash}
+       and other.document_id <> current_file.document_id
+       and other.deleted_at is null
+       and other.file_status in ('uploaded', 'available')
+      where current_file.id = ${documentFileId}
+        and current_file.document_id = ${documentId}
+        and current_file.deleted_at is null
+      limit 10
+    `;
+    duplicateFileDocumentIds.push(...duplicateRows.map((row) => row.document_id));
+
+    const nextDocumentStatus: DocumentStatus = duplicateFileDocumentIds.length > 0
+      ? "needs_review"
+      : chunks.length > 0
+        ? "text_extracted"
+        : "ocr_required";
+
     await tx`
       update public.documents
-      set status = ${chunks.length > 0 ? "text_extracted" : "ocr_required"},
+      set status = ${nextDocumentStatus},
           failure_reason = null,
           updated_at = now()
       where id = ${documentId}
     `;
+
+    if (duplicateFileDocumentIds.length > 0) {
+      await tx`
+        insert into public.review_tasks (
+          organization_id,
+          document_id,
+          status,
+          priority,
+          reason
+        )
+        select
+          d.organization_id,
+          d.id,
+          'open',
+          20,
+          'duplicate_file_candidate'
+        from public.documents d
+        where d.id = ${documentId}
+          and not exists (
+            select 1
+            from public.review_tasks rt
+            where rt.document_id = d.id
+              and rt.status in ('open', 'in_review')
+              and rt.reason = 'duplicate_file_candidate'
+          )
+      `;
+    }
+
+    if (chunks.length > 0 && duplicateFileDocumentIds.length === 0) {
+      nextJob = await enqueueAiExtractionJob(tx, queueName, documentId);
+    }
 
     await tx`
       update public.processing_jobs
@@ -133,7 +281,23 @@ export async function saveExtractedText(
           updated_at = now()
       where id = ${jobId}
     `;
+
+    return {
+      nextJob,
+      duplicateFileDocumentIds
+    };
   });
+}
+
+export async function markJobSucceeded(db: DbClient, jobId: string, documentId: string): Promise<void> {
+  await db`
+    update public.processing_jobs
+    set status = 'succeeded',
+        finished_at = now(),
+        updated_at = now()
+    where id = ${jobId}
+      and document_id = ${documentId}
+  `;
 }
 
 export async function markJobFailed(
@@ -166,5 +330,80 @@ export async function markJobFailed(
   return {
     attemptCount: result?.attempt_count ?? 1,
     maxAttempts: result?.max_attempts ?? 1
+  };
+}
+
+async function enqueueAiExtractionJob(
+  tx: postgres.TransactionSql,
+  queueName: string,
+  documentId: string
+): Promise<ExtractedTextSaveResult["nextJob"]> {
+  const jobRows = await tx<AiJobRow[]>`
+    with existing as (
+      select id, organization_id
+      from public.processing_jobs
+      where document_id = ${documentId}
+        and job_type = 'ai_extract'
+        and status in ('queued', 'running', 'retrying', 'succeeded')
+      order by created_at desc
+      limit 1
+    ),
+    inserted as (
+      insert into public.processing_jobs (
+        organization_id,
+        document_id,
+        job_type,
+        status
+      )
+      select
+        d.organization_id,
+        d.id,
+        'ai_extract',
+        'queued'
+      from public.documents d
+      where d.id = ${documentId}
+        and not exists (select 1 from existing)
+      returning id, organization_id
+    )
+    select id, organization_id, true as inserted
+    from inserted
+    union all
+    select id, organization_id, false as inserted
+    from existing
+    limit 1
+  `;
+  const job = jobRows[0];
+
+  if (!job || !job.inserted) {
+    return null;
+  }
+
+  const message = {
+    job_id: job.id,
+    document_id: documentId,
+    organization_id: job.organization_id,
+    reason: "text_extracted"
+  };
+
+  const sendRows = await tx<QueueSendRow[]>`
+    select * from pgmq.send(${queueName}, ${tx.json(message)}, 0)
+  `;
+  const queueMessageId = sendRows[0]?.send === undefined || sendRows[0]?.send === null
+    ? null
+    : Number(sendRows[0].send);
+
+  await tx`
+    update public.processing_jobs
+    set queue_message_id = ${queueMessageId},
+        updated_at = now()
+    where id = ${job.id}
+  `;
+
+  return {
+    id: job.id,
+    organizationId: job.organization_id,
+    documentId,
+    jobType: "ai_extract",
+    queueMessageId
   };
 }

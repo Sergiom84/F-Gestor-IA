@@ -16,6 +16,34 @@ export type QueueMessage = {
   message: DocumentJobMessage;
 };
 
+export type ProcessingJobType = "extract_text" | "ocr" | "ai_extract" | "classify" | "deduplicate" | "validate";
+
+export type ProcessingJobStatus = "queued" | "running" | "succeeded" | "failed" | "retrying" | "cancelled";
+
+export type DocumentStatus =
+  | "uploaded"
+  | "queued"
+  | "extracting_text"
+  | "text_extracted"
+  | "ocr_required"
+  | "ocr_processing"
+  | "ai_processing"
+  | "ai_processed"
+  | "needs_review"
+  | "approved"
+  | "rejected"
+  | "failed";
+
+export type ProcessingJobRecord = {
+  id: string;
+  organization_id: string;
+  document_id: string | null;
+  job_type: ProcessingJobType;
+  status: ProcessingJobStatus;
+  attempt_count: number;
+  max_attempts: number;
+};
+
 export type DocumentFileRecord = {
   id: string;
   organization_id: string;

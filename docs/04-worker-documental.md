@@ -1,7 +1,7 @@
 # Worker documental basico
 
 Fecha: 2026-06-03  
-Estado: implementado como esqueleto TypeScript, pendiente de prueba con Supabase local/remoto
+Estado: conectado a Supabase remoto como flujo MVP documental
 
 ## Objetivo
 
@@ -10,12 +10,16 @@ Procesar PDFs con texto embebido sin bloquear la interfaz.
 El worker:
 
 - Lee mensajes desde la cola `document_processing`.
+- Lee `processing_jobs.job_type` y despacha por tipo.
+- Procesa `extract_text` para PDFs con texto embebido.
 - Marca el job como `running`.
 - Descarga el PDF desde Supabase Storage privado con credenciales server-side.
 - Extrae texto por pagina con `pdfjs-dist`.
 - Guarda `document_pages`.
 - Genera `document_text_chunks`.
-- Actualiza `documents.status` a `text_extracted` u `ocr_required`.
+- Actualiza `documents.status` a `text_extracted`, `ocr_required` o `needs_review`.
+- Detecta duplicado exacto por `sha256_hash` y abre `review_task` sin gastar IA.
+- Si hay texto y no hay duplicado exacto, crea `processing_job` tipo `ai_extract` y lo encola en `pgmq`.
 - Marca `processing_jobs.status` como `succeeded`, `retrying` o `failed`.
 - Reencola con backoff si el job aun tiene intentos disponibles.
 
@@ -30,7 +34,8 @@ Decisiones tomadas:
 
 - El worker usa Postgres directo para `pgmq`; no expone la cola al navegador.
 - El worker usa service role solo en entorno servidor para descargar de Storage.
-- La app futura debe crear `processing_jobs` y enviar mensajes a `pgmq`.
+- La app futura debe crear el primer `processing_job` tipo `extract_text` y enviar su mensaje a `pgmq`.
+- Los jobs posteriores del MVP documental los encadena el worker.
 
 ## Archivos
 
@@ -40,7 +45,7 @@ Decisiones tomadas:
 - `src/workers/document-worker/storage.ts`: descarga desde Storage privado.
 - `src/workers/document-worker/pdf.ts`: extraccion de texto embebido y chunks.
 - `src/workers/document-worker/repository.ts`: escrituras de estado/texto en Postgres.
-- `src/workers/document-worker/processor.ts`: orquestacion por mensaje.
+- `src/workers/document-worker/processor.ts`: despachador por `job_type`.
 - `src/workers/document-worker/extract-local-pdf.ts`: prueba local sin Supabase.
 
 ## Variables de entorno
@@ -78,6 +83,8 @@ Formato esperado:
 
 El worker valida este payload con Zod antes de procesar.
 
+El tipo real de trabajo no viaja en el payload: se lee desde `processing_jobs.job_type` usando `job_id`.
+
 ## Estados que modifica
 
 `processing_jobs`:
@@ -92,6 +99,8 @@ El worker valida este payload con Zod antes de procesar.
 - `queued` -> `extracting_text`
 - `extracting_text` -> `text_extracted`
 - `extracting_text` -> `ocr_required`
+- `extracting_text` -> `needs_review` si hay duplicado exacto por hash
+- `text_extracted` -> `ai_processing` -> `needs_review`
 - `extracting_text` -> `failed`
 
 `document_files`:
@@ -126,9 +135,9 @@ Arrancar worker:
 npm run worker:documents
 ```
 
-## Bloqueo actual
+## Estado Supabase
 
-No se puede probar contra Supabase local hasta que Docker Desktop este disponible y la migracion inicial se aplique con:
+Las migraciones estan aplicadas en Supabase remoto. Supabase local sigue pendiente hasta que Docker Desktop este disponible y la migracion inicial pueda aplicarse con:
 
 ```powershell
 npx supabase db reset --local --no-seed

@@ -1,7 +1,7 @@
 import type postgres from "postgres";
 import type { DbClient } from "../db.js";
 import type { OpenAiInvoiceExtractionResult } from "./openai-provider.js";
-import type { ReceivedInvoiceValidation } from "./invoice-schema.js";
+import type { ReceivedInvoiceExtraction, ReceivedInvoiceValidation } from "./invoice-schema.js";
 
 export type DocumentAiInput = {
   documentId: string;
@@ -30,6 +30,30 @@ type DocumentAiInputRow = {
 
 type IdRow = {
   id: string;
+};
+
+type AiBudgetStateRow = {
+  ai_monthly_budget_cents: number | string;
+  spent_this_month_cents: number | string | null;
+};
+
+export type AiBudgetState = {
+  monthlyBudgetCents: number;
+  spentThisMonthCents: number;
+};
+
+export type DuplicateInvoiceCandidate = {
+  id: string;
+  invoice_number: string | null;
+  issue_date: string | null;
+  total_amount: number;
+};
+
+type DuplicateInvoiceRow = {
+  id: string;
+  invoice_number: string | null;
+  issue_date: string | Date | null;
+  total_amount: string | number;
 };
 
 export async function getDocumentAiInput(db: DbClient, documentId: string): Promise<DocumentAiInput | null> {
@@ -65,6 +89,74 @@ export async function getDocumentAiInput(db: DbClient, documentId: string): Prom
     text: row.text ?? "",
     chunkCount: Number(row.chunk_count)
   };
+}
+
+export async function getOrganizationAiBudgetState(
+  db: DbClient,
+  organizationId: string
+): Promise<AiBudgetState> {
+  const rows = await db<AiBudgetStateRow[]>`
+    select
+      o.ai_monthly_budget_cents,
+      coalesce(sum(ace.estimated_cost_cents), 0) as spent_this_month_cents
+    from public.organizations o
+    left join public.ai_cost_events ace
+      on ace.organization_id = o.id
+     and ace.created_at >= date_trunc('month', now())
+     and ace.created_at < date_trunc('month', now()) + interval '1 month'
+    where o.id = ${organizationId}
+    group by o.id, o.ai_monthly_budget_cents
+  `;
+  const row = rows[0];
+
+  if (!row) {
+    throw new Error(`Organization ${organizationId} was not found`);
+  }
+
+  return {
+    monthlyBudgetCents: Number(row.ai_monthly_budget_cents),
+    spentThisMonthCents: Number(row.spent_this_month_cents ?? 0)
+  };
+}
+
+export async function findReceivedInvoiceDuplicates(
+  db: DbClient,
+  organizationId: string,
+  extraction: ReceivedInvoiceExtraction
+): Promise<DuplicateInvoiceCandidate[]> {
+  const supplierTaxId = normalizeText(extraction.supplier.tax_id);
+  const invoiceNumber = normalizeText(extraction.invoice.invoice_number);
+  const issueDate = normalizeText(extraction.invoice.issue_date);
+  const totalAmount = extraction.amounts.total_amount;
+
+  if (!supplierTaxId || !invoiceNumber || !issueDate || totalAmount === null) {
+    return [];
+  }
+
+  const rows = await db<DuplicateInvoiceRow[]>`
+    select
+      id::text,
+      invoice_number,
+      issue_date,
+      total_amount
+    from public.invoices
+    where organization_id = ${organizationId}
+      and direction = 'received'
+      and deleted_at is null
+      and supplier_tax_id = ${supplierTaxId}
+      and invoice_number = ${invoiceNumber}
+      and issue_date = ${issueDate}
+      and total_amount = ${totalAmount}
+    order by created_at desc
+    limit 10
+  `;
+
+  return rows.map((row) => ({
+    id: row.id,
+    invoice_number: row.invoice_number,
+    issue_date: toDateText(row.issue_date),
+    total_amount: Number(row.total_amount)
+  }));
 }
 
 export async function markDocumentAiProcessing(db: DbClient, documentId: string): Promise<void> {
@@ -234,8 +326,8 @@ export async function saveReceivedInvoiceExtraction(
         ${documentInput.documentId},
         ${extraction.id},
         'open',
-        ${validation.status === "invalid" ? 10 : 0},
-        ${validation.status === "invalid" ? "ai_invoice_extraction_needs_attention" : "ai_invoice_extraction"}
+        ${getReviewPriority(validation)},
+        ${getReviewReason(validation)}
       )
       returning id
     `);
@@ -266,4 +358,39 @@ function toJsonValue(value: unknown): postgres.JSONValue {
   }
 
   return JSON.parse(JSON.stringify(value)) as postgres.JSONValue;
+}
+
+function getReviewPriority(validation: ReceivedInvoiceValidation): number {
+  if (validation.warnings.some((warning) => warning.startsWith("duplicate invoice candidates:"))) {
+    return 20;
+  }
+
+  return validation.status === "invalid" ? 10 : 0;
+}
+
+function getReviewReason(validation: ReceivedInvoiceValidation): string {
+  if (validation.warnings.some((warning) => warning.startsWith("duplicate invoice candidates:"))) {
+    return "ai_invoice_duplicate_candidate";
+  }
+
+  return validation.status === "invalid"
+    ? "ai_invoice_extraction_needs_attention"
+    : "ai_invoice_extraction";
+}
+
+function normalizeText(value: string | null): string | null {
+  const normalized = value?.trim();
+  return normalized ? normalized : null;
+}
+
+function toDateText(value: string | Date | null): string | null {
+  if (value === null) {
+    return null;
+  }
+
+  if (value instanceof Date) {
+    return value.toISOString().slice(0, 10);
+  }
+
+  return value.slice(0, 10);
 }
