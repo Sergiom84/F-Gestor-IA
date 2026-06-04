@@ -465,11 +465,11 @@ Objetivo:
 
 Estado:
 
-- Iniciada.
+- Completada con fixture sintetico.
 - Migraciones remotas aplicadas.
 - Script `npm run smoke:mvp-remote` creado.
-- Smoke remoto con `--skip-ai --cleanup` validado: Storage, PGMQ, `extract_text`, paginas/chunks y cancelacion controlada de `ai_extract`.
-- Falta `OPENAI_API_KEY` para completar `ai_extract` real.
+- Smoke remoto con `--cleanup` validado: Storage, PGMQ, `extract_text`, paginas/chunks, `ai_extract`, `review_task`, aprobacion DB, `invoice` y limpieza de fixtures.
+- Variante `--skip-ai --cleanup` validada para entornos sin `OPENAI_API_KEY`.
 
 Incluye:
 
@@ -478,6 +478,7 @@ Incluye:
 - Ejecucion controlada del mismo procesador que usa `worker:documents`.
 - Comprobacion de `document_pages`, `document_text_chunks`, `processing_jobs`, `document_extractions` y `review_tasks`.
 - Aprobacion con `review:invoice-db` cuando haya extraccion real.
+- Cleanup de Storage, organizacion y usuario smoke temporal.
 
 No incluye todavia:
 
@@ -487,7 +488,11 @@ No incluye todavia:
 
 Criterio de salida:
 
-- Una factura PDF atraviesa `extract_text` -> `ai_extract` -> `review_task` -> `review:invoice-db` y crea una fila en `invoices` con auditoria.
+- Una factura PDF atraviesa `extract_text` -> `ai_extract` -> `review_task` -> aprobacion DB y crea una fila en `invoices` con auditoria.
+
+Resultado:
+
+- Cumplido el 2026-06-04 contra Supabase remoto con PDF sintetico y cleanup. Queda pendiente repetir con factura real.
 
 ## Backlog consciente
 

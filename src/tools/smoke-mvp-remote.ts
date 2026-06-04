@@ -3,6 +3,11 @@ import { loadConfig } from "../workers/document-worker/config.js";
 import { createDb, type DbClient } from "../workers/document-worker/db.js";
 import { archiveMessage } from "../workers/document-worker/queue.js";
 import { processQueueMessage } from "../workers/document-worker/processor.js";
+import { applyInvoiceReview } from "../workers/document-worker/review/invoice-review.js";
+import {
+  getReviewTaskExtractionInput,
+  persistInvoiceReviewOutcome
+} from "../workers/document-worker/review/repository.js";
 import { createStorageClient, type StorageClient } from "../workers/document-worker/storage.js";
 import type { QueueMessage } from "../workers/document-worker/types.js";
 
@@ -15,6 +20,8 @@ type SmokeFixture = {
   documentFileId: string;
   extractJobId: string;
   extractQueueMessageId: number | null;
+  reviewerUserId: string;
+  reviewerEmail: string;
   storageBucket: string;
   storagePath: string;
 };
@@ -35,6 +42,13 @@ type SmokeSummary = {
     documentStatus: string | null;
     extractionId: string | null;
     reviewTaskId: string | null;
+  };
+  approval: {
+    attempted: boolean;
+    skippedReason: string | null;
+    invoiceId: string | null;
+    documentStatus: string | null;
+    reviewTaskStatus: string | null;
   };
   cleanup: {
     requested: boolean;
@@ -69,9 +83,12 @@ const shouldCleanup = process.argv.includes("--cleanup");
 const config = loadConfig();
 const db = createDb(config);
 const supabase = createStorageClient(config);
+let createdFixture: SmokeFixture | null = null;
+let cleanupCompleted = false;
 
 try {
   const fixture = await createSmokeFixture(db, supabase, config.queueName);
+  createdFixture = fixture;
   const extractMessage = toQueueMessage(fixture.extractQueueMessageId, {
     job_id: fixture.extractJobId,
     document_id: fixture.documentId,
@@ -91,6 +108,7 @@ try {
 
   const extract = await readExtractSummary(db, fixture);
   const ai = await processOrSkipAi(db, supabase, fixture);
+  const approval = await approveReviewTaskIfReady(db, fixture, ai);
   const cleanup = shouldCleanup
     ? await cleanupFixture(db, supabase, fixture)
     : {
@@ -98,16 +116,27 @@ try {
       removedStoragePaths: 0,
       deletedOrganization: false
     };
+  cleanupCompleted = cleanup.requested;
 
   const summary: SmokeSummary = {
     fixture,
     extract,
     ai,
+    approval,
     cleanup
   };
 
   console.info(JSON.stringify(summary, null, 2));
 } catch (error) {
+  if (shouldCleanup && createdFixture && !cleanupCompleted) {
+    try {
+      const cleanup = await cleanupFixture(db, supabase, createdFixture);
+      console.error(`Smoke cleanup after failure completed: ${JSON.stringify(cleanup)}`);
+    } catch (cleanupError) {
+      console.error(`Smoke cleanup after failure failed: ${cleanupError instanceof Error ? cleanupError.message : String(cleanupError)}`);
+    }
+  }
+
   console.error(error instanceof Error ? error.message : String(error));
   process.exitCode = 1;
 } finally {
@@ -126,6 +155,8 @@ async function createSmokeFixture(
   const documentId = randomUUID();
   const documentFileId = randomUUID();
   const extractJobId = randomUUID();
+  const reviewerUserId = randomUUID();
+  const reviewerEmail = `${runId}@gfiscal-smoke.local`;
   const storageBucket = "document-files";
   const storagePath = [
     "organizations",
@@ -152,6 +183,31 @@ async function createSmokeFixture(
 
   try {
     const queueRows = await dbClient.begin(async (tx) => {
+      await tx`
+        insert into auth.users (
+          id,
+          aud,
+          role,
+          email,
+          email_confirmed_at,
+          raw_app_meta_data,
+          raw_user_meta_data,
+          created_at,
+          updated_at
+        )
+        values (
+          ${reviewerUserId},
+          'authenticated',
+          'authenticated',
+          ${reviewerEmail},
+          now(),
+          ${tx.json({ provider: "email", providers: ["email"] })}::jsonb,
+          ${tx.json({ source: "gfiscal-smoke" })}::jsonb,
+          now(),
+          now()
+        )
+      `;
+
       await tx`
         insert into public.organizations (
           id,
@@ -198,6 +254,44 @@ async function createSmokeFixture(
           'Cliente Smoke SL',
           'B00000000',
           'company'
+        )
+      `;
+
+      await tx`
+        insert into public.organization_members (
+          organization_id,
+          user_id,
+          email,
+          role,
+          status,
+          joined_at
+        )
+        values (
+          ${organizationId},
+          ${reviewerUserId},
+          ${reviewerEmail},
+          'owner',
+          'active',
+          now()
+        )
+      `;
+
+      await tx`
+        insert into public.fiscal_entity_members (
+          organization_id,
+          fiscal_entity_id,
+          user_id,
+          access_role,
+          can_upload,
+          status
+        )
+        values (
+          ${organizationId},
+          ${fiscalEntityId},
+          ${reviewerUserId},
+          'uploader',
+          true,
+          'active'
         )
       `;
 
@@ -306,6 +400,8 @@ async function createSmokeFixture(
       documentFileId,
       extractJobId,
       extractQueueMessageId,
+      reviewerUserId,
+      reviewerEmail,
       storageBucket,
       storagePath
     };
@@ -425,6 +521,71 @@ async function processOrSkipAi(
   };
 }
 
+async function approveReviewTaskIfReady(
+  dbClient: DbClient,
+  fixture: SmokeFixture,
+  ai: SmokeSummary["ai"]
+): Promise<SmokeSummary["approval"]> {
+  if (!ai.reviewTaskId || !ai.extractionId) {
+    return {
+      attempted: false,
+      skippedReason: "AI extraction/review task is not available",
+      invoiceId: null,
+      documentStatus: ai.documentStatus,
+      reviewTaskStatus: null
+    };
+  }
+
+  const taskInput = await getReviewTaskExtractionInput(dbClient, ai.reviewTaskId);
+  const outcome = applyInvoiceReview(taskInput.normalizedData, {
+    action: "approve",
+    organization_id: fixture.organizationId,
+    document_id: fixture.documentId,
+    extraction_id: ai.extractionId,
+    review_task_id: ai.reviewTaskId,
+    fiscal_entity_id: fixture.fiscalEntityId,
+    client_id: fixture.clientId,
+    reviewed_by: fixture.reviewerUserId,
+    review_notes: "Smoke MVP approval.",
+    corrections: {
+      supplier_tax_id: "B12345678",
+      customer_tax_id: "B00000000",
+      invoice_number: fixture.runId.toUpperCase(),
+      issue_date: "2026-06-04",
+      due_date: null,
+      currency: "EUR",
+      subtotal_amount: 100,
+      tax_amount: 21,
+      total_amount: 121
+    },
+    line_items: [
+      {
+        description: "Servicio smoke",
+        quantity: 1,
+        unit_price: 100,
+        tax_rate_percent: 21,
+        line_total: 100
+      }
+    ],
+    tax_breakdowns: [
+      {
+        tax_rate_percent: 21,
+        taxable_base: 100,
+        tax_amount: 21
+      }
+    ]
+  });
+  const persisted = await persistInvoiceReviewOutcome(dbClient, outcome);
+
+  return {
+    attempted: true,
+    skippedReason: null,
+    invoiceId: persisted.invoiceId,
+    documentStatus: persisted.documentStatus,
+    reviewTaskStatus: persisted.reviewTaskStatus
+  };
+}
+
 async function getLatestAiJob(dbClient: DbClient, documentId: string): Promise<AiJobRow | null> {
   const rows = await dbClient<AiJobRow[]>`
     select
@@ -482,6 +643,19 @@ async function cleanupFixture(
   storageClient: StorageClient,
   fixture: SmokeFixture
 ): Promise<SmokeSummary["cleanup"]> {
+  const queueRows = await dbClient<{ queue_message_id: number | string | null }[]>`
+    select queue_message_id
+    from public.processing_jobs
+    where organization_id = ${fixture.organizationId}
+      and queue_message_id is not null
+  `;
+
+  for (const row of queueRows) {
+    if (row.queue_message_id !== null) {
+      await archiveMessage(dbClient, config.queueName, Number(row.queue_message_id));
+    }
+  }
+
   const removeResult = await storageClient.storage
     .from(fixture.storageBucket)
     .remove([fixture.storagePath]);
@@ -495,6 +669,7 @@ async function cleanupFixture(
     where id = ${fixture.organizationId}
     returning id::text
   `;
+  await dbClient`delete from auth.users where id = ${fixture.reviewerUserId}`;
 
   return {
     requested: true,

@@ -37,10 +37,9 @@ Estado de publicacion: las fases 10-14 estan publicadas en el remoto principal e
 
 ## Prioridad alta inmediata
 
-1. Ejecutar smoke test remoto completo con PDF real o fixture controlado.
-2. Configurar `OPENAI_API_KEY` para que `ai_extract` complete el flujo real.
-3. Completar el smoke remoto hasta `review_task` y aprobacion DB cuando haya clave IA.
-4. Anadir tests del flujo nuevo: dispatcher por `job_type`, dedupe por hash, presupuesto IA y aprobacion DB.
+1. Anadir tests del flujo nuevo: dispatcher por `job_type`, dedupe por hash, presupuesto IA y aprobacion DB.
+2. Preparar un fixture de factura real ademas del PDF sintético del smoke.
+3. Decidir si el smoke remoto completo debe entrar como workflow manual en GitHub Actions.
 
 ## Documentacion inicial
 
@@ -109,7 +108,7 @@ Para usar `worker:extract-invoice`, el documento debe tener chunks en `document_
 
 `review:invoice-db` usa Supabase/Postgres: lee `review_tasks` + `document_extractions`, aplica la revision, inserta `invoices`, `invoice_lines` y `tax_breakdowns` cuando se aprueba, actualiza estados y guarda `audit_logs` en una transaccion.
 
-`smoke:mvp-remote` usa Supabase remoto: crea fixture, sube PDF a Storage, crea `processing_job`, manda PGMQ y procesa `extract_text`. Con `OPENAI_API_KEY` configurada puede continuar hacia `ai_extract`; con `--skip-ai` valida solo la parte documental y cancela el job IA.
+`smoke:mvp-remote` usa Supabase remoto: crea fixture, sube PDF a Storage, crea `processing_job`, manda PGMQ, procesa `extract_text`, ejecuta `ai_extract`, aprueba la `review_task`, crea `invoice` y limpia datos si se usa `--cleanup`. Con `--skip-ai` valida solo la parte documental y cancela el job IA.
 
 `dashboard:local` no usa Supabase: toma datos exportados o mock en JSON y devuelve un snapshot documental/fiscal para una organizacion.
 
