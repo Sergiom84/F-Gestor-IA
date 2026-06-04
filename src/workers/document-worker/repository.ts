@@ -386,7 +386,7 @@ async function enqueueAiExtractionJob(
   };
 
   const sendRows = await tx<QueueSendRow[]>`
-    select * from pgmq.send(${queueName}, ${tx.json(message)}, 0)
+    select * from pgmq.send(${queueName}::text, ${tx.json(message)}::jsonb, 0::integer)
   `;
   const queueMessageId = sendRows[0]?.send === undefined || sendRows[0]?.send === null
     ? null

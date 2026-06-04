@@ -37,7 +37,7 @@ export async function readMessages(
 }
 
 export async function archiveMessage(db: DbClient, queueName: string, msgId: number): Promise<void> {
-  await db`select pgmq.archive(${queueName}, ${msgId})`;
+  await db`select pgmq.archive(${queueName}::text, ${msgId}::bigint)`;
 }
 
 export async function requeueMessage(
@@ -46,5 +46,5 @@ export async function requeueMessage(
   message: DocumentJobMessage,
   delaySeconds: number
 ): Promise<void> {
-  await db`select * from pgmq.send(${queueName}, ${db.json(message)}, ${delaySeconds})`;
+  await db`select * from pgmq.send(${queueName}::text, ${db.json(message)}::jsonb, ${delaySeconds}::integer)`;
 }

@@ -15,6 +15,7 @@
     "regulatory:local": "tsx src/workers/document-worker/regulatory-local.ts",
     "regulatory:persist-invoice": "tsx src/workers/document-worker/regulatory-persist-invoice.ts",
     "supabase:validate-local": "tsx src/tools/supabase-local-validate.ts",
+    "smoke:mvp-remote": "tsx src/tools/smoke-mvp-remote.ts",
     "ci:static": "npm run typecheck && npm test",
     "ci:supabase-local": "npm run supabase:validate-local",
     "ci:full": "npm run ci:static && npm run ci:supabase-local",

@@ -39,7 +39,7 @@ Estado de publicacion: las fases 10-14 estan publicadas en el remoto principal e
 
 1. Ejecutar smoke test remoto completo con PDF real o fixture controlado.
 2. Configurar `OPENAI_API_KEY` para que `ai_extract` complete el flujo real.
-3. Automatizar el seed/smoke remoto: organizacion, cliente, entidad fiscal, documento, archivo, job y mensaje PGMQ.
+3. Completar el smoke remoto hasta `review_task` y aprobacion DB cuando haya clave IA.
 4. Anadir tests del flujo nuevo: dispatcher por `job_type`, dedupe por hash, presupuesto IA y aprobacion DB.
 
 ## Documentacion inicial
@@ -87,6 +87,7 @@ npm run worker:documents
 npm run worker:extract-invoice -- <document_id>
 npm run review:invoice-local -- C:\ruta\extraccion.json C:\ruta\revision.json
 npm run review:invoice-db -- <review_task_id> C:\ruta\revision.json
+npm run smoke:mvp-remote -- --skip-ai --cleanup
 npm run dashboard:local -- C:\ruta\dashboard-data.json 2026-01-01 2026-12-31
 npm run worker:ocr-plan-local -- C:\ruta\documento.pdf 100 2.5 25
 npm run regulatory:local -- C:\ruta\regulatory-input.json
@@ -107,6 +108,8 @@ Para usar `worker:extract-invoice`, el documento debe tener chunks en `document_
 `review:invoice-local` no usa Supabase: toma una extraccion IA en JSON y un comando de revision humana en JSON, y devuelve el resultado auditable.
 
 `review:invoice-db` usa Supabase/Postgres: lee `review_tasks` + `document_extractions`, aplica la revision, inserta `invoices`, `invoice_lines` y `tax_breakdowns` cuando se aprueba, actualiza estados y guarda `audit_logs` en una transaccion.
+
+`smoke:mvp-remote` usa Supabase remoto: crea fixture, sube PDF a Storage, crea `processing_job`, manda PGMQ y procesa `extract_text`. Con `OPENAI_API_KEY` configurada puede continuar hacia `ai_extract`; con `--skip-ai` valida solo la parte documental y cancela el job IA.
 
 `dashboard:local` no usa Supabase: toma datos exportados o mock en JSON y devuelve un snapshot documental/fiscal para una organizacion.
 

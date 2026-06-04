@@ -465,15 +465,17 @@ Objetivo:
 
 Estado:
 
-- Prioridad alta inmediata.
+- Iniciada.
 - Migraciones remotas aplicadas.
+- Script `npm run smoke:mvp-remote` creado.
+- Smoke remoto con `--skip-ai --cleanup` validado: Storage, PGMQ, `extract_text`, paginas/chunks y cancelacion controlada de `ai_extract`.
 - Falta `OPENAI_API_KEY` para completar `ai_extract` real.
 
 Incluye:
 
-- Script de smoke remoto que cree organizacion, cliente, entidad fiscal, documento, archivo, `processing_job` y mensaje PGMQ.
-- Upload de PDF de prueba a Storage privado.
-- Ejecucion controlada de `worker:documents`.
+- Script de smoke remoto que crea organizacion, cliente, entidad fiscal, documento, archivo, `processing_job` y mensaje PGMQ.
+- Upload de PDF fixture a Storage privado.
+- Ejecucion controlada del mismo procesador que usa `worker:documents`.
 - Comprobacion de `document_pages`, `document_text_chunks`, `processing_jobs`, `document_extractions` y `review_tasks`.
 - Aprobacion con `review:invoice-db` cuando haya extraccion real.
 
