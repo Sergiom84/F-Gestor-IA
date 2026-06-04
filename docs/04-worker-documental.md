@@ -11,7 +11,7 @@ El worker:
 
 - Lee mensajes desde la cola `document_processing`.
 - Lee `processing_jobs.job_type` y despacha por tipo.
-- Procesa `extract_text` para PDFs con texto embebido.
+- Procesa `extract_text` para todos los PDFs disponibles del documento.
 - Marca el job como `running`.
 - Descarga el PDF desde Supabase Storage privado con credenciales server-side.
 - Extrae texto por pagina con `pdfjs-dist`.
@@ -21,7 +21,9 @@ El worker:
 - Detecta duplicado exacto por `sha256_hash` y abre `review_task` sin gastar IA.
 - Si hay texto y no hay duplicado exacto, crea `processing_job` tipo `ai_extract` y lo encola en `pgmq`.
 - Marca `processing_jobs.status` como `succeeded`, `retrying` o `failed`.
-- Reencola con backoff si el job aun tiene intentos disponibles.
+- Reencola con backoff exponencial si el job aun tiene intentos disponibles.
+- Reclama jobs solo desde `queued/retrying` para evitar carreras entre workers.
+- Emite logs JSON estructurados con `job_id`, `document_id` y `organization_id`.
 
 ## Fuentes oficiales revisadas
 
@@ -34,7 +36,7 @@ Decisiones tomadas:
 
 - El worker usa Postgres directo para `pgmq`; no expone la cola al navegador.
 - El worker usa service role solo en entorno servidor para descargar de Storage.
-- La app futura debe crear el primer `processing_job` tipo `extract_text` y enviar su mensaje a `pgmq`.
+- La app crea el primer `processing_job` tipo `extract_text` y envia su mensaje a `pgmq` desde una server action.
 - Los jobs posteriores del MVP documental los encadena el worker.
 
 ## Archivos
@@ -45,7 +47,8 @@ Decisiones tomadas:
 - `src/workers/document-worker/storage.ts`: descarga desde Storage privado.
 - `src/workers/document-worker/pdf.ts`: extraccion de texto embebido y chunks.
 - `src/workers/document-worker/repository.ts`: escrituras de estado/texto en Postgres.
-- `src/workers/document-worker/processor.ts`: despachador por `job_type`.
+- `src/workers/document-worker/processor.ts`: despachador por `job_type`, backoff exponencial y procesamiento multiarchivo.
+- `src/workers/document-worker/logger.ts`: logs JSON estructurados.
 - `src/workers/document-worker/extract-local-pdf.ts`: prueba local sin Supabase.
 
 ## Variables de entorno
@@ -146,9 +149,7 @@ npx supabase db reset --local --no-seed
 ## Pendiente para cerrar Fase 3
 
 - Validar migracion Supabase con Docker.
-- Insertar un documento y archivo real en Storage privado.
-- Crear `processing_job`.
-- Enviar mensaje a `pgmq`.
+- Repetir el flujo local completo con documento y Storage cuando Docker este disponible.
 - Ejecutar worker contra DB local.
 - Confirmar que se crean paginas/chunks y que RLS no permite acceso cruzado desde clientes.
 - Anadir test automatizado de flujo documental cuando haya entorno local operativo.

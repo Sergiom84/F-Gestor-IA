@@ -7,6 +7,7 @@ import {
   getDocumentAiInput,
   markDocumentAiFailed,
   markDocumentAiProcessing,
+  recordReceivedInvoiceAiRequestFailure,
   saveReceivedInvoiceExtraction,
   type AiBudgetState,
   type DocumentAiInput,
@@ -53,7 +54,7 @@ export async function processReceivedInvoiceExtraction(
   try {
     await assertAiBudgetAvailable(db, documentInput);
 
-    const aiResult = await extractReceivedInvoiceWithOpenAi(aiConfig, documentInput.text);
+    const aiResult = await extractInvoiceWithFailureAudit(db, aiConfig, documentInput);
     const baseValidation = validateReceivedInvoiceExtraction(aiResult.extraction);
     const duplicates = await findReceivedInvoiceDuplicates(
       db,
@@ -75,6 +76,39 @@ export async function processReceivedInvoiceExtraction(
     }
     throw error;
   }
+}
+
+async function extractInvoiceWithFailureAudit(
+  db: DbClient,
+  aiConfig: OpenAiInvoiceConfig,
+  documentInput: DocumentAiInput
+) {
+  try {
+    return await extractReceivedInvoiceWithOpenAi(aiConfig, documentInput.text);
+  } catch (error) {
+    await recordReceivedInvoiceAiRequestFailure(db, documentInput, {
+      providerKey: "openai",
+      modelKey: aiConfig.model,
+      status: classifyAiRequestFailure(error),
+      errorMessage: error instanceof Error ? error.message : String(error)
+    });
+    throw error;
+  }
+}
+
+export function classifyAiRequestFailure(error: unknown): "schema_error" | "provider_error" | "timeout" {
+  const name = error instanceof Error ? error.name : "";
+  const message = error instanceof Error ? error.message : String(error);
+
+  if (name === "AbortError" || /aborted|timeout/i.test(message)) {
+    return "timeout";
+  }
+
+  if (/JSON|schema|output text|output_text|empty|did not include/i.test(message)) {
+    return "schema_error";
+  }
+
+  return "provider_error";
 }
 
 async function assertAiBudgetAvailable(db: DbClient, documentInput: DocumentAiInput): Promise<void> {

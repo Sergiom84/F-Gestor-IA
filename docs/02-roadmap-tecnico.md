@@ -92,7 +92,10 @@ Estado:
 
 - Worker TypeScript conectado a Supabase remoto.
 - Despacha por `processing_jobs.job_type`.
-- `extract_text` crea paginas/chunks, detecta duplicados exactos por hash y encadena `ai_extract`.
+- `extract_text` procesa todos los PDFs disponibles del documento, crea paginas/chunks, detecta duplicados exactos por hash y encadena `ai_extract`.
+- Reclamacion idempotente de jobs: solo `queued/retrying` pasan a `running`; mensajes duplicados no incrementan intentos ni pisan un worker activo.
+- Backoff exponencial para reintentos.
+- Logs JSON estructurados por `job_id`, `document_id` y `organization_id`.
 - Pendiente de validacion local cuando Docker Desktop este disponible.
 
 Incluye:
@@ -139,6 +142,7 @@ Incluye:
 - Control de presupuesto mensual por organizacion.
 - Deteccion de duplicados fiscales contra `invoices`.
 - Fallback preparado, aunque no necesariamente activo en produccion.
+- Registro de fallos IA en `ai_requests` para errores de proveedor, timeout o esquema antes de respuesta valida.
 
 No incluye:
 
@@ -159,7 +163,8 @@ Estado:
 
 - Conectada a Supabase remoto.
 - Contrato de decision humana, aprobacion/rechazo/cambios, conversion a factura y evento de auditoria.
-- Adaptador transaccional DB implementado; UI queda pendiente.
+- Adaptador transaccional DB implementado.
+- UI Next.js de detalle de factura con campos editables y acciones aprobar, pedir cambios o rechazar.
 
 Incluye:
 
@@ -182,8 +187,9 @@ Objetivo:
 
 Estado:
 
-- En curso como motor offline de snapshot: agregacion de documentos, revision, facturas aprobadas, IVA e IA desde datos JSON/exportados.
-- UI y consultas directas a Supabase quedan para el final de integracion.
+- Motor offline de snapshot disponible para datos JSON/exportados.
+- Primera UI Next.js conectada a Supabase en Fase 16: dashboard autenticado, subida multi-PDF, bandeja documental, detalle de factura y acciones de revision.
+- Pendiente evolucionar la UI de dashboard fiscal hacia consultas agregadas reales por periodo.
 
 Incluye:
 
@@ -198,11 +204,11 @@ No incluye:
 
 - Declaraciones oficiales.
 - Recomendaciones fiscales cerradas.
-- Conexion directa a Supabase remoto hasta tener URL y claves.
+- Analitica fiscal avanzada por periodo desde UI.
 
 Criterio de salida:
 
-- Se puede generar un snapshot del estado documental/fiscal de una organizacion desde datos exportados o mock, con la misma forma que usara la futura UI.
+- Se puede generar un snapshot documental/fiscal de una organizacion y ver el estado documental basico desde UI autenticada.
 
 ## Fase 7 - OCR y PDFs dificiles
 
@@ -501,8 +507,9 @@ Resultado:
 Siguiente prioridad alta:
 
 - Preparar fixture de factura real para repetir el smoke completo sin depender solo del PDF sintetico.
-- Completar Fase 1/2 de producto: crear organizacion, cliente, entidad fiscal y subida PDF desde UI.
-- Promocionar validaciones manuales a PR cuando Supabase local y smoke remoto hayan pasado de forma repetible en GitHub Actions.
+- Completar Fase 1/2 de producto: crear organizacion, cliente y entidad fiscal desde UI.
+- Validar Supabase local cuando Docker Desktop este operativo y promocionar esa puerta a PR.
+- Anadir visor PDF/URL firmada y proveedor OCR real.
 
 ## Fase 16 - Superficie Next.js minima
 
@@ -512,12 +519,14 @@ Objetivo:
 
 Estado:
 
-- Iniciada.
+- Completada como primera superficie operativa.
 - Next.js App Router instalado con React.
 - `@supabase/ssr` integrado con `getAll`/`setAll`.
 - `proxy.ts` refresca sesion con `supabase.auth.getUser()`.
 - `/login` usa server action con email/password.
-- `/dashboard` requiere usuario autenticado, resuelve organizacion activa y muestra bandeja documental/revisiones de lectura.
+- `/dashboard` requiere usuario autenticado, resuelve organizacion activa, muestra bandeja documental/revisiones, permite subir uno o varios PDFs a Storage y encola `extract_text`.
+- `/dashboard/review/[taskId]` muestra detalle de factura y permite aprobar, pedir cambios o rechazar.
+- `ocr_required` queda visible como metrica y estado destacado.
 - `ci:static` incluye `next build`.
 - `postcss` queda forzado por override a `8.5.10`; `npm audit --omit=dev` queda limpio.
 
@@ -526,16 +535,19 @@ Incluye:
 - Auth Supabase SSR.
 - Login y logout.
 - Selector de organizacion activa por query.
-- Metricas de documentos, revision, clientes y entidades fiscales.
+- Metricas de documentos, revision, OCR pendiente, clientes y entidades fiscales.
 - Lista de documentos y tareas de revision bajo RLS.
+- Upload multi-PDF con validacion app-side del `storage_path` contra `organization_id`, `fiscal_entity_id`, `document_id` y `document_file_id`.
+- Creacion server-side de `processing_job` y mensaje PGMQ.
+- Detalle de factura con aprobacion/rechazo y auditoria.
 
 No incluye todavia:
 
 - Registro de usuarios.
 - Crear organizacion desde UI.
 - CRUD de clientes/entidades fiscales desde UI.
-- Upload PDF desde UI.
-- Revision/aprobacion de factura desde UI.
+- Visor PDF embebido o URL firmada de descarga.
+- OCR real con proveedor externo.
 
 Criterio de salida:
 

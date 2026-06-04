@@ -1,13 +1,13 @@
 # Dashboard MVP
 
-Fecha: 2026-06-03  
-Estado: Fase 6 iniciada sin dependencia de Supabase remoto
+Fecha: 2026-06-04
+Estado: motor local iniciado y primera UI Next.js conectada
 
 ## Objetivo
 
 Dar visibilidad basica del estado documental, fiscal y de coste IA de una organizacion.
 
-El primer paso es un motor de snapshot local. La UI y las consultas directas a Supabase quedan para el final de integracion, cuando existan URL, claves y entorno operativo.
+El primer paso fue un motor de snapshot local. La primera superficie Next.js ya consulta Supabase bajo RLS y cubre upload, bandeja y revision humana basica.
 
 ## Alcance implementado
 
@@ -47,6 +47,9 @@ El primer paso es un motor de snapshot local. La UI y las consultas directas a S
 - Series mensuales simples.
 - Alertas basicas.
 - CLI local sin Supabase.
+- UI `/dashboard` con organizacion activa, metricas, subida multi-PDF, bandeja documental y tareas de revision.
+- UI `/dashboard/review/[taskId]` con detalle de factura, campos editables y aprobar/rechazar/pedir cambios.
+- Estado `ocr_required` destacado como metrica y pill de estado.
 
 ## Archivos
 
@@ -147,8 +150,7 @@ La metrica ya puede probarse con datos exportados o mocks. Cuando el entorno est
 
 ## Pendiente para cerrar Fase 6
 
-- Crear adaptador de lectura Supabase/Postgres.
-- Crear UI de dashboard en Next.js cuando exista app.
-- Definir filtros por organizacion, entidad fiscal, periodo y cliente.
+- Ampliar filtros por entidad fiscal, periodo y cliente.
+- Anadir visor PDF/URL firmada en detalle.
 - Validar metricas con datos reales.
 - Decidir si se materializan `tax_summaries` o se calculan bajo demanda.

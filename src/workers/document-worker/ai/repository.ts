@@ -1,7 +1,12 @@
 import type postgres from "postgres";
 import type { DbClient } from "../db.js";
 import type { OpenAiInvoiceExtractionResult } from "./openai-provider.js";
-import type { ReceivedInvoiceExtraction, ReceivedInvoiceValidation } from "./invoice-schema.js";
+import {
+  INVOICE_EXTRACTION_PROMPT_VERSION,
+  INVOICE_EXTRACTION_SCHEMA_VERSION,
+  type ReceivedInvoiceExtraction,
+  type ReceivedInvoiceValidation
+} from "./invoice-schema.js";
 
 export type DocumentAiInput = {
   documentId: string;
@@ -30,6 +35,15 @@ type DocumentAiInputRow = {
 
 type IdRow = {
   id: string;
+};
+
+export type AiRequestFailureStatus = "schema_error" | "provider_error" | "timeout";
+
+export type AiRequestFailureInput = {
+  providerKey: string;
+  modelKey: string;
+  status: AiRequestFailureStatus;
+  errorMessage: string;
 };
 
 type AiBudgetStateRow = {
@@ -181,6 +195,40 @@ export async function markDocumentAiFailed(
         updated_at = now()
     where id = ${documentId}
   `;
+}
+
+export async function recordReceivedInvoiceAiRequestFailure(
+  db: DbClient,
+  documentInput: DocumentAiInput,
+  failure: AiRequestFailureInput
+): Promise<string> {
+  const aiRequest = await insertAndReturnId(db<IdRow[]>`
+    insert into public.ai_requests (
+      organization_id,
+      document_id,
+      task_type,
+      provider_key,
+      model_key,
+      prompt_version,
+      schema_version,
+      status,
+      error_message
+    )
+    values (
+      ${documentInput.organizationId},
+      ${documentInput.documentId},
+      'invoice_received_extraction',
+      ${failure.providerKey},
+      ${failure.modelKey},
+      ${INVOICE_EXTRACTION_PROMPT_VERSION},
+      ${INVOICE_EXTRACTION_SCHEMA_VERSION},
+      ${failure.status},
+      ${failure.errorMessage}
+    )
+    returning id
+  `);
+
+  return aiRequest.id;
 }
 
 export async function saveReceivedInvoiceExtraction(

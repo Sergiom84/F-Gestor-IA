@@ -17,7 +17,7 @@ La base tecnica inicial esta documentada y parcialmente implementada:
 
 - Modelo de datos Supabase documentado.
 - Migraciones Supabase aplicadas al remoto `F_Gestor-IA`, con RLS, Storage privado, cola `document_processing` y ledger normativo.
-- Worker documental TypeScript creado para extraer texto embebido de PDFs y encadenar `ai_extract`.
+- Worker documental TypeScript creado para extraer texto embebido de PDFs, procesar multiples archivos por documento y encadenar `ai_extract`.
 - Fase 4 conectada al worker con contrato Zod/JSON Schema, extractor IA de facturas recibidas, control de presupuesto y deteccion de duplicados.
 - Fase 5 conectada a Supabase con adaptador transaccional de revision humana y aprobacion/rechazo.
 - Fase 6 iniciada con motor local de dashboard MVP para snapshot documental/fiscal desde JSON.
@@ -30,18 +30,19 @@ La base tecnica inicial esta documentada y parcialmente implementada:
 - Fase 13 iniciada con runner de validacion local Supabase para migraciones, lint y pgTAP.
 - Fase 14 iniciada con CI rapido y workflow manual de validacion Supabase local.
 - Smoke MVP remoto validado con aprobacion DB y cobertura unitaria de dispatcher, dedupe documental, presupuesto IA y revision humana.
-- Superficie Next.js minima iniciada: Supabase Auth SSR, proxy de sesion, login, organizacion activa y bandeja documental de lectura.
+- Superficie Next.js minima conectada: Supabase Auth SSR, proxy de sesion, login, organizacion activa, subida multi-PDF, bandeja, detalle de factura y revision humana aprobar/rechazar.
 
 Pendiente importante: Supabase local sigue pendiente porque Docker Desktop no esta operativo en el entorno actual.
 La conexion real a Supabase remoto ya esta vinculada y las migraciones estan aplicadas.
 
-Estado de publicacion: las fases 10-14 estan publicadas en el remoto principal en la rama `main`; el flujo MVP Supabase remoto queda preparado localmente para commit/publicacion.
+Estado de publicacion: las fases 10-16 quedan publicadas en el remoto principal en la rama `main` tras este cierre de MVP documental.
 
 ## Prioridad alta inmediata
 
 1. Preparar un fixture de factura real ademas del PDF sintetico del smoke.
-2. Completar Fase 1/2 de producto: crear organizacion, cliente, entidad fiscal y subida PDF desde UI.
-3. Promocionar validaciones manuales a PR cuando Supabase local y smoke remoto hayan pasado de forma repetible en GitHub Actions.
+2. Completar Fase 1/2 de producto: crear organizacion, cliente y entidad fiscal desde UI.
+3. Validar Supabase local cuando Docker Desktop este operativo y promocionar esa puerta a PR.
+4. Anadir visor PDF/URL firmada y proveedor OCR real.
 
 ## Documentacion inicial
 
@@ -69,11 +70,11 @@ Estado de publicacion: las fases 10-14 estan publicadas en el remoto principal e
 - Storage: Supabase Storage privado.
 - Seguridad: RLS obligatorio en tablas expuestas y Storage.
 - Workers: proceso externo TypeScript para PDFs, OCR e IA.
-- IA: capa desacoplada con proveedores intercambiables, validacion Zod/JSON Schema y logs completos.
+- IA: capa desacoplada con proveedores intercambiables, validacion Zod/JSON Schema y logs completos, incluidos fallos antes de respuesta valida.
 
 ## Fuera de alcance por ahora
 
-- La UI aun no crea organizaciones, clientes, entidades fiscales ni sube PDFs.
+- La UI aun no crea organizaciones, clientes ni entidades fiscales.
 - Supabase local queda pendiente de validar con Docker Desktop.
 - El proveedor IA se invoca desde worker/CLI cuando `OPENAI_API_KEY` esta configurada.
 
@@ -104,7 +105,7 @@ npm run ci:full
 
 Para usar `worker:documents` hace falta configurar `.env` segun `.env.example` y tener Supabase/Postgres accesible.
 
-Para usar `worker:documents`, la app o una prueba debe crear un `processing_job` tipo `extract_text` y enviar un mensaje a `pgmq`. Al terminar texto, el worker crea y encola el job `ai_extract` si hay texto suficiente y no detecta duplicado exacto por hash.
+Para usar `worker:documents`, la app o una prueba debe crear un `processing_job` tipo `extract_text` y enviar un mensaje a `pgmq`. Al terminar texto, el worker crea y encola el job `ai_extract` si hay texto suficiente y no detecta duplicado exacto por hash. El worker reclama jobs solo desde `queued/retrying`, reintenta con backoff exponencial y emite logs JSON con `job_id`, `document_id` y `organization_id`.
 
 Para usar `worker:extract-invoice`, el documento debe tener chunks en `document_text_chunks`, `DATABASE_URL` debe apuntar a la base y `OPENAI_API_KEY` debe estar configurada.
 

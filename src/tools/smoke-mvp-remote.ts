@@ -4,6 +4,7 @@ import { createDb, type DbClient } from "../workers/document-worker/db.js";
 import { archiveMessage } from "../workers/document-worker/queue.js";
 import { processQueueMessage } from "../workers/document-worker/processor.js";
 import { applyInvoiceReview } from "../workers/document-worker/review/invoice-review.js";
+import { assertDocumentStoragePath, buildDocumentStoragePath } from "../lib/documents/storage-path.js";
 import {
   getReviewTaskExtractionInput,
   persistInvoiceReviewOutcome
@@ -158,16 +159,19 @@ async function createSmokeFixture(
   const reviewerUserId = randomUUID();
   const reviewerEmail = `${runId}@gfiscal-smoke.local`;
   const storageBucket = "document-files";
-  const storagePath = [
-    "organizations",
+  const storagePath = buildDocumentStoragePath({
     organizationId,
-    "fiscal-entities",
     fiscalEntityId,
-    "documents",
     documentId,
-    "files",
-    `${documentFileId}-factura-smoke.pdf`
-  ].join("/");
+    documentFileId,
+    filename: "factura-smoke.pdf"
+  });
+  assertDocumentStoragePath(storagePath, {
+    organizationId,
+    fiscalEntityId,
+    documentId,
+    documentFileId
+  });
   const pdfBuffer = buildSmokeInvoicePdf(runId);
 
   const upload = await storageClient.storage

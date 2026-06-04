@@ -1,12 +1,17 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import { signOut } from "../login/actions";
+import { uploadDocument } from "./actions";
 import { createClient } from "@/src/lib/supabase/server";
+import { BrandLockup } from "../brand-lockup";
 
 export const dynamic = "force-dynamic";
 
 type DashboardPageProps = {
   searchParams?: Promise<{
     org?: string;
+    uploaded?: string;
+    error?: string;
   }>;
 };
 
@@ -41,6 +46,12 @@ type ReviewTaskRow = {
   priority: number;
   document_id: string;
   created_at: string;
+};
+
+type FiscalEntityRow = {
+  id: string;
+  legal_name: string;
+  tax_id: string | null;
 };
 
 export default async function DashboardPage({ searchParams }: DashboardPageProps) {
@@ -81,9 +92,9 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
       <main className="dashboard">
         <header className="topbar">
           <div className="page-title">
-            <p className="brand-line">GFiscal</p>
+            <BrandLockup />
             <h1>Sin organizacion activa</h1>
-            <p className="supporting-text">Tu usuario no tiene una membresia activa en este proyecto.</p>
+            <p className="supporting-text">No hay membresia activa para este usuario.</p>
           </div>
           <form action={signOut}>
             <button className="button secondary" type="submit">
@@ -100,22 +111,26 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
     reviewTasks,
     documentCount,
     needsReviewCount,
+    ocrRequiredCount,
     clientCount,
-    fiscalEntityCount
+    fiscalEntityCount,
+    fiscalEntities
   ] = await Promise.all([
     readDocuments(activeOrganization.id),
     readReviewTasks(activeOrganization.id),
     readDocumentCount(activeOrganization.id),
     readNeedsReviewCount(activeOrganization.id),
+    readOcrRequiredCount(activeOrganization.id),
     readClientCount(activeOrganization.id),
-    readFiscalEntityCount(activeOrganization.id)
+    readFiscalEntityCount(activeOrganization.id),
+    readFiscalEntities(activeOrganization.id)
   ]);
 
   return (
     <main className="dashboard">
       <header className="topbar">
         <div className="page-title">
-          <p className="brand-line">GFiscal</p>
+          <BrandLockup />
           <h1>Bandeja documental</h1>
           <p className="supporting-text">
             {activeOrganization.name} · {activeMembership?.role ?? "miembro"}
@@ -134,30 +149,68 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
       <section className="org-strip" aria-label="Organizacion activa">
         <form className="field" action="/dashboard">
           <span>Organizacion</span>
-          <select className="select" name="org" defaultValue={activeOrganization.id}>
-            {organizations.map((organization) => (
-              <option key={organization.id} value={organization.id}>
-                {organization.name}
-              </option>
-            ))}
-          </select>
-          <button className="button secondary" type="submit">
-            Cambiar
-          </button>
+          <div className="inline-control">
+            <select className="select" name="org" defaultValue={activeOrganization.id}>
+              {organizations.map((organization) => (
+                <option key={organization.id} value={organization.id}>
+                  {organization.name}
+                </option>
+              ))}
+            </select>
+            <button className="button secondary" type="submit">
+              Cambiar
+            </button>
+          </div>
         </form>
       </section>
 
       <section className="metrics-grid" aria-label="Resumen">
         <MetricCard label="Documentos" value={documentCount} />
-        <MetricCard label="Revision" value={needsReviewCount} />
+        <MetricCard label="Por revisar" value={needsReviewCount} />
+        <MetricCard label="OCR pendiente" value={ocrRequiredCount} />
         <MetricCard label="Clientes" value={clientCount} />
         <MetricCard label="Entidades fiscales" value={fiscalEntityCount} />
+      </section>
+
+      {params?.uploaded ? (
+        <div className="notice success">Documento subido y encolado para procesamiento.</div>
+      ) : null}
+
+      {params?.error ? (
+        <div className="notice danger">{formatDashboardError(params.error)}</div>
+      ) : null}
+
+      <section className="panel upload-panel" aria-labelledby="upload-title">
+        <div className="panel-header">
+          <h2 id="upload-title">Subir factura</h2>
+          <span className="row-meta">PDF · Storage privado · cola documental</span>
+        </div>
+        <form className="upload-form" action={uploadDocument}>
+          <input type="hidden" name="organization_id" value={activeOrganization.id} />
+          <label className="field">
+            <span>Entidad fiscal</span>
+            <select className="select" name="fiscal_entity_id" required disabled={fiscalEntities.length === 0}>
+              {fiscalEntities.map((entity) => (
+                <option key={entity.id} value={entity.id}>
+                  {entity.legal_name}{entity.tax_id ? ` · ${entity.tax_id}` : ""}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="field">
+            <span>Archivos PDF</span>
+            <input className="input file-input" name="files" type="file" accept="application/pdf" multiple required />
+          </label>
+          <button className="button" type="submit" disabled={fiscalEntities.length === 0}>
+            Encolar
+          </button>
+        </form>
       </section>
 
       <section className="content-grid">
         <div className="panel">
           <div className="panel-header">
-            <h2>Ultimos documentos</h2>
+            <h2>Documentos recientes</h2>
             <span className="row-meta">{documents.length} visibles</span>
           </div>
           {documents.length > 0 ? (
@@ -170,6 +223,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
                     <th>Estado</th>
                     <th>Origen</th>
                     <th>Fecha</th>
+                    <th></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -187,6 +241,11 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
                       </td>
                       <td>{formatLabel(document.source)}</td>
                       <td>{formatDate(document.created_at)}</td>
+                      <td>
+                        {document.status === "ocr_required" ? (
+                          <span className="row-meta strong">Requiere OCR</span>
+                        ) : null}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -206,7 +265,9 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
             <div className="side-list">
               {reviewTasks.map((task) => (
                 <div className="side-row" key={task.id}>
-                  <div className="row-title">{formatLabel(task.reason)}</div>
+                  <Link className="row-title link-row" href={`/dashboard/review/${task.id}`}>
+                    {formatLabel(task.reason)}
+                  </Link>
                   <div className="row-meta">Prioridad {task.priority} · {formatDate(task.created_at)}</div>
                   <StatusPill status={task.status} />
                 </div>
@@ -285,6 +346,18 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
     return count ?? 0;
   }
 
+  async function readOcrRequiredCount(organizationId: string): Promise<number> {
+    const { count, error } = await supabase
+      .from("documents")
+      .select("id", { count: "exact", head: true })
+      .eq("organization_id", organizationId)
+      .eq("status", "ocr_required")
+      .is("deleted_at", null);
+
+    assertNoError(error, "No se pudo contar OCR pendiente");
+    return count ?? 0;
+  }
+
   async function readClientCount(organizationId: string): Promise<number> {
     const { count, error } = await supabase
       .from("clients")
@@ -306,6 +379,19 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
     assertNoError(error, "No se pudo contar entidades fiscales");
     return count ?? 0;
   }
+
+  async function readFiscalEntities(organizationId: string): Promise<FiscalEntityRow[]> {
+    const { data, error } = await supabase
+      .from("fiscal_entities")
+      .select("id, legal_name, tax_id")
+      .eq("organization_id", organizationId)
+      .is("deleted_at", null)
+      .order("legal_name", { ascending: true })
+      .returns<FiscalEntityRow[]>();
+
+    assertNoError(error, "No se pudieron cargar las entidades fiscales");
+    return data ?? [];
+  }
 }
 
 function MetricCard({ label, value }: { label: string; value: number }) {
@@ -318,12 +404,41 @@ function MetricCard({ label, value }: { label: string; value: number }) {
 }
 
 function StatusPill({ status }: { status: string }) {
-  const knownStatuses = new Set(["needs_review", "open", "in_review", "failed", "rejected", "approved", "succeeded"]);
+  const knownStatuses = new Set([
+    "uploaded",
+    "queued",
+    "extracting_text",
+    "text_extracted",
+    "ocr_required",
+    "ocr_processing",
+    "ai_processing",
+    "needs_review",
+    "open",
+    "in_review",
+    "failed",
+    "rejected",
+    "approved",
+    "succeeded"
+  ]);
   const className = knownStatuses.has(status)
     ? `status-pill ${status}`
     : "status-pill default";
 
   return <span className={className}>{formatLabel(status)}</span>;
+}
+
+function formatDashboardError(error: string): string {
+  const messages: Record<string, string> = {
+    missing_file: "Selecciona un PDF antes de subir.",
+    unsupported_file: "Solo se admiten PDFs en esta primera superficie.",
+    upload_scope: "La entidad fiscal no pertenece a la organizacion activa o no tienes permiso.",
+    document_create: "No se pudo crear el documento.",
+    storage_upload: "No se pudo subir el PDF a Storage.",
+    file_register: "El archivo se subio, pero no pudo registrarse en la base.",
+    review_not_found: "No se encontro la tarea de revision."
+  };
+
+  return messages[error] ?? "La operacion no se pudo completar.";
 }
 
 function formatLabel(value: string): string {

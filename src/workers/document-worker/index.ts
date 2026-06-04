@@ -3,6 +3,7 @@ import { createDb } from "./db.js";
 import { archiveMessage, readMessages, requeueMessage } from "./queue.js";
 import { processQueueMessage } from "./processor.js";
 import { createStorageClient } from "./storage.js";
+import { logError, logInfo } from "./logger.js";
 
 const config = loadConfig();
 const db = createDb(config);
@@ -19,7 +20,7 @@ process.on("SIGTERM", () => {
 });
 
 async function main() {
-  console.info("document-worker starting", {
+  logInfo("document_worker.starting", {
     queueName: config.queueName,
     batchSize: config.batchSize
   });
@@ -40,25 +41,39 @@ async function main() {
     }
 
     for (const message of messages) {
-      console.info("document-worker processing message", {
-        msgId: message.msgId,
-        jobId: message.message.job_id,
-        documentId: message.message.document_id,
-        readCount: message.readCount
+      logInfo("document_worker.message_received", {
+        msg_id: message.msgId,
+        job_id: message.message.job_id,
+        document_id: message.message.document_id,
+        organization_id: message.message.organization_id,
+        read_count: message.readCount
       });
 
       const result = await processQueueMessage(config, db, supabase, message);
 
       if (result.shouldRetry) {
         await requeueMessage(db, config.queueName, message.message, result.retryDelaySeconds ?? config.retryBaseSeconds);
+        logInfo("document_worker.message_requeued", {
+          msg_id: message.msgId,
+          job_id: message.message.job_id,
+          document_id: message.message.document_id,
+          organization_id: message.message.organization_id,
+          retry_delay_seconds: result.retryDelaySeconds ?? config.retryBaseSeconds
+        });
       }
 
       await archiveMessage(db, config.queueName, message.msgId);
+      logInfo("document_worker.message_archived", {
+        msg_id: message.msgId,
+        job_id: message.message.job_id,
+        document_id: message.message.document_id,
+        organization_id: message.message.organization_id
+      });
     }
   }
 
   await db.end({ timeout: 5 });
-  console.info("document-worker stopped");
+  logInfo("document_worker.stopped");
 }
 
 function sleep(ms: number) {
@@ -66,7 +81,7 @@ function sleep(ms: number) {
 }
 
 main().catch(async (error) => {
-  console.error("document-worker fatal error", error);
+  logError("document_worker.fatal_error", error);
   await db.end({ timeout: 5 });
   process.exitCode = 1;
 });

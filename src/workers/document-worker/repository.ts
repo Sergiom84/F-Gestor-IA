@@ -3,11 +3,10 @@ import type { DbClient } from "./db.js";
 import type {
   DocumentFileRecord,
   DocumentStatus,
-  ExtractedPdf,
   ProcessingJobRecord,
   ProcessingJobType,
-  TextChunk
 } from "./types.js";
+import type { ExtractedDocumentFileText } from "./processor.js";
 
 export type ExtractedTextSaveResult = {
   nextJob: {
@@ -91,8 +90,8 @@ export async function markJobRunning(
   jobId: string,
   documentId: string,
   documentStatus: DocumentStatus
-): Promise<void> {
-  await db.begin(async (tx) => {
+): Promise<boolean> {
+  return db.begin(async (tx) => {
     const updatedJobs = await tx<{ id: string }[]>`
       update public.processing_jobs
       set status = 'running',
@@ -102,12 +101,12 @@ export async function markJobRunning(
           updated_at = now()
       where id = ${jobId}
         and document_id = ${documentId}
-        and status in ('queued', 'retrying', 'running')
+        and status in ('queued', 'retrying')
       returning id
     `;
 
     if (updatedJobs.length === 0) {
-      throw new Error(`Processing job ${jobId} is not queued/retryable`);
+      return false;
     }
 
     await tx`
@@ -117,6 +116,8 @@ export async function markJobRunning(
           updated_at = now()
       where id = ${documentId}
     `;
+
+    return true;
   });
 }
 
@@ -146,90 +147,99 @@ export async function saveExtractedText(
   queueName: string,
   jobId: string,
   documentId: string,
-  documentFileId: string,
-  extracted: ExtractedPdf,
-  chunks: TextChunk[]
+  extractedFiles: ExtractedDocumentFileText[]
 ): Promise<ExtractedTextSaveResult> {
   return db.begin(async (tx) => {
     let nextJob: ExtractedTextSaveResult["nextJob"] = null;
     const duplicateFileDocumentIds: string[] = [];
+    const documentFileIds = extractedFiles.map((file) => file.documentFileId);
+    let nextChunkIndex = 0;
 
     await tx`delete from public.document_text_chunks where document_id = ${documentId}`;
     await tx`delete from public.document_pages where document_id = ${documentId}`;
 
-    for (const page of extracted.pages) {
+    for (const fileText of extractedFiles) {
+      for (const page of fileText.extracted.pages) {
+        await tx`
+          insert into public.document_pages (
+            organization_id,
+            document_id,
+            document_file_id,
+            page_number,
+            text,
+            text_quality,
+            extraction_method,
+            metadata
+          )
+          select
+            df.organization_id,
+            df.document_id,
+            df.id,
+            ${page.pageNumber},
+            ${page.text},
+            ${page.textQuality},
+            'embedded_text',
+            ${tx.json({ source: "document-worker" })}
+          from public.document_files df
+          where df.id = ${fileText.documentFileId}
+            and df.document_id = ${documentId}
+            and df.deleted_at is null
+          limit 1
+        `;
+      }
+
+      for (const chunk of fileText.chunks) {
+        await tx`
+          insert into public.document_text_chunks (
+            organization_id,
+            document_id,
+            chunk_index,
+            text,
+            token_count,
+            metadata
+          )
+          select
+            d.organization_id,
+            d.id,
+            ${nextChunkIndex},
+            ${chunk.text},
+            ${chunk.tokenCountEstimate},
+            ${tx.json({
+              document_file_id: fileText.documentFileId,
+              file_chunk_index: chunk.chunkIndex,
+              page_numbers: chunk.pageNumbers,
+              source: "document-worker"
+            })}
+          from public.documents d
+          where d.id = ${documentId}
+        `;
+        nextChunkIndex += 1;
+      }
+
       await tx`
-        insert into public.document_pages (
-          organization_id,
-          document_id,
-          document_file_id,
-          page_number,
-          text,
-          text_quality,
-          extraction_method,
-          metadata
-        )
-        select
-          df.organization_id,
-          df.document_id,
-          df.id,
-          ${page.pageNumber},
-          ${page.text},
-          ${page.textQuality},
-          'embedded_text',
-          ${tx.json({ source: "document-worker" })}
-        from public.document_files df
-        where df.id = ${documentFileId}
-          and df.document_id = ${documentId}
-          and df.deleted_at is null
-        limit 1
+        update public.document_files
+        set file_status = 'available',
+            page_count = ${fileText.extracted.pageCount},
+            sha256_hash = coalesce(sha256_hash, ${fileText.extracted.sha256Hash}),
+            updated_at = now()
+        where id = ${fileText.documentFileId}
+          and document_id = ${documentId}
+          and deleted_at is null
       `;
     }
-
-    for (const chunk of chunks) {
-      await tx`
-        insert into public.document_text_chunks (
-          organization_id,
-          document_id,
-          chunk_index,
-          text,
-          token_count,
-          metadata
-        )
-        select
-          d.organization_id,
-          d.id,
-          ${chunk.chunkIndex},
-          ${chunk.text},
-          ${chunk.tokenCountEstimate},
-          ${tx.json({ page_numbers: chunk.pageNumbers, source: "document-worker" })}
-        from public.documents d
-        where d.id = ${documentId}
-      `;
-    }
-
-    await tx`
-      update public.document_files
-      set file_status = 'available',
-          page_count = ${extracted.pageCount},
-          sha256_hash = coalesce(sha256_hash, ${extracted.sha256Hash}),
-          updated_at = now()
-      where id = ${documentFileId}
-        and document_id = ${documentId}
-        and deleted_at is null
-    `;
 
     const duplicateRows = await tx<DuplicateFileRow[]>`
       select distinct other.document_id
       from public.document_files current_file
       join public.document_files other
         on other.organization_id = current_file.organization_id
-       and other.sha256_hash = ${extracted.sha256Hash}
+       and other.sha256_hash = current_file.sha256_hash
        and other.document_id <> current_file.document_id
        and other.deleted_at is null
        and other.file_status in ('uploaded', 'available')
-      where current_file.id = ${documentFileId}
+      where current_file.id in ${tx(documentFileIds)}
         and current_file.document_id = ${documentId}
+        and current_file.sha256_hash is not null
         and current_file.deleted_at is null
       limit 10
     `;
@@ -237,7 +247,7 @@ export async function saveExtractedText(
 
     const nextStep = decideExtractedTextNextStep({
       duplicateFileDocumentIds,
-      chunkCount: chunks.length
+      chunkCount: nextChunkIndex
     });
 
     await tx`
