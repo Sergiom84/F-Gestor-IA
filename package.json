@@ -12,7 +12,14 @@
     "dashboard:local": "tsx src/workers/document-worker/dashboard-local.ts",
     "worker:ocr-plan-local": "tsx src/workers/document-worker/ocr-plan-local.ts",
     "regulatory:local": "tsx src/workers/document-worker/regulatory-local.ts",
-    "test": "npm run test:regulatory",
+    "regulatory:persist-invoice": "tsx src/workers/document-worker/regulatory-persist-invoice.ts",
+    "supabase:validate-local": "tsx src/tools/supabase-local-validate.ts",
+    "ci:static": "npm run typecheck && npm test",
+    "ci:supabase-local": "npm run supabase:validate-local",
+    "ci:full": "npm run ci:static && npm run ci:supabase-local",
+    "db:test": "npx supabase test db --local",
+    "test": "npm run test:unit",
+    "test:unit": "node --import tsx --test src/workers/document-worker/regulatory/regulatory-ledger.test.ts src/tools/supabase-local-validate.test.ts",
     "test:regulatory": "node --import tsx --test src/workers/document-worker/regulatory/regulatory-ledger.test.ts"
   },
   "dependencies": {

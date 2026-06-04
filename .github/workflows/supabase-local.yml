@@ -1,0 +1,45 @@
+name: Supabase Local Validation
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  supabase-local:
+    name: Migrations, lint and pgTAP
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+      SUPABASE_CLI_COMMAND: supabase
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v2
+        with:
+          version: 2.104.0
+          github-token: ${{ github.token }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Start local database
+        run: supabase db start
+
+      - name: Validate local Supabase database
+        run: npm run ci:supabase-local
+
+      - name: Stop local Supabase
+        if: always()
+        continue-on-error: true
+        run: supabase stop --no-backup

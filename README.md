@@ -2,6 +2,8 @@
 
 GFiscal es un SaaS fiscal/contable para Espana orientado a autonomos, pymes y gestorias.
 
+Repositorio remoto principal: https://github.com/Sergiom84/F-Gestor-IA
+
 El producto se disenara alrededor de cuatro principios:
 
 - Multi-tenant desde el primer dia, con `organization_id` como frontera principal.
@@ -22,9 +24,16 @@ La base tecnica inicial esta documentada y parcialmente implementada:
 - Fase 7 iniciada con planificador local de OCR para PDFs dificiles, coste por pagina y reintentos.
 - Fase 8 iniciada con ledger normativo offline, hash chain y preparacion interna VERI*FACTU/B2B.
 - Fase 9 iniciada con tests locales de integridad del ledger normativo y contrato de fila futura.
+- Fase 10 iniciada con migracion preparada para `regulatory_events` append-only.
+- Fase 11 iniciada con adaptador server-side para persistir eventos regulatorios por factura.
+- Fase 12 iniciada con tests pgTAP para RLS y append-only de `regulatory_events`.
+- Fase 13 iniciada con runner de validacion local Supabase para migraciones, lint y pgTAP.
+- Fase 14 iniciada con CI rapido y workflow manual de validacion Supabase local.
 
 Pendiente importante: la migracion y el worker contra Supabase local no se han podido validar porque Docker Desktop no esta operativo en el entorno actual.
 La conexion real a Supabase remoto queda deliberadamente para el final, cuando esten disponibles URL y claves.
+
+Estado de publicacion: las fases 10-14 quedan preparadas para subirse al remoto principal en la rama `main`.
 
 ## Documentacion inicial
 
@@ -38,6 +47,11 @@ La conexion real a Supabase remoto queda deliberadamente para el final, cuando e
 - [OCR y PDFs dificiles](docs/08-ocr-pdfs-dificiles.md)
 - [Preparacion normativa](docs/09-preparacion-normativa.md)
 - [Integridad del ledger normativo](docs/10-integridad-ledger-normativo.md)
+- [Persistencia del ledger normativo](docs/11-persistencia-ledger-normativo.md)
+- [Adaptador del ledger normativo](docs/12-adaptador-ledger-normativo.md)
+- [Tests DB del ledger normativo](docs/13-tests-db-ledger-normativo.md)
+- [Validacion local Supabase](docs/14-validacion-local-supabase.md)
+- [CI y calidad minima](docs/15-ci-calidad.md)
 
 ## Decisiones base
 
@@ -69,7 +83,12 @@ npm run review:invoice-local -- C:\ruta\extraccion.json C:\ruta\revision.json
 npm run dashboard:local -- C:\ruta\dashboard-data.json 2026-01-01 2026-12-31
 npm run worker:ocr-plan-local -- C:\ruta\documento.pdf 100 2.5 25
 npm run regulatory:local -- C:\ruta\regulatory-input.json
+npm run regulatory:persist-invoice -- <invoice_id> verifactu_pending
 npm run test:regulatory
+npm run db:test
+npm run supabase:validate-local
+npm run ci:static
+npm run ci:full
 ```
 
 Para usar `worker:documents` hace falta configurar `.env` segun `.env.example` y tener Supabase/Postgres accesible.
@@ -98,6 +117,14 @@ Validacion local esperada:
 
 ```powershell
 npx supabase db reset --local --no-seed
+npm run supabase:validate-local
 ```
 
-Este comando requiere Docker Desktop en ejecucion.
+Estos comandos requieren Docker Desktop en ejecucion.
+
+## CI
+
+La Fase 14 deja dos workflows GitHub Actions:
+
+- `.github/workflows/ci.yml`: `npm ci` + `npm run ci:static` en push/PR.
+- `.github/workflows/supabase-local.yml`: validacion Supabase local manual con CLI `2.104.0`.

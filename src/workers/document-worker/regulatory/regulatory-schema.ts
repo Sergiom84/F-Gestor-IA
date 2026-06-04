@@ -89,7 +89,7 @@ export const regulatoryReadinessInputSchema = z.object({
 export const regulatoryEventRowSchema = z.object({
   id: z.string(),
   organization_id: z.string(),
-  fiscal_entity_id: z.string().nullable(),
+  fiscal_entity_id: z.string(),
   invoice_id: z.string(),
   event_type: regulatoryEventTypeSchema,
   occurred_at: z.string(),

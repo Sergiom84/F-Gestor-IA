@@ -6,6 +6,11 @@ import {
   validateRegulatoryAppend,
   validateRegulatoryLedger
 } from "./regulatory-ledger.js";
+import {
+  assertRegulatoryPreparationPersistable,
+  buildRegulatoryReadinessInputFromRows,
+  type RegulatoryInvoiceRow
+} from "./repository.js";
 import type {
   RegulatoryEvent,
   RegulatoryMode,
@@ -28,6 +33,73 @@ test("prepares a verifiable first regulatory event row", () => {
   assert.equal(row.ledger_version, "regulatory_ledger_v1");
   assert.equal(row.row_version, "regulatory_event_row_v1");
   assert.equal(row.official_submission_ready, false);
+});
+
+test("requires a fiscal entity before persisting a regulatory event row", () => {
+  const preparation = prepareRegulatoryRecord(buildInput({
+    fiscalEntityId: null
+  }));
+
+  assert.throws(
+    () => buildRegulatoryEventRow(preparation.nextEvent),
+    /Invalid input/
+  );
+});
+
+test("blocks persistence when readiness has critical errors", () => {
+  const preparation = prepareRegulatoryRecord(buildInput({
+    invoiceNumber: null
+  }));
+
+  assert.throws(
+    () => assertRegulatoryPreparationPersistable(preparation),
+    /Cannot persist blocked regulatory readiness: invoice_number/
+  );
+});
+
+test("builds regulatory input from persisted invoice and event rows", () => {
+  const firstPreparation = prepareRegulatoryRecord(buildInput());
+  const invoiceRow: RegulatoryInvoiceRow = {
+    id: INVOICE_ID,
+    organization_id: ORGANIZATION_ID,
+    fiscal_entity_id: FISCAL_ENTITY_ID,
+    direction: "issued",
+    invoice_number: "2026-0002",
+    issue_date: new Date("2026-06-03T00:00:00.000Z"),
+    currency: "EUR",
+    supplier_tax_id: "B12345678",
+    customer_tax_id: "B87654321",
+    subtotal_amount: "200.00",
+    tax_amount: "42.00",
+    total_amount: "242.00",
+    status: "draft",
+    human_approved_at: new Date("2026-06-03T09:00:00.000Z")
+  };
+
+  const input = buildRegulatoryReadinessInputFromRows({
+    invoice: invoiceRow,
+    regulatoryMode: "b2b_einvoice_pending",
+    priorEvents: [{
+      id: firstPreparation.nextEvent.id,
+      organization_id: firstPreparation.nextEvent.organization_id,
+      fiscal_entity_id: firstPreparation.nextEvent.fiscal_entity_id,
+      invoice_id: firstPreparation.nextEvent.invoice_id,
+      event_type: firstPreparation.nextEvent.event_type,
+      occurred_at: new Date(firstPreparation.nextEvent.occurred_at),
+      actor_user_id: firstPreparation.nextEvent.actor.user_id,
+      actor_role: firstPreparation.nextEvent.actor.role,
+      actor_system_id: firstPreparation.nextEvent.actor.system_id,
+      payload: firstPreparation.nextEvent.payload,
+      previous_hash: firstPreparation.nextEvent.previous_hash,
+      hash: firstPreparation.nextEvent.hash
+    }],
+    generatedAt: "2026-06-03T10:15:00.000Z"
+  });
+
+  assert.equal(input.invoice.issue_date, "2026-06-03");
+  assert.equal(input.invoice.total_amount, 242);
+  assert.equal(input.prior_events[0]?.hash, firstPreparation.nextEvent.hash);
+  assert.equal(input.regulatory_mode, "b2b_einvoice_pending");
 });
 
 test("links a second event to the previous hash", () => {
@@ -103,20 +175,24 @@ test("rejects append events that move backwards in time", () => {
 });
 
 function buildInput(args: {
+  fiscalEntityId?: string | null;
   generatedAt?: string;
+  invoiceNumber?: string | null;
   priorEvents?: RegulatoryEvent[];
   regulatoryMode?: RegulatoryMode;
 } = {}): RegulatoryReadinessInput {
+  const fiscalEntityId = args.fiscalEntityId === undefined ? FISCAL_ENTITY_ID : args.fiscalEntityId;
+
   return {
     organization_id: ORGANIZATION_ID,
-    fiscal_entity_id: FISCAL_ENTITY_ID,
+    fiscal_entity_id: fiscalEntityId,
     regulatory_mode: args.regulatoryMode ?? "verifactu_pending",
     invoice: {
       id: INVOICE_ID,
       organization_id: ORGANIZATION_ID,
-      fiscal_entity_id: FISCAL_ENTITY_ID,
+      fiscal_entity_id: fiscalEntityId,
       direction: "issued",
-      invoice_number: "2026-0001",
+      invoice_number: args.invoiceNumber === undefined ? "2026-0001" : args.invoiceNumber,
       issue_date: "2026-06-03",
       currency: "EUR",
       supplier_tax_id: "B12345678",

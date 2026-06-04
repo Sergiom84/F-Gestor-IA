@@ -1,13 +1,14 @@
 # Roadmap tecnico
 
-Fecha: 2026-06-03  
-Estado: plan vivo sincronizado con July
+Fecha: 2026-06-04
+Estado: plan vivo sincronizado con July y preparado para remoto
 
 Nota operativa:
 
 - July es la memoria mas reciente del proyecto.
 - Este roadmap ya refleja que varias fases se han iniciado como nucleos offline verificables.
 - La conexion real a Supabase remoto, URL, claves y validacion end-to-end quedan deliberadamente para el final, cuando el entorno este disponible.
+- Remoto principal: https://github.com/Sergiom84/F-Gestor-IA.
 
 Este roadmap evita construir todo de golpe. Cada fase debe terminar con una superficie usable y verificable.
 
@@ -283,6 +284,167 @@ No incluye todavia:
 Criterio de salida:
 
 - El ledger normativo tiene pruebas locales que demuestran deteccion de manipulacion y reglas minimas de append.
+
+## Fase 10 - Persistencia del ledger normativo
+
+Objetivo:
+
+- Preparar la tabla Supabase append-only que persistira eventos normativos internos.
+
+Estado:
+
+- Iniciada como migracion preparada: `public.regulatory_events` con RLS, triggers de no mutacion, validacion de append y shape alineado con `regulatory_event_row_v1`.
+- Pendiente de aplicar contra Supabase local/remoto cuando haya Docker o entorno operativo.
+
+Incluye:
+
+- Enum `regulatory_event_type`.
+- Tabla `regulatory_events`.
+- Consistencia por `organization_id`, `fiscal_entity_id` e `invoice_id`.
+- Un solo primer evento por factura.
+- Un solo hijo por `previous_hash` en la misma factura.
+- Triggers para bloquear update/delete.
+- RLS de lectura por acceso a factura.
+- Sin escritura desde clientes autenticados.
+
+No incluye todavia:
+
+- Aplicar migracion en Supabase local/remoto.
+- Adapter server-side de insercion.
+- Advisors Supabase.
+- Tests SQL de acceso cruzado.
+- Payload oficial, firma, certificado o envio.
+
+Criterio de salida:
+
+- La migracion puede aplicarse en Supabase local y demostrar que usuarios de otra organizacion no leen eventos y que update/delete quedan bloqueados.
+
+## Fase 11 - Adaptador server-side del ledger normativo
+
+Objetivo:
+
+- Conectar la logica regulatoria offline con la tabla `regulatory_events` sin exponer claves elevadas al navegador.
+
+Estado:
+
+- Iniciada como adaptador de worker: carga factura y eventos previos desde Postgres, prepara el siguiente evento, valida readiness/cadena y lo inserta en `regulatory_events`.
+- Pendiente de prueba end-to-end porque Supabase local sigue sin Postgres activo en `127.0.0.1:54322`.
+
+Incluye:
+
+- `regulatory/repository.ts`.
+- `persistRegulatoryEventForInvoice`.
+- Bloqueo de persistencia si readiness esta `blocked`.
+- Bloqueo de persistencia si la cadena no es valida.
+- CLI `regulatory:persist-invoice`.
+- Tests locales de mapping y bloqueo de persistencia.
+
+No incluye todavia:
+
+- Ejecucion contra Supabase local/remoto.
+- Insercion desde UI.
+- Uso de claves secret/service role en frontend.
+- Payload oficial ni envio oficial.
+
+Criterio de salida:
+
+- Un worker o proceso server-side puede crear el siguiente evento regulatorio interno para una factura aprobada, sin que ningun cliente autenticado tenga permiso directo de escritura sobre el ledger.
+
+## Fase 12 - Tests DB del ledger normativo
+
+Objetivo:
+
+- Preparar una suite pgTAP para verificar estructura, RLS y reglas append-only de `regulatory_events`.
+
+Estado:
+
+- Iniciada como test SQL preparado en `supabase/tests/database/regulatory_events.test.sql`.
+- Pendiente de ejecutar porque Supabase local no esta levantado.
+
+Incluye:
+
+- Test de existencia de tabla.
+- Test de RLS activo.
+- Test de politica `regulatory_events_select_allowed`.
+- Test de privilegios: `authenticated` solo lee, no inserta/actualiza/borra.
+- Test de aislamiento entre dos organizaciones.
+- Test de bloqueo update/delete por trigger.
+- Test de bloqueo de `previous_hash` perteneciente a otra factura/organizacion.
+
+No incluye todavia:
+
+- Ejecucion real con `supabase test db`.
+- Advisors Supabase.
+- CI.
+
+Criterio de salida:
+
+- `npm run db:test` pasa contra Supabase local tras aplicar migraciones, demostrando que el ledger no permite acceso cruzado ni mutacion.
+
+## Fase 13 - Validacion local Supabase
+
+Objetivo:
+
+- Agrupar la validacion local de Supabase en un runner repetible y no destructivo.
+
+Estado:
+
+- Iniciada con `npm run supabase:validate-local`: primero comprueba conectividad a Postgres local y despues ejecuta `migration list`, `db lint` y `test db` en modo local.
+- Sigue pendiente de ejecucion completa porque Supabase local no esta levantado.
+
+Incluye:
+
+- Preflight de `DATABASE_URL`.
+- Plan explicito no destructivo.
+- Lint de schemas `public`, `auth` y `storage`.
+- Ejecucion pgTAP local con `supabase test db --local`.
+- Mensaje de recuperacion cuando falta Docker/Postgres local.
+
+No incluye todavia:
+
+- Levantar Docker Desktop desde el runner.
+- Ejecutar `db reset` automaticamente.
+- Validacion remota.
+- CI.
+
+Criterio de salida:
+
+- `npm run supabase:validate-local` pasa contra Supabase local despues de aplicar migraciones, sin errores de lint y con pgTAP en verde.
+
+## Fase 14 - CI y calidad minima
+
+Objetivo:
+
+- Preparar una puerta de calidad automatizable para codigo TypeScript y validacion Supabase local.
+
+Estado:
+
+- Iniciada con workflows GitHub Actions y scripts npm de CI.
+- CI rapido activo para push/PR.
+- Validacion Supabase local preparada como workflow manual hasta que Docker/pgTAP se valide una vez.
+
+Incluye:
+
+- `.github/workflows/ci.yml`.
+- `.github/workflows/supabase-local.yml`.
+- `npm run ci:static`.
+- `npm run ci:supabase-local`.
+- `npm run ci:full`.
+- Supabase CLI fijado a `2.104.0` en CI DB.
+
+No incluye todavia:
+
+- Job Supabase obligatorio en cada PR.
+- Deploy.
+- Environments staging/production.
+- Secretos remotos.
+- Validacion contra Supabase cloud.
+
+Criterio de salida:
+
+- `ci:static` pasa localmente y en GitHub Actions.
+- El workflow manual Supabase puede levantar Postgres local, aplicar migraciones y ejecutar lint/pgTAP.
+- Una vez validado, el job Supabase se puede activar para PRs que cambien schema, tests DB o codigo regulatorio.
 
 ## Backlog consciente
 
