@@ -1,0 +1,78 @@
+name: Remote MVP Smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_ai:
+        description: Run ai_extract and approval; requires OPENAI_API_KEY.
+        required: true
+        type: boolean
+        default: true
+      cleanup:
+        description: Delete smoke fixture data and Storage object after the run.
+        required: true
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  smoke-mvp-remote:
+    name: Supabase remote document flow
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      OPENAI_MODEL: ${{ vars.OPENAI_MODEL || 'gpt-5.4-mini' }}
+      OPENAI_BASE_URL: ${{ vars.OPENAI_BASE_URL || 'https://api.openai.com' }}
+      OPENAI_TIMEOUT_MS: ${{ vars.OPENAI_TIMEOUT_MS || '60000' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate required secrets
+        shell: bash
+        run: |
+          missing=0
+
+          for name in SUPABASE_URL SUPABASE_SERVICE_ROLE_KEY DATABASE_URL; do
+            if [ -z "${!name:-}" ]; then
+              echo "::error::${name} secret is required for the remote smoke workflow."
+              missing=1
+            fi
+          done
+
+          if [ "${{ inputs.run_ai }}" = "true" ] && [ -z "${OPENAI_API_KEY:-}" ]; then
+            echo "::error::OPENAI_API_KEY secret is required when run_ai is true."
+            missing=1
+          fi
+
+          exit "$missing"
+
+      - name: Run remote MVP smoke
+        shell: bash
+        run: |
+          args=()
+
+          if [ "${{ inputs.run_ai }}" != "true" ]; then
+            args+=(--skip-ai)
+          fi
+
+          if [ "${{ inputs.cleanup }}" = "true" ]; then
+            args+=(--cleanup)
+          fi
+
+          npm run smoke:mvp-remote -- "${args[@]}"

@@ -39,8 +39,8 @@ Estado de publicacion: las fases 10-14 estan publicadas en el remoto principal e
 ## Prioridad alta inmediata
 
 1. Preparar un fixture de factura real ademas del PDF sintetico del smoke.
-2. Decidir si el smoke remoto completo debe entrar como workflow manual en GitHub Actions.
-3. Empezar superficie Next.js minima: Auth Supabase SSR, organizacion activa y bandeja documental.
+2. Empezar superficie Next.js minima: Auth Supabase SSR, organizacion activa y bandeja documental.
+3. Promocionar validaciones manuales a PR cuando Supabase local y smoke remoto hayan pasado de forma repetible en GitHub Actions.
 
 ## Documentacion inicial
 
@@ -138,7 +138,8 @@ Estos comandos requieren Docker Desktop en ejecucion.
 
 ## CI
 
-La Fase 14 deja dos workflows GitHub Actions:
+La Fase 14 deja workflows GitHub Actions para CI rapido, Supabase local y smoke remoto manual:
 
 - `.github/workflows/ci.yml`: `npm ci` + `npm run ci:static` en push/PR.
 - `.github/workflows/supabase-local.yml`: validacion Supabase local manual con CLI `2.104.0`.
+- `.github/workflows/smoke-mvp-remote.yml`: smoke MVP remoto manual contra Supabase cloud; requiere `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `DATABASE_URL` y, si `run_ai=true`, `OPENAI_API_KEY`. Ejecuta con `--cleanup` por defecto.
