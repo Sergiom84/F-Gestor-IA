@@ -34,7 +34,10 @@ La base tecnica inicial esta documentada y parcialmente implementada:
 - Onboarding minimo preparado con RPC transaccional `create_onboarding_workspace`: crea organizacion, membership owner, cliente, entidad fiscal y acceso uploader inicial sin `service_role` en frontend.
 - Storage RLS endurecido para que la organizacion indicada en el path coincida con la organizacion real de la entidad fiscal.
 - Configuracion Supabase endurecida: `SUPABASE_URL` tiene prioridad en servidor sobre `NEXT_PUBLIC_SUPABASE_URL` y `SUPABASE_PROJECT_REF` detecta procesos con project ref antiguo antes de llamar a Auth.
-- Rediseño de dashboard iniciado con referencia local Sage Active (`C:\Users\sergi\Documents\Software\SADGE_Asor-IA`): shell tipo ERP, sidebar modular, pestañas de cuadro de mando, superficie `Ventas y compras` y esqueletos para Ventas, Compras, Contactos, Productos y servicios, Bancos, Contabilidad, Declaraciones e Informes.
+- Rediseño de dashboard iniciado con referencia local Sage Active (`C:\Users\sergi\Documents\Software\SADGE_Asor-IA`): shell tipo ERP, sidebar modular, pestañas de cuadro de mando y workspaces especificos para Ventas, Compras, Contactos y Productos y servicios.
+- Ventas replica presupuestos/pedidos/albaranes/facturas con formulario de presupuesto; Compras replica facturas recibidas con upload y tabs de revision/pago; Contactos replica clientes/proveedores/empleados con ficha de cliente; Productos y servicios replica producto/servicio, tarifas y grupos de descuentos.
+- Material local Sage Active extraido a referencia operativa: catalogo TypeScript en `src/lib/product/sage-active-reference.ts` y mapa funcional en `docs/16-mapa-referencia-sage-active.md`.
+- Dashboard modularizado en componentes `_components` y `_lib`; Fase 17 avanza con migracion comercial MVP para proveedores, productos/servicios, facturas de venta/compra, presupuestos y vencimientos.
 
 Pendiente importante: Supabase local sigue pendiente porque Docker Desktop no esta operativo en el entorno actual.
 La conexion real a Supabase remoto ya esta vinculada y las migraciones de onboarding/hardening Storage ya estan aplicadas en remoto. Falta validar el stack local cuando Docker Desktop este operativo.
@@ -48,6 +51,7 @@ Estado de publicacion: las fases 10-16 quedan publicadas en el remoto principal 
 3. Validar Supabase local cuando Docker Desktop este operativo y promocionar esa puerta a PR.
 4. Anadir proveedor OCR real cuando el flujo PDF + revision este cerrado.
 5. Sustituir datos semilla del dashboard comercial por tablas reales de facturas de venta, compra, vencimientos, presupuestos, clientes, proveedores y bancos.
+6. Conectar `Ventas y compras` a la migracion comercial MVP y retirar los importes/filas semilla.
 
 ## Documentacion inicial
 
@@ -66,6 +70,8 @@ Estado de publicacion: las fases 10-16 quedan publicadas en el remoto principal 
 - [Tests DB del ledger normativo](docs/13-tests-db-ledger-normativo.md)
 - [Validacion local Supabase](docs/14-validacion-local-supabase.md)
 - [CI y calidad minima](docs/15-ci-calidad.md)
+- [Mapa de referencia Sage Active](docs/16-mapa-referencia-sage-active.md)
+- [Modelo comercial MVP](docs/17-modelo-comercial-mvp.md)
 
 ## Decisiones base
 
@@ -92,7 +98,11 @@ La superficie principal `/dashboard` ya funciona como shell modular:
 - `?module=tax`: declaraciones, IVA, obligaciones legales y VeriFactu.
 - `?module=reports`: informes financieros y fiscales.
 
-Los importes y filas de `Ventas y compras` que proceden de capturas son datos semilla. Sirven para dar forma al producto; no deben interpretarse como datos reales hasta conectar el modelo comercial.
+Los importes, filas y formularios comerciales que proceden de capturas son datos semilla y superficies de producto. Sirven para dar forma al flujo; no deben interpretarse como datos reales hasta conectar el modelo comercial.
+
+La referencia extraida de Sage Active queda centralizada en `src/lib/product/sage-active-reference.ts`. Incluye modulos, entidades esperadas, acciones rapidas, listas, formularios, settings, senales visuales y backlog de tablas; debe usarse como mapa de producto, no como copia de codigo o payloads de terceros.
+
+La primera base comercial real queda preparada en `supabase/migrations/20260604174547_commercial_foundation.sql`, con RLS en tablas de proveedores, productos/servicios, facturas, presupuestos y vencimientos.
 
 ## Fuera de alcance por ahora
 

@@ -590,9 +590,17 @@ Estado:
 - La navegacion principal expone `Cuadros de mando`, `Ventas`, `Compras`, `Contactos`, `Productos y servicios`, `Bancos`, `Contabilidad`, `Declaraciones` e `Informes`.
 - `Cuadros de mando` incluye pestañas server-side por query: `Contabilidad`, `Ventas y compras` y `Novedades`.
 - `Ventas y compras` replica la jerarquia de Sage Active: importes pendientes, pendiente de cobro/pago, tarjetas de facturas, clientes activos, accesos rapidos, facturas vencidas y presupuestos pendientes.
-- Los demas modulos tienen superficie base con hero, KPIs, acciones rapidas y tabla vacia profesional.
+- `Ventas` ya tiene workspace especifico para presupuestos, pedidos, albaranes, facturas y facturas recurrentes, con formulario de presupuesto y tabs de productos, totales, notas e informacion de cliente.
+- `Compras` ya tiene workspace especifico de facturas de compra con panel de clasificacion automatica, zona de subida, tabs `Todas`, `Por revisar`, `Por pagar` y `Pagadas`.
+- `Contactos` ya tiene selector de clientes, proveedores y empleados, lista lateral y ficha de cliente con informacion, contactos, condiciones de pago, direcciones y condiciones de venta.
+- `Productos y servicios` ya tiene workspace especifico con alta de producto/servicio, precios y descuentos de venta, tarifas y grupos de descuentos.
+- Bancos, Contabilidad, Declaraciones e Informes mantienen superficie base con hero, KPIs, acciones rapidas y tabla vacia profesional.
 - Los textos y quick actions proceden del material local de Sage Active cuando hay correspondencia clara.
 - Los datos reales se usan solo donde GFiscal ya tiene modelo: documentos, clientes, entidades fiscales, OCR y revision. Los importes/filas comerciales son semilla visual.
+- El material local queda extraido en `src/lib/product/sage-active-reference.ts` y documentado en `docs/16-mapa-referencia-sage-active.md`.
+- La referencia cubre modulos, entidades, acciones rapidas, listas, formularios, settings, senales visuales, feature signals y backlog de tablas comerciales/contables.
+- `app/dashboard/page.tsx` queda modularizado en `_components` y `_lib`, reduciendo el monolito visual antes de seguir ampliando pantallas.
+- Migracion comercial MVP creada en `20260604174547_commercial_foundation.sql` para proveedores, productos/servicios, facturas de venta, presupuestos, facturas de compra y vencimientos.
 
 Incluye:
 
@@ -600,12 +608,16 @@ Incluye:
 - Sidebar modular.
 - Query params `module` y `tab`.
 - Catalogo de modulos en codigo.
+- Catalogo de referencia Sage Active separado del componente de dashboard.
+- Componentes separados para cuadro contable/documental, ventas, novedades, tarjetas ERP y workspace modular.
+- Workspaces operativos separados para Ventas, Compras, Contactos y Productos y servicios.
+- Base de tablas comerciales con RLS para sustituir semilla por datos reales.
 - Superficies base para construir CRUDs y tablas reales.
 - Dependencia `lucide-react` para iconografia consistente.
 
 No incluye todavia:
 
-- Modelo real de ventas, compras, presupuestos, vencimientos, proveedores, productos, bancos o declaraciones.
+- Consultas UI reales sobre ventas, compras, presupuestos, vencimientos, proveedores, productos, bancos o declaraciones.
 - CRUDs completos por modulo.
 - Conciliacion bancaria real.
 - Informes financieros agregados desde PostgreSQL.
@@ -617,9 +629,10 @@ Criterio de salida:
 
 Siguiente prioridad alta:
 
-- Definir y migrar tablas comerciales minimas: facturas de venta, facturas de compra, vencimientos, presupuestos, clientes/proveedores ampliados y productos/servicios.
 - Reemplazar datos semilla de `Ventas y compras` por consultas agregadas.
 - Conectar acciones rapidas a rutas/forms reales por modulo.
+- Usar `src/lib/product/sage-active-reference.ts` como fuente para no duplicar estructura de modulos en la UI.
+- Validar/aplicar la migracion comercial en Supabase local cuando Docker este operativo y despues en remoto.
 
 ## Backlog consciente
 

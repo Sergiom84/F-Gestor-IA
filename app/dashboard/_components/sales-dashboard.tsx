@@ -1,0 +1,294 @@
+import {
+  BadgeEuro,
+  ExternalLink,
+  FileSearch,
+  FileText,
+  MoreVertical,
+  ShoppingCart,
+  Users
+} from "lucide-react";
+import type { ReactNode } from "react";
+import { formatMoney } from "../_lib/formatters";
+import type { SalesInvoiceRow } from "../_lib/types";
+import { SmallIndicatorCard } from "./erp-cards";
+
+const salesInvoiceSeedRows: SalesInvoiceRow[] = [
+  {
+    id: "0013",
+    status: "Vencida",
+    invoiceDate: "30/05/2026",
+    invoiceNumber: "0013",
+    customer: "INTERVENCIONES ORIENTADAS SL",
+    customerCode: "47",
+    total: 18856.11
+  },
+  {
+    id: "0012",
+    status: "Vencida",
+    invoiceDate: "25/05/2026",
+    invoiceNumber: "0012",
+    customer: "SANSANO OIL SERVICE SL",
+    customerCode: "24",
+    total: 1294.70
+  },
+  {
+    id: "0011",
+    status: "Vencida",
+    invoiceDate: "25/05/2026",
+    invoiceNumber: "0011",
+    customer: "FENIX DISTRIBUCIONES SL",
+    customerCode: "26",
+    total: -1452
+  }
+];
+
+export function SalesDashboard({
+  clientCount,
+  documentCount,
+  fiscalEntityCount
+}: {
+  clientCount: number;
+  documentCount: number;
+  fiscalEntityCount: number;
+}) {
+  const pendingCollection = 46004.88;
+  const pendingPayment = 6455.46;
+  const purchaseInvoicesTotal = 6134.97;
+  const convertedQuotes = Math.max(Math.min(documentCount, 1), 1);
+  const activeClients = clientCount > 0 ? clientCount : 45;
+
+  return (
+    <>
+      <section className="dashboard-section" aria-labelledby="outstanding-title">
+        <h2 id="outstanding-title">Importes pendientes</h2>
+        <div className="outstanding-grid">
+          <OutstandingAmountCard
+            icon={<FileText aria-hidden="true" size={27} />}
+            title="Pendiente de cobro"
+            amount={pendingCollection}
+            links={["Ver vencimientos", "Ver antiguedad de saldos"]}
+          />
+          <OutstandingAmountCard
+            icon={<BadgeEuro aria-hidden="true" size={27} />}
+            title="Pendiente de pago"
+            amount={pendingPayment}
+            links={["Ver vencimientos", "Ver antiguedad de saldos"]}
+          />
+        </div>
+      </section>
+
+      <section className="sales-overview-grid" aria-label="Indicadores de ventas y compras">
+        <SalesSummaryTile
+          icon={<BadgeEuro aria-hidden="true" size={25} />}
+          tone="green"
+          value={formatMoney(pendingCollection)}
+          description='Total de facturas contabilizadas desde "Facturas de venta" (ejercicio en curso hasta la fecha)'
+        />
+        <SalesSummaryTile
+          icon={<ShoppingCart aria-hidden="true" size={25} />}
+          tone="rose"
+          value={formatMoney(purchaseInvoicesTotal)}
+          description='Total de facturas contabilizadas desde "Facturas de compra" (ejercicio en curso hasta la fecha)'
+        />
+        <SalesSummaryTile
+          icon={<Users aria-hidden="true" size={25} />}
+          tone="blue"
+          value={activeClients.toLocaleString("es-ES")}
+          description="Clientes activos"
+        />
+        <aside className="sales-quick-card">
+          <h2>Accesos rapidos</h2>
+          <div className="quick-links">
+            <a href="#sales-customers">Crear clientes</a>
+            <a href="#sales-suppliers">Crear proveedores</a>
+            <a href="#sales-invoices">Crear facturas de venta</a>
+            <a href="#purchase-upload">Subir facturas de compra</a>
+          </div>
+        </aside>
+      </section>
+
+      <SalesInvoiceTable rows={salesInvoiceSeedRows} totalItems={13} />
+
+      <section className="quotes-dashboard-grid" aria-label="Presupuestos">
+        <div className="quotes-side-stack">
+          <SmallIndicatorCard
+            title="Presupuestos pendientes"
+            value={formatMoney(0)}
+            description="Total de todos los presupuestos pendientes"
+          />
+          <SalesSummaryTile
+            icon={<FileText aria-hidden="true" size={23} />}
+            tone="green"
+            value={convertedQuotes.toLocaleString("es-ES")}
+            description="Presupuestos convertidos en otro documento de venta"
+          />
+        </div>
+        <section className="sales-table-card">
+          <div className="sales-table-heading">
+            <h2>Presupuestos pendientes</h2>
+            <p>Consulta todos los presupuestos pendientes.</p>
+          </div>
+          <div className="sales-table-wrap quote-table">
+            <table className="sales-table">
+              <thead>
+                <tr>
+                  <th>Fecha de presup...</th>
+                  <th>Numero de presupuesto</th>
+                  <th>Cliente</th>
+                  <th>Codigo de cliente</th>
+                  <th>Total</th>
+                  <th>Acciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td colSpan={6}>
+                    <div className="table-empty-state">
+                      <FileSearch aria-hidden="true" size={76} />
+                      <div>
+                        <strong>Esta lista esta en blanco.</strong>
+                        <p>La busqueda no ha dado ningun resultado. Intentalo de nuevo.</p>
+                      </div>
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+              <tfoot>
+                <tr>
+                  <td colSpan={6}>Elementos: 0</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+          <div className="sales-table-actions">
+            <a href="#quotes">Ver todos los presupuestos</a>
+            <a href="#quote-reminders">Preparar recordatorios</a>
+          </div>
+        </section>
+      </section>
+
+      <section className="sales-footnote-grid" aria-label="Cobertura operacional">
+        <SmallIndicatorCard
+          title="Organizaciones fiscales"
+          value={fiscalEntityCount.toLocaleString("es-ES")}
+          description="Entidades disponibles para clasificar ventas, compras y documentos."
+        />
+        <SmallIndicatorCard
+          title="Documentos conectados"
+          value={documentCount.toLocaleString("es-ES")}
+          description="Base documental actual para alimentar el futuro modulo comercial."
+        />
+      </section>
+    </>
+  );
+}
+
+function OutstandingAmountCard({
+  icon,
+  title,
+  amount,
+  links
+}: {
+  icon: ReactNode;
+  title: string;
+  amount: number;
+  links: string[];
+}) {
+  return (
+    <article className="outstanding-card">
+      <div className="outstanding-title">
+        <span>{icon}</span>
+        <h3>{title}</h3>
+      </div>
+      <p>
+        {formatMoney(amount)} <span>Importe vencido:</span>
+      </p>
+      <div className="outstanding-bar" aria-hidden="true" />
+      <strong>{formatMoney(amount)} Total</strong>
+      <div className="outstanding-actions">
+        {links.map((link) => (
+          <a href="#sales-vencimientos" key={link}>{link}</a>
+        ))}
+      </div>
+    </article>
+  );
+}
+
+function SalesSummaryTile({
+  icon,
+  tone,
+  value,
+  description
+}: {
+  icon: ReactNode;
+  tone: "green" | "rose" | "blue";
+  value: string;
+  description: string;
+}) {
+  return (
+    <article className="sales-summary-tile">
+      <span className={`sales-tile-icon ${tone}`}>{icon}</span>
+      <div>
+        <strong>{value}</strong>
+        <p>{description}</p>
+      </div>
+    </article>
+  );
+}
+
+function SalesInvoiceTable({ rows, totalItems }: { rows: SalesInvoiceRow[]; totalItems: number }) {
+  return (
+    <section className="sales-table-card" id="sales-invoices">
+      <div className="sales-table-heading">
+        <h2>Facturas de venta vencidas</h2>
+        <p>Consulta todas las facturas de venta que han vencido.</p>
+      </div>
+      <div className="sales-table-wrap">
+        <table className="sales-table">
+          <thead>
+            <tr>
+              <th>Estado</th>
+              <th>Fecha de factura</th>
+              <th>Numero de factura</th>
+              <th>Cliente</th>
+              <th>Codigo de cliente</th>
+              <th>Total</th>
+              <th>Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr key={row.id}>
+                <td><span className="expired-badge">{row.status}</span></td>
+                <td>{row.invoiceDate}</td>
+                <td>
+                  <a className="invoice-link" href={`#invoice-${row.invoiceNumber}`}>
+                    {row.invoiceNumber}
+                    <ExternalLink aria-hidden="true" size={17} />
+                  </a>
+                </td>
+                <td>{row.customer}</td>
+                <td>{row.customerCode}</td>
+                <td>{formatMoney(row.total)}</td>
+                <td>
+                  <button className="table-icon-button" type="button" aria-label={`Acciones ${row.invoiceNumber}`}>
+                    <MoreVertical aria-hidden="true" size={22} />
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr>
+              <td colSpan={7}>Elementos: {totalItems.toLocaleString("es-ES")}</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+      <div className="sales-table-actions">
+        <a href="#all-sales-invoices">Ver todas las facturas</a>
+        <a href="#sales-reminders">Preparar recordatorios</a>
+      </div>
+    </section>
+  );
+}
