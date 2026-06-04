@@ -1,11 +1,10 @@
 # Roadmap tecnico
 
 Fecha: 2026-06-04
-Estado: plan vivo sincronizado con July y remoto principal
+Estado: plan vivo sincronizado con el repositorio principal
 
 Nota operativa:
 
-- July es la memoria mas reciente del proyecto.
 - Este roadmap ya refleja que varias fases se han iniciado como nucleos offline verificables y que el MVP documental ya esta conectado a Supabase remoto.
 - Supabase remoto `F_Gestor-IA` esta vinculado y tiene migraciones aplicadas. Supabase local sigue pendiente por Docker Desktop.
 - Remoto principal: https://github.com/Sergiom84/F-Gestor-IA.
@@ -37,6 +36,13 @@ Objetivo:
 
 - Tener una app usable con autenticacion, organizaciones y clientes.
 
+Estado:
+
+- Iniciada en producto con registro email/password y onboarding minimo.
+- La RPC `create_onboarding_workspace` crea en transaccion organizacion, membership owner, cliente, entidad fiscal y acceso uploader para el usuario autenticado.
+- `/dashboard` redirige a `/onboarding` cuando el usuario no tiene organizacion activa.
+- Pendiente CRUD posterior de clientes/entidades fiscales, invitaciones, roles y settings.
+
 Incluye:
 
 - Next.js App Router.
@@ -62,6 +68,13 @@ Criterio de salida:
 Objetivo:
 
 - Subir, listar y visualizar PDFs de forma segura.
+
+Estado:
+
+- Upload multi-PDF conectado a Storage privado y PGMQ.
+- Formulario de subida declara `multipart/form-data`.
+- RLS de Storage endurecido: el `organization_id` del path debe coincidir con la organizacion real de la entidad fiscal.
+- Detalle de revision con URL firmada server-side para visualizar o abrir el PDF privado.
 
 Incluye:
 
@@ -507,9 +520,9 @@ Resultado:
 Siguiente prioridad alta:
 
 - Preparar fixture de factura real para repetir el smoke completo sin depender solo del PDF sintetico.
-- Completar Fase 1/2 de producto: crear organizacion, cliente y entidad fiscal desde UI.
+- Aplicar y validar migraciones nuevas de onboarding minimo y hardening Storage.
 - Validar Supabase local cuando Docker Desktop este operativo y promocionar esa puerta a PR.
-- Anadir visor PDF/URL firmada y proveedor OCR real.
+- Validar revision humana con factura real visible desde URL firmada y anadir proveedor OCR real.
 
 ## Fase 16 - Superficie Next.js minima
 
@@ -523,9 +536,10 @@ Estado:
 - Next.js App Router instalado con React.
 - `@supabase/ssr` integrado con `getAll`/`setAll`.
 - `proxy.ts` refresca sesion con `supabase.auth.getUser()`.
-- `/login` usa server action con email/password.
+- `/login` usa server actions de login y registro con email/password.
+- `/onboarding` crea el alta inicial cuando no hay organizacion activa.
 - `/dashboard` requiere usuario autenticado, resuelve organizacion activa, muestra bandeja documental/revisiones, permite subir uno o varios PDFs a Storage y encola `extract_text`.
-- `/dashboard/review/[taskId]` muestra detalle de factura y permite aprobar, pedir cambios o rechazar.
+- `/dashboard/review/[taskId]` muestra detalle de factura, genera URL firmada del PDF original y permite aprobar, pedir cambios o rechazar.
 - `ocr_required` queda visible como metrica y estado destacado.
 - `ci:static` incluye `next build`.
 - `postcss` queda forzado por override a `8.5.10`; `npm audit --omit=dev` queda limpio.
@@ -533,25 +547,26 @@ Estado:
 Incluye:
 
 - Auth Supabase SSR.
-- Login y logout.
+- Login, registro y logout.
+- Onboarding minimo de organizacion, cliente y entidad fiscal.
 - Selector de organizacion activa por query.
 - Metricas de documentos, revision, OCR pendiente, clientes y entidades fiscales.
 - Lista de documentos y tareas de revision bajo RLS.
 - Upload multi-PDF con validacion app-side del `storage_path` contra `organization_id`, `fiscal_entity_id`, `document_id` y `document_file_id`.
+- URL firmada server-side para revisar el PDF original desde Storage privado.
 - Creacion server-side de `processing_job` y mensaje PGMQ.
 - Detalle de factura con aprobacion/rechazo y auditoria.
 
 No incluye todavia:
 
-- Registro de usuarios.
-- Crear organizacion desde UI.
-- CRUD de clientes/entidades fiscales desde UI.
-- Visor PDF embebido o URL firmada de descarga.
+- CRUD posterior de clientes/entidades fiscales.
+- Invitaciones, gestion de miembros, roles y settings.
+- Visor PDF avanzado con paginacion, zoom y auditoria de descarga.
 - OCR real con proveedor externo.
 
 Criterio de salida:
 
-- Un usuario con membresia activa puede entrar y ver su bandeja documental sin usar `service_role` en frontend.
+- Un usuario nuevo puede registrarse, crear su alta inicial, entrar y ver su bandeja documental sin usar `service_role` en frontend.
 
 Resultado:
 

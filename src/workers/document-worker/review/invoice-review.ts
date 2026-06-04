@@ -1,7 +1,7 @@
 import {
   receivedInvoiceExtractionSchema,
   type ReceivedInvoiceExtraction
-} from "../ai/invoice-schema.js";
+} from "../ai/invoice-schema";
 import {
   invoiceReviewCommandSchema,
   type ApprovedInvoiceDraft,
@@ -11,7 +11,7 @@ import {
   type ReviewLineItem,
   type ReviewTaxBreakdown,
   type ReviewValidation
-} from "./review-schema.js";
+} from "./review-schema";
 
 export function parseReceivedInvoiceExtractionInput(input: unknown): ReceivedInvoiceExtraction {
   const record = asRecord(input);

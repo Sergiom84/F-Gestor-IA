@@ -30,19 +30,22 @@ La base tecnica inicial esta documentada y parcialmente implementada:
 - Fase 13 iniciada con runner de validacion local Supabase para migraciones, lint y pgTAP.
 - Fase 14 iniciada con CI rapido y workflow manual de validacion Supabase local.
 - Smoke MVP remoto validado con aprobacion DB y cobertura unitaria de dispatcher, dedupe documental, presupuesto IA y revision humana.
-- Superficie Next.js minima conectada: Supabase Auth SSR, proxy de sesion, login, organizacion activa, subida multi-PDF, bandeja, detalle de factura y revision humana aprobar/rechazar.
+- Superficie Next.js minima conectada: Supabase Auth SSR, proxy de sesion, login/registro, onboarding minimo con organizacion, cliente y entidad fiscal, subida multi-PDF, bandeja, detalle de factura con URL firmada del PDF y revision humana aprobar/rechazar.
+- Onboarding minimo preparado con RPC transaccional `create_onboarding_workspace`: crea organizacion, membership owner, cliente, entidad fiscal y acceso uploader inicial sin `service_role` en frontend.
+- Storage RLS endurecido para que la organizacion indicada en el path coincida con la organizacion real de la entidad fiscal.
 
 Pendiente importante: Supabase local sigue pendiente porque Docker Desktop no esta operativo en el entorno actual.
-La conexion real a Supabase remoto ya esta vinculada y las migraciones estan aplicadas.
+La conexion real a Supabase remoto ya esta vinculada. Las nuevas migraciones de onboarding y hardening Storage deben aplicarse/validarse antes de probar el alta inicial en remoto.
 
 Estado de publicacion: las fases 10-16 quedan publicadas en el remoto principal en la rama `main` tras este cierre de MVP documental.
 
 ## Prioridad alta inmediata
 
-1. Preparar un fixture de factura real ademas del PDF sintetico del smoke.
-2. Completar Fase 1/2 de producto: crear organizacion, cliente y entidad fiscal desde UI.
-3. Validar Supabase local cuando Docker Desktop este operativo y promocionar esa puerta a PR.
-4. Anadir visor PDF/URL firmada y proveedor OCR real.
+1. Aplicar y validar las migraciones nuevas de onboarding/Storage en Supabase local o remoto controlado.
+2. Preparar un fixture de factura real ademas del PDF sintetico del smoke.
+3. Validar la revision humana con PDF real visible desde URL firmada.
+4. Validar Supabase local cuando Docker Desktop este operativo y promocionar esa puerta a PR.
+5. Anadir proveedor OCR real cuando el flujo PDF + revision este cerrado.
 
 ## Documentacion inicial
 
@@ -70,11 +73,12 @@ Estado de publicacion: las fases 10-16 quedan publicadas en el remoto principal 
 - Storage: Supabase Storage privado.
 - Seguridad: RLS obligatorio en tablas expuestas y Storage.
 - Workers: proceso externo TypeScript para PDFs, OCR e IA.
-- IA: capa desacoplada con proveedores intercambiables, validacion Zod/JSON Schema y logs completos, incluidos fallos antes de respuesta valida.
+- IA: capa extensible con proveedor OpenAI actual, validacion Zod/JSON Schema y logs completos, incluidos fallos antes de respuesta valida.
 
 ## Fuera de alcance por ahora
 
-- La UI aun no crea organizaciones, clientes ni entidades fiscales.
+- CRUD posterior de organizaciones, clientes, entidades fiscales, invitaciones y roles.
+- Visor PDF avanzado, paginacion/zoom y descarga controlada con auditoria.
 - Supabase local queda pendiente de validar con Docker Desktop.
 - El proveedor IA se invoca desde worker/CLI cuando `OPENAI_API_KEY` esta configurada.
 

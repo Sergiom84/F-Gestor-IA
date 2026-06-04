@@ -11,6 +11,7 @@ type DashboardPageProps = {
   searchParams?: Promise<{
     org?: string;
     uploaded?: string;
+    onboarded?: string;
     error?: string;
   }>;
 };
@@ -88,22 +89,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
     : null;
 
   if (!activeOrganization) {
-    return (
-      <main className="dashboard">
-        <header className="topbar">
-          <div className="page-title">
-            <BrandLockup />
-            <h1>Sin organizacion activa</h1>
-            <p className="supporting-text">No hay membresia activa para este usuario.</p>
-          </div>
-          <form action={signOut}>
-            <button className="button secondary" type="submit">
-              Salir
-            </button>
-          </form>
-        </header>
-      </main>
-    );
+    redirect("/onboarding");
   }
 
   const [
@@ -176,6 +162,10 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
         <div className="notice success">Documento subido y encolado para procesamiento.</div>
       ) : null}
 
+      {params?.onboarded ? (
+        <div className="notice success">Alta inicial completada. Ya puedes subir tu primer PDF.</div>
+      ) : null}
+
       {params?.error ? (
         <div className="notice danger">{formatDashboardError(params.error)}</div>
       ) : null}
@@ -185,7 +175,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
           <h2 id="upload-title">Subir factura</h2>
           <span className="row-meta">PDF · Storage privado · cola documental</span>
         </div>
-        <form className="upload-form" action={uploadDocument}>
+        <form className="upload-form" action={uploadDocument} encType="multipart/form-data">
           <input type="hidden" name="organization_id" value={activeOrganization.id} />
           <label className="field">
             <span>Entidad fiscal</span>

@@ -48,7 +48,7 @@ El primer paso fue un motor de snapshot local. La primera superficie Next.js ya 
 - Alertas basicas.
 - CLI local sin Supabase.
 - UI `/dashboard` con organizacion activa, metricas, subida multi-PDF, bandeja documental y tareas de revision.
-- UI `/dashboard/review/[taskId]` con detalle de factura, campos editables y aprobar/rechazar/pedir cambios.
+- UI `/dashboard/review/[taskId]` con detalle de factura, URL firmada del PDF original, campos editables y aprobar/rechazar/pedir cambios.
 - Estado `ocr_required` destacado como metrica y pill de estado.
 
 ## Archivos
@@ -151,6 +151,6 @@ La metrica ya puede probarse con datos exportados o mocks. Cuando el entorno est
 ## Pendiente para cerrar Fase 6
 
 - Ampliar filtros por entidad fiscal, periodo y cliente.
-- Anadir visor PDF/URL firmada en detalle.
+- Mejorar visor PDF con paginacion, zoom y auditoria de descarga.
 - Validar metricas con datos reales.
 - Decidir si se materializan `tax_summaries` o se calculan bajo demanda.

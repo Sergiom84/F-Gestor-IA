@@ -1,10 +1,10 @@
 import type postgres from "postgres";
-import type { DbClient } from "../db.js";
+import type { DbClient } from "../db";
 import type {
   ApprovedInvoiceDraft,
   InvoiceReviewOutcome,
   ReviewAction
-} from "./review-schema.js";
+} from "./review-schema";
 
 export type ReviewTaskExtractionInput = {
   reviewTaskId: string;

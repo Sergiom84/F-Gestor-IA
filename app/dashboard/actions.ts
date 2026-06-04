@@ -11,6 +11,9 @@ import {
 } from "@/src/lib/documents/storage-path";
 import { createDb, type DbClient } from "@/src/workers/document-worker/db";
 import { loadDatabaseUrl } from "@/src/workers/document-worker/ai/config";
+import { applyInvoiceReview } from "@/src/workers/document-worker/review/invoice-review";
+import { persistInvoiceReviewOutcome } from "@/src/workers/document-worker/review/repository";
+import type { InvoiceReviewCommand } from "@/src/workers/document-worker/review/review-schema";
 
 type ReviewAction = "approve" | "reject" | "changes_requested";
 
@@ -37,6 +40,11 @@ type ReviewDocumentRow = {
   id: string;
   fiscal_entity_id: string;
   client_id: string;
+};
+
+type ReviewExtractionRow = {
+  id: string;
+  normalized_data: unknown;
 };
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -205,18 +213,38 @@ export async function reviewInvoiceTask(formData: FormData) {
     redirect(`/dashboard/review/${reviewTaskId}?error=document_not_found`);
   }
 
+  if (!task.extraction_id) {
+    redirect(`/dashboard/review/${reviewTaskId}?error=missing_extraction`);
+  }
+
+  const extractionId = task.extraction_id;
+
+  const { data: extraction, error: extractionError } = await supabase
+    .from("document_extractions")
+    .select("id, normalized_data")
+    .eq("id", extractionId)
+    .single()
+    .returns<ReviewExtractionRow>();
+
+  if (extractionError || !extraction) {
+    redirect(`/dashboard/review/${reviewTaskId}?error=missing_extraction`);
+  }
+
   try {
     await withDb(async (db) => {
-      await persistDashboardReview(db, formData, action, {
+      const reviewedAt = new Date().toISOString();
+      const command = buildInvoiceReviewCommand(formData, action, {
         reviewTaskId,
         organizationId: task.organization_id,
         documentId: task.document_id,
-        extractionId: task.extraction_id,
+        extractionId,
         fiscalEntityId: documentRow.fiscal_entity_id,
         clientId: documentRow.client_id,
-        reviewedBy: user.id,
-        reviewedAt: new Date().toISOString()
+        reviewedBy: user.id
       });
+      const outcome = applyInvoiceReview({ normalized_data: extraction.normalized_data }, command, reviewedAt);
+
+      await persistInvoiceReviewOutcome(db, outcome);
     });
   } catch (error) {
     const message = encodeURIComponent(error instanceof Error ? error.message.slice(0, 160) : String(error).slice(0, 160));
@@ -228,202 +256,65 @@ export async function reviewInvoiceTask(formData: FormData) {
   redirect(`/dashboard/review/${reviewTaskId}?result=${action}`);
 }
 
-async function persistDashboardReview(
-  db: DbClient,
+function buildInvoiceReviewCommand(
   formData: FormData,
   action: ReviewAction,
   context: {
     reviewTaskId: string;
     organizationId: string;
     documentId: string;
-    extractionId: string | null;
+    extractionId: string;
     fiscalEntityId: string;
     clientId: string;
     reviewedBy: string;
-    reviewedAt: string;
   }
-): Promise<void> {
-  const reviewNotes = stringValue(formData, "review_notes");
-  const reviewTaskStatus = toReviewTaskStatus(action);
-  const documentStatus = toDocumentStatus(action);
-  const auditAction = toAuditAction(action);
+): InvoiceReviewCommand {
+  const subtotalAmount = nullableNumber(formData, "subtotal_amount");
+  const taxAmount = nullableNumber(formData, "tax_amount");
+  const totalAmount = nullableNumber(formData, "total_amount");
+  const taxRatePercent = nullableNumber(formData, "tax_rate_percent");
+  const lineDescription = nullableString(formData, "line_description");
+  const lineItems = lineDescription || subtotalAmount !== null
+    ? [{
+        description: lineDescription,
+        quantity: 1,
+        unit_price: subtotalAmount ?? 0,
+        tax_rate_percent: taxRatePercent,
+        line_total: subtotalAmount ?? 0
+      }]
+    : [];
+  const taxBreakdowns = taxRatePercent !== null && subtotalAmount !== null && taxAmount !== null
+    ? [{
+        tax_rate_percent: taxRatePercent,
+        taxable_base: subtotalAmount,
+        tax_amount: taxAmount
+      }]
+    : [];
 
-  await db.begin(async (tx) => {
-    let invoiceId: string | null = null;
-    const beforeSnapshot = {
-      review_task_id: context.reviewTaskId,
-      extraction_id: context.extractionId,
-      document_id: context.documentId,
-      action
-    };
-
-    if (action === "approve") {
-      const draft = buildApprovedInvoiceDraft(formData, context);
-
-      if (draft.sourceExtractionId) {
-        const existingRows = await tx<{ id: string }[]>`
-          select id::text
-          from public.invoices
-          where source_extraction_id = ${draft.sourceExtractionId}
-            and organization_id = ${draft.organizationId}
-            and deleted_at is null
-          limit 1
-        `;
-
-        if (existingRows[0]) {
-          throw new Error(`La extraccion ya esta vinculada a la factura ${existingRows[0].id}`);
-        }
-      }
-
-      const invoiceRows = await tx<{ id: string }[]>`
-        insert into public.invoices (
-          organization_id,
-          fiscal_entity_id,
-          client_id,
-          source_document_id,
-          source_extraction_id,
-          direction,
-          supplier_tax_id,
-          customer_tax_id,
-          invoice_number,
-          issue_date,
-          due_date,
-          currency,
-          subtotal_amount,
-          tax_amount,
-          total_amount,
-          status,
-          human_approved_by,
-          human_approved_at
-        )
-        values (
-          ${draft.organizationId},
-          ${draft.fiscalEntityId},
-          ${draft.clientId},
-          ${draft.sourceDocumentId},
-          ${draft.sourceExtractionId},
-          'received',
-          ${draft.supplierTaxId},
-          ${draft.customerTaxId},
-          ${draft.invoiceNumber},
-          ${draft.issueDate},
-          ${draft.dueDate},
-          ${draft.currency},
-          ${draft.subtotalAmount},
-          ${draft.taxAmount},
-          ${draft.totalAmount},
-          'draft',
-          ${draft.humanApprovedBy},
-          ${draft.humanApprovedAt}
-        )
-        returning id::text
-      `;
-      invoiceId = invoiceRows[0]?.id ?? null;
-
-      if (!invoiceId) {
-        throw new Error("No se pudo crear la factura aprobada");
-      }
-
-      await tx`
-        insert into public.invoice_lines (
-          organization_id,
-          invoice_id,
-          line_index,
-          description,
-          quantity,
-          unit_price,
-          tax_rate,
-          line_total
-        )
-        values (
-          ${draft.organizationId},
-          ${invoiceId},
-          0,
-          ${draft.lineDescription},
-          1,
-          ${draft.subtotalAmount},
-          ${draft.taxRatePercent},
-          ${draft.subtotalAmount}
-        )
-      `;
-
-      await tx`
-        insert into public.tax_breakdowns (
-          organization_id,
-          invoice_id,
-          tax_rate,
-          taxable_base,
-          tax_amount
-        )
-        values (
-          ${draft.organizationId},
-          ${invoiceId},
-          ${draft.taxRatePercent},
-          ${draft.subtotalAmount},
-          ${draft.taxAmount}
-        )
-      `;
-    }
-
-    if (context.extractionId) {
-      await tx`
-        update public.document_extractions
-        set status = ${toExtractionStatus(action)},
-            needs_human_review = ${action !== "approve"},
-            validation_errors = ${tx.json([])},
-            updated_at = now()
-        where id = ${context.extractionId}
-          and organization_id = ${context.organizationId}
-      `;
-    }
-
-    await tx`
-      update public.review_tasks
-      set status = ${reviewTaskStatus},
-          reviewed_by = ${context.reviewedBy},
-          reviewed_at = ${context.reviewedAt},
-          review_notes = ${reviewNotes},
-          updated_at = now()
-      where id = ${context.reviewTaskId}
-        and organization_id = ${context.organizationId}
-    `;
-
-    await tx`
-      update public.documents
-      set status = ${documentStatus},
-          failure_reason = null,
-          updated_at = now()
-      where id = ${context.documentId}
-        and organization_id = ${context.organizationId}
-    `;
-
-    await tx`
-      insert into public.audit_logs (
-        organization_id,
-        actor_user_id,
-        action,
-        resource_type,
-        resource_id,
-        before_snapshot,
-        after_snapshot,
-        created_at
-      )
-      values (
-        ${context.organizationId},
-        ${context.reviewedBy},
-        ${auditAction},
-        'document',
-        ${context.documentId},
-        ${tx.json(beforeSnapshot)},
-        ${tx.json({
-          review_task_status: reviewTaskStatus,
-          document_status: documentStatus,
-          persisted_invoice_id: invoiceId
-        })},
-        ${context.reviewedAt}
-      )
-    `;
-  });
+  return {
+    action,
+    organization_id: context.organizationId,
+    document_id: context.documentId,
+    extraction_id: context.extractionId,
+    review_task_id: context.reviewTaskId,
+    fiscal_entity_id: context.fiscalEntityId,
+    client_id: context.clientId,
+    reviewed_by: context.reviewedBy,
+    review_notes: stringValue(formData, "review_notes"),
+    corrections: {
+      supplier_tax_id: nullableString(formData, "supplier_tax_id"),
+      customer_tax_id: nullableString(formData, "customer_tax_id"),
+      invoice_number: nullableString(formData, "invoice_number"),
+      issue_date: nullableString(formData, "issue_date"),
+      due_date: nullableString(formData, "due_date"),
+      currency: nullableString(formData, "currency"),
+      subtotal_amount: subtotalAmount,
+      tax_amount: taxAmount,
+      total_amount: totalAmount
+    },
+    line_items: lineItems,
+    tax_breakdowns: taxBreakdowns
+  };
 }
 
 async function enqueueExtractTextJob(args: {
@@ -531,138 +422,6 @@ function getUploadedFiles(formData: FormData): File[] {
 
   const singleFile = formData.get("file");
   return singleFile instanceof File && singleFile.size > 0 ? [singleFile] : [];
-}
-
-function buildApprovedInvoiceDraft(
-  formData: FormData,
-  context: {
-    organizationId: string;
-    documentId: string;
-    extractionId: string | null;
-    fiscalEntityId: string;
-    clientId: string;
-    reviewedBy: string;
-    reviewedAt: string;
-  }
-): {
-  organizationId: string;
-  fiscalEntityId: string;
-  clientId: string;
-  sourceDocumentId: string;
-  sourceExtractionId: string | null;
-  supplierTaxId: string | null;
-  customerTaxId: string | null;
-  invoiceNumber: string;
-  issueDate: string;
-  dueDate: string | null;
-  currency: string;
-  subtotalAmount: number;
-  taxAmount: number;
-  totalAmount: number;
-  taxRatePercent: number;
-  lineDescription: string;
-  humanApprovedBy: string;
-  humanApprovedAt: string;
-} {
-  const subtotalAmount = nullableNumber(formData, "subtotal_amount");
-  const taxAmount = nullableNumber(formData, "tax_amount");
-  const totalAmount = nullableNumber(formData, "total_amount");
-  const taxRate = nullableNumber(formData, "tax_rate_percent") ?? 21;
-  const lineDescription = stringValue(formData, "line_description") || "Factura recibida";
-  const invoiceNumber = nullableString(formData, "invoice_number");
-  const issueDate = nullableString(formData, "issue_date");
-  const currency = nullableString(formData, "currency") ?? "EUR";
-
-  if (!invoiceNumber) {
-    throw new Error("El numero de factura es obligatorio para aprobar");
-  }
-
-  if (!issueDate) {
-    throw new Error("La fecha de emision es obligatoria para aprobar");
-  }
-
-  if (subtotalAmount === null || taxAmount === null || totalAmount === null) {
-    throw new Error("Base, IVA y total son obligatorios para aprobar");
-  }
-
-  const expectedTotal = roundMoney(subtotalAmount + taxAmount);
-
-  if (expectedTotal !== roundMoney(totalAmount)) {
-    throw new Error(`Los importes no cuadran: base + IVA = ${expectedTotal}, total = ${roundMoney(totalAmount)}`);
-  }
-
-  return {
-    organizationId: context.organizationId,
-    fiscalEntityId: context.fiscalEntityId,
-    clientId: context.clientId,
-    sourceDocumentId: context.documentId,
-    sourceExtractionId: context.extractionId,
-    supplierTaxId: nullableString(formData, "supplier_tax_id"),
-    customerTaxId: nullableString(formData, "customer_tax_id"),
-    invoiceNumber,
-    issueDate,
-    dueDate: nullableString(formData, "due_date"),
-    currency,
-    subtotalAmount,
-    taxAmount,
-    totalAmount,
-    taxRatePercent: taxRate,
-    lineDescription,
-    humanApprovedBy: context.reviewedBy,
-    humanApprovedAt: context.reviewedAt
-  };
-}
-
-function toReviewTaskStatus(action: ReviewAction): "approved" | "rejected" | "changes_requested" {
-  if (action === "approve") {
-    return "approved";
-  }
-
-  if (action === "reject") {
-    return "rejected";
-  }
-
-  return "changes_requested";
-}
-
-function toDocumentStatus(action: ReviewAction): "approved" | "rejected" | "needs_review" {
-  if (action === "approve") {
-    return "approved";
-  }
-
-  if (action === "reject") {
-    return "rejected";
-  }
-
-  return "needs_review";
-}
-
-function toExtractionStatus(action: ReviewAction): "draft" | "valid" | "invalid" {
-  if (action === "approve") {
-    return "valid";
-  }
-
-  if (action === "reject") {
-    return "invalid";
-  }
-
-  return "draft";
-}
-
-function toAuditAction(action: ReviewAction): string {
-  if (action === "approve") {
-    return "document.review_approved";
-  }
-
-  if (action === "reject") {
-    return "document.review_rejected";
-  }
-
-  return "document.review_changes_requested";
-}
-
-function roundMoney(value: number): number {
-  return Number(value.toFixed(2));
 }
 
 function parseReviewAction(value: string): ReviewAction {

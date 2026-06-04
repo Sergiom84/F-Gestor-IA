@@ -30,6 +30,8 @@ La regla central se mantiene: ningun dato fiscal entra como factura o gasto sin 
 - Generacion de `auditEvent` con before/after.
 - CLI local que no requiere Supabase.
 - Adaptador transaccional Supabase/Postgres.
+- UI de revision conectada al motor comun de revision y persistencia.
+- URL firmada del PDF original generada server-side desde Storage privado.
 - CLI DB para aprobar/rechazar una `review_task` real.
 - Persistencia de factura aprobada en `invoices`, `invoice_lines` y `tax_breakdowns`.
 - Actualizacion de `review_tasks`, `documents` y `document_extractions`.
@@ -141,7 +143,6 @@ El comando DB:
 
 ## Pendiente para cerrar Fase 5
 
-- Conectar UI de revision con PDF, propuesta y campos editables.
 - Probar aprobacion, rechazo y cambios con datos reales en Supabase remoto.
 - Decidir si la factura aprobada nace como `draft` o `booked`.
-- Anadir tests del motor de revision.
+- Ampliar tests de integracion del motor de revision con la Server Action de UI.

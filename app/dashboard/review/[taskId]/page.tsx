@@ -45,6 +45,19 @@ type ExtractionRow = {
   confidence_overall: number | string | null;
 };
 
+type DocumentFileRow = {
+  id: string;
+  storage_bucket: string;
+  storage_path: string;
+  original_filename: string;
+  mime_type: string;
+};
+
+type SignedDocumentUrl = {
+  url: string | null;
+  error: string | null;
+};
+
 export default async function ReviewDetailPage({ params, searchParams }: ReviewDetailPageProps) {
   const { taskId } = await params;
   const query = await searchParams;
@@ -83,6 +96,10 @@ export default async function ReviewDetailPage({ params, searchParams }: ReviewD
   const extraction = task.extraction_id
     ? await readExtraction(task.extraction_id)
     : null;
+  const primaryFile = await readPrimaryDocumentFile(documentRow.id);
+  const signedDocumentUrl = primaryFile
+    ? await createSignedDocumentUrl(primaryFile)
+    : { url: null, error: "No hay archivo principal registrado." };
   const normalizedData = extraction?.normalized_data ?? {};
   const canSubmitReview = Boolean(extraction) && (task.status === "open" || task.status === "in_review");
 
@@ -175,6 +192,32 @@ export default async function ReviewDetailPage({ params, searchParams }: ReviewD
         </div>
       </section>
 
+      <section className="panel document-viewer" aria-labelledby="document-viewer-title">
+        <div className="panel-header">
+          <h2 id="document-viewer-title">Documento original</h2>
+          <span className="row-meta">{primaryFile?.original_filename ?? "PDF privado"}</span>
+        </div>
+        {signedDocumentUrl.url ? (
+          <>
+            <iframe
+              className="pdf-frame"
+              src={signedDocumentUrl.url}
+              title={primaryFile?.original_filename ?? "Documento original"}
+              referrerPolicy="no-referrer"
+            />
+            <div className="viewer-actions">
+              <a className="button secondary" href={signedDocumentUrl.url} target="_blank" rel="noreferrer">
+                Abrir PDF
+              </a>
+            </div>
+          </>
+        ) : (
+          <div className="empty-state">
+            {signedDocumentUrl.error ?? "No se pudo generar el enlace seguro del documento."}
+          </div>
+        )}
+      </section>
+
       <section className="panel">
         <div className="panel-header">
           <h2>Revision humana</h2>
@@ -263,6 +306,43 @@ export default async function ReviewDetailPage({ params, searchParams }: ReviewD
     }
 
     return data ?? null;
+  }
+
+  async function readPrimaryDocumentFile(documentId: string): Promise<DocumentFileRow | null> {
+    const { data, error } = await supabase
+      .from("document_files")
+      .select("id, storage_bucket, storage_path, original_filename, mime_type")
+      .eq("document_id", documentId)
+      .is("deleted_at", null)
+      .order("is_primary", { ascending: false })
+      .order("created_at", { ascending: true })
+      .limit(1)
+      .maybeSingle()
+      .returns<DocumentFileRow>();
+
+    if (error) {
+      throw new Error(`No se pudo cargar el archivo del documento: ${error.message}`);
+    }
+
+    return data ?? null;
+  }
+
+  async function createSignedDocumentUrl(file: DocumentFileRow): Promise<SignedDocumentUrl> {
+    const { data, error } = await supabase.storage
+      .from(file.storage_bucket)
+      .createSignedUrl(file.storage_path, 60 * 60);
+
+    if (error) {
+      return {
+        url: null,
+        error: `No se pudo generar el enlace seguro: ${error.message}`
+      };
+    }
+
+    return {
+      url: data.signedUrl,
+      error: null
+    };
   }
 }
 
