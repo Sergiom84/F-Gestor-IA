@@ -1,7 +1,7 @@
 # Roadmap tecnico
 
 Fecha: 2026-06-04
-Estado: plan vivo sincronizado con July y preparado para remoto
+Estado: plan vivo sincronizado con July y remoto principal
 
 Nota operativa:
 

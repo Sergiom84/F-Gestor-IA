@@ -33,7 +33,7 @@ La base tecnica inicial esta documentada y parcialmente implementada:
 Pendiente importante: la migracion y el worker contra Supabase local no se han podido validar porque Docker Desktop no esta operativo en el entorno actual.
 La conexion real a Supabase remoto queda deliberadamente para el final, cuando esten disponibles URL y claves.
 
-Estado de publicacion: las fases 10-14 quedan preparadas para subirse al remoto principal en la rama `main`.
+Estado de publicacion: las fases 10-14 estan publicadas en el remoto principal en la rama `main`.
 
 ## Documentacion inicial
 
