@@ -16,7 +16,7 @@ El producto se disenara alrededor de cuatro principios:
 La base tecnica inicial esta documentada y parcialmente implementada:
 
 - Modelo de datos Supabase documentado.
-- Migraciones Supabase aplicadas al remoto `F_Gestor-IA`, con RLS, Storage privado, cola `document_processing` y ledger normativo.
+- Migraciones Supabase aplicadas al remoto `F_Gestor-IA` (`yhnqdntfxeojhfgdvkva`), con RLS, Storage privado, cola `document_processing`, onboarding minimo, hardening de Storage y ledger normativo.
 - Worker documental TypeScript creado para extraer texto embebido de PDFs, procesar multiples archivos por documento y encadenar `ai_extract`.
 - Fase 4 conectada al worker con contrato Zod/JSON Schema, extractor IA de facturas recibidas, control de presupuesto y deteccion de duplicados.
 - Fase 5 conectada a Supabase con adaptador transaccional de revision humana y aprobacion/rechazo.
@@ -33,19 +33,21 @@ La base tecnica inicial esta documentada y parcialmente implementada:
 - Superficie Next.js minima conectada: Supabase Auth SSR, proxy de sesion, login/registro, onboarding minimo con organizacion, cliente y entidad fiscal, subida multi-PDF, bandeja, detalle de factura con URL firmada del PDF y revision humana aprobar/rechazar.
 - Onboarding minimo preparado con RPC transaccional `create_onboarding_workspace`: crea organizacion, membership owner, cliente, entidad fiscal y acceso uploader inicial sin `service_role` en frontend.
 - Storage RLS endurecido para que la organizacion indicada en el path coincida con la organizacion real de la entidad fiscal.
+- Configuracion Supabase endurecida: `SUPABASE_URL` tiene prioridad en servidor sobre `NEXT_PUBLIC_SUPABASE_URL` y `SUPABASE_PROJECT_REF` detecta procesos con project ref antiguo antes de llamar a Auth.
+- Rediseño de dashboard iniciado con referencia local Sage Active (`C:\Users\sergi\Documents\Software\SADGE_Asor-IA`): shell tipo ERP, sidebar modular, pestañas de cuadro de mando, superficie `Ventas y compras` y esqueletos para Ventas, Compras, Contactos, Productos y servicios, Bancos, Contabilidad, Declaraciones e Informes.
 
 Pendiente importante: Supabase local sigue pendiente porque Docker Desktop no esta operativo en el entorno actual.
-La conexion real a Supabase remoto ya esta vinculada. Las nuevas migraciones de onboarding y hardening Storage deben aplicarse/validarse antes de probar el alta inicial en remoto.
+La conexion real a Supabase remoto ya esta vinculada y las migraciones de onboarding/hardening Storage ya estan aplicadas en remoto. Falta validar el stack local cuando Docker Desktop este operativo.
 
 Estado de publicacion: las fases 10-16 quedan publicadas en el remoto principal en la rama `main` tras este cierre de MVP documental.
 
 ## Prioridad alta inmediata
 
-1. Aplicar y validar las migraciones nuevas de onboarding/Storage en Supabase local o remoto controlado.
-2. Preparar un fixture de factura real ademas del PDF sintetico del smoke.
-3. Validar la revision humana con PDF real visible desde URL firmada.
-4. Validar Supabase local cuando Docker Desktop este operativo y promocionar esa puerta a PR.
-5. Anadir proveedor OCR real cuando el flujo PDF + revision este cerrado.
+1. Preparar un fixture de factura real ademas del PDF sintetico del smoke.
+2. Validar la revision humana con PDF real visible desde URL firmada.
+3. Validar Supabase local cuando Docker Desktop este operativo y promocionar esa puerta a PR.
+4. Anadir proveedor OCR real cuando el flujo PDF + revision este cerrado.
+5. Sustituir datos semilla del dashboard comercial por tablas reales de facturas de venta, compra, vencimientos, presupuestos, clientes, proveedores y bancos.
 
 ## Documentacion inicial
 
@@ -74,6 +76,23 @@ Estado de publicacion: las fases 10-16 quedan publicadas en el remoto principal 
 - Seguridad: RLS obligatorio en tablas expuestas y Storage.
 - Workers: proceso externo TypeScript para PDFs, OCR e IA.
 - IA: capa extensible con proveedor OpenAI actual, validacion Zod/JSON Schema y logs completos, incluidos fallos antes de respuesta valida.
+- UI de producto: crecer desde una estructura ERP sobria inspirada en Sage Active, usando sus textos y jerarquia local como referencia, pero conectando cada widget a datos reales de GFiscal antes de considerarlo funcional.
+
+## Estructura de producto
+
+La superficie principal `/dashboard` ya funciona como shell modular:
+
+- `?module=dashboard`: cuadros de mando con pestañas `Contabilidad`, `Ventas y compras` y `Novedades`.
+- `?module=sales`: ventas, facturas, presupuestos, cobros y recordatorios.
+- `?module=purchases`: compras, proveedores, facturas de compra y gastos.
+- `?module=contacts`: clientes, proveedores y terceros.
+- `?module=products`: productos, servicios, tarifas y descuentos.
+- `?module=banks`: cuentas, extractos, movimientos y conciliacion.
+- `?module=accounting`: asientos, libro mayor, marcaje y cierre.
+- `?module=tax`: declaraciones, IVA, obligaciones legales y VeriFactu.
+- `?module=reports`: informes financieros y fiscales.
+
+Los importes y filas de `Ventas y compras` que proceden de capturas son datos semilla. Sirven para dar forma al producto; no deben interpretarse como datos reales hasta conectar el modelo comercial.
 
 ## Fuera de alcance por ahora
 
@@ -108,6 +127,22 @@ npm run ci:full
 ```
 
 Para usar `worker:documents` hace falta configurar `.env` segun `.env.example` y tener Supabase/Postgres accesible.
+
+## Configuracion Supabase remoto
+
+El proyecto remoto operativo es `F_Gestor-IA` con project ref `yhnqdntfxeojhfgdvkva`.
+
+En desarrollo remoto, `.env` debe contener:
+
+```powershell
+SUPABASE_URL=https://yhnqdntfxeojhfgdvkva.supabase.co
+SUPABASE_PROJECT_REF=yhnqdntfxeojhfgdvkva
+SUPABASE_ANON_KEY=...
+```
+
+`SUPABASE_PROJECT_REF` no es secreto: sirve para que la app detecte si un proceso hereda una `SUPABASE_URL` o `NEXT_PUBLIC_SUPABASE_URL` de otro proyecto. Si el host no coincide con el ref esperado, `getSupabasePublicConfig()` falla con un mensaje explicito antes de intentar login/registro.
+
+En Server Components y Server Actions, `SUPABASE_URL` tiene prioridad sobre `NEXT_PUBLIC_SUPABASE_URL` para evitar que un entorno publico antiguo pise la URL real del servidor.
 
 Para usar `worker:documents`, la app o una prueba debe crear un `processing_job` tipo `extract_text` y enviar un mensaje a `pgmq`. Al terminar texto, el worker crea y encola el job `ai_extract` si hay texto suficiente y no detecta duplicado exacto por hash. El worker reclama jobs solo desde `queued/retrying`, reintenta con backoff exponencial y emite logs JSON con `job_id`, `document_id` y `organization_id`.
 

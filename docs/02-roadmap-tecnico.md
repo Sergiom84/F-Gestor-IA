@@ -6,7 +6,7 @@ Estado: plan vivo sincronizado con el repositorio principal
 Nota operativa:
 
 - Este roadmap ya refleja que varias fases se han iniciado como nucleos offline verificables y que el MVP documental ya esta conectado a Supabase remoto.
-- Supabase remoto `F_Gestor-IA` esta vinculado y tiene migraciones aplicadas. Supabase local sigue pendiente por Docker Desktop.
+- Supabase remoto `F_Gestor-IA` esta vinculado con project ref `yhnqdntfxeojhfgdvkva` y tiene migraciones aplicadas, incluidas onboarding minimo y hardening de Storage. Supabase local sigue pendiente por Docker Desktop.
 - Remoto principal: https://github.com/Sergiom84/F-Gestor-IA.
 
 Este roadmap evita construir todo de golpe. Cada fase debe terminar con una superficie usable y verificable.
@@ -41,6 +41,7 @@ Estado:
 - Iniciada en producto con registro email/password y onboarding minimo.
 - La RPC `create_onboarding_workspace` crea en transaccion organizacion, membership owner, cliente, entidad fiscal y acceso uploader para el usuario autenticado.
 - `/dashboard` redirige a `/onboarding` cuando el usuario no tiene organizacion activa.
+- Migracion `20260604113000_onboarding_minimal` aplicada en Supabase remoto el 2026-06-04.
 - Pendiente CRUD posterior de clientes/entidades fiscales, invitaciones, roles y settings.
 
 Incluye:
@@ -72,8 +73,9 @@ Objetivo:
 Estado:
 
 - Upload multi-PDF conectado a Storage privado y PGMQ.
-- Formulario de subida declara `multipart/form-data`.
+- Formulario de subida usa Server Action con input file; React/Next declaran automaticamente `multipart/form-data`, sin `encType` manual para evitar error de React 19.
 - RLS de Storage endurecido: el `organization_id` del path debe coincidir con la organizacion real de la entidad fiscal.
+- Migracion `20260604114000_harden_storage_path_rls` aplicada en Supabase remoto el 2026-06-04.
 - Detalle de revision con URL firmada server-side para visualizar o abrir el PDF privado.
 
 Incluye:
@@ -520,9 +522,9 @@ Resultado:
 Siguiente prioridad alta:
 
 - Preparar fixture de factura real para repetir el smoke completo sin depender solo del PDF sintetico.
-- Aplicar y validar migraciones nuevas de onboarding minimo y hardening Storage.
+- Repetir smoke/revision con una factura real visible desde URL firmada, ahora que onboarding minimo y hardening Storage ya estan aplicados en remoto.
 - Validar Supabase local cuando Docker Desktop este operativo y promocionar esa puerta a PR.
-- Validar revision humana con factura real visible desde URL firmada y anadir proveedor OCR real.
+- Anadir proveedor OCR real cuando el flujo PDF + revision este cerrado.
 
 ## Fase 16 - Superficie Next.js minima
 
@@ -540,6 +542,8 @@ Estado:
 - `/onboarding` crea el alta inicial cuando no hay organizacion activa.
 - `/dashboard` requiere usuario autenticado, resuelve organizacion activa, muestra bandeja documental/revisiones, permite subir uno o varios PDFs a Storage y encola `extract_text`.
 - `/dashboard/review/[taskId]` muestra detalle de factura, genera URL firmada del PDF original y permite aprobar, pedir cambios o rechazar.
+- Configuracion Supabase endurecida: `SUPABASE_URL` tiene prioridad sobre `NEXT_PUBLIC_SUPABASE_URL` en servidor y `SUPABASE_PROJECT_REF` bloquea hosts de otro proyecto antes de llamar a Auth.
+- Import interno de revision ajustado para Next/Turbopack, evitando resolucion fallida de sufijos `.js` en modulos TypeScript usados por Server Actions.
 - `ocr_required` queda visible como metrica y estado destacado.
 - `ci:static` incluye `next build`.
 - `postcss` queda forzado por override a `8.5.10`; `npm audit --omit=dev` queda limpio.
@@ -570,7 +574,52 @@ Criterio de salida:
 
 Resultado:
 
-- `npm run typecheck`, `npm run ci:static` y `npm run build` pasan localmente.
+- `npm run typecheck`, `npm run test:unit`, `npm run ci:static` y `npm run build` pasan localmente.
+- Guardarrail de Supabase cubierto por `src/lib/supabase/config.test.ts`: un `NEXT_PUBLIC_SUPABASE_URL` heredado no pisa `SUPABASE_URL`, y un project ref distinto falla con error explicito.
+
+## Fase 17 - Estructura UI modular tipo ERP
+
+Objetivo:
+
+- Dar a GFiscal una forma de aplicacion contable/ERP, usando como referencia local la captura de Sage Active almacenada en `C:\Users\sergi\Documents\Software\SADGE_Asor-IA`.
+
+Estado:
+
+- Iniciada como estructura de producto navegable.
+- `/dashboard` deja de ser una unica web app plana y pasa a un shell con sidebar modular.
+- La navegacion principal expone `Cuadros de mando`, `Ventas`, `Compras`, `Contactos`, `Productos y servicios`, `Bancos`, `Contabilidad`, `Declaraciones` e `Informes`.
+- `Cuadros de mando` incluye pestañas server-side por query: `Contabilidad`, `Ventas y compras` y `Novedades`.
+- `Ventas y compras` replica la jerarquia de Sage Active: importes pendientes, pendiente de cobro/pago, tarjetas de facturas, clientes activos, accesos rapidos, facturas vencidas y presupuestos pendientes.
+- Los demas modulos tienen superficie base con hero, KPIs, acciones rapidas y tabla vacia profesional.
+- Los textos y quick actions proceden del material local de Sage Active cuando hay correspondencia clara.
+- Los datos reales se usan solo donde GFiscal ya tiene modelo: documentos, clientes, entidades fiscales, OCR y revision. Los importes/filas comerciales son semilla visual.
+
+Incluye:
+
+- Shell visual tipo ERP.
+- Sidebar modular.
+- Query params `module` y `tab`.
+- Catalogo de modulos en codigo.
+- Superficies base para construir CRUDs y tablas reales.
+- Dependencia `lucide-react` para iconografia consistente.
+
+No incluye todavia:
+
+- Modelo real de ventas, compras, presupuestos, vencimientos, proveedores, productos, bancos o declaraciones.
+- CRUDs completos por modulo.
+- Conciliacion bancaria real.
+- Informes financieros agregados desde PostgreSQL.
+- Sustitucion de datos semilla por datos reales.
+
+Criterio de salida:
+
+- Cada modulo principal tiene una primera superficie navegable y preparada para conectarse a datos reales sin rehacer la estructura visual.
+
+Siguiente prioridad alta:
+
+- Definir y migrar tablas comerciales minimas: facturas de venta, facturas de compra, vencimientos, presupuestos, clientes/proveedores ampliados y productos/servicios.
+- Reemplazar datos semilla de `Ventas y compras` por consultas agregadas.
+- Conectar acciones rapidas a rutas/forms reales por modulo.
 
 ## Backlog consciente
 
