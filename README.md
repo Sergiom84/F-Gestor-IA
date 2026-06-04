@@ -29,6 +29,7 @@ La base tecnica inicial esta documentada y parcialmente implementada:
 - Fase 12 iniciada con tests pgTAP para RLS y append-only de `regulatory_events`.
 - Fase 13 iniciada con runner de validacion local Supabase para migraciones, lint y pgTAP.
 - Fase 14 iniciada con CI rapido y workflow manual de validacion Supabase local.
+- Smoke MVP remoto validado con aprobacion DB y cobertura unitaria inicial de revision humana.
 
 Pendiente importante: Supabase local sigue pendiente porque Docker Desktop no esta operativo en el entorno actual.
 La conexion real a Supabase remoto ya esta vinculada y las migraciones estan aplicadas.
@@ -37,7 +38,7 @@ Estado de publicacion: las fases 10-14 estan publicadas en el remoto principal e
 
 ## Prioridad alta inmediata
 
-1. Anadir tests del flujo nuevo: dispatcher por `job_type`, dedupe por hash, presupuesto IA y aprobacion DB.
+1. Ampliar tests del flujo nuevo: dispatcher por `job_type`, dedupe por hash y presupuesto IA. La aprobacion humana ya tiene cobertura unitaria inicial.
 2. Preparar un fixture de factura real ademas del PDF sintético del smoke.
 3. Decidir si el smoke remoto completo debe entrar como workflow manual en GitHub Actions.
 
