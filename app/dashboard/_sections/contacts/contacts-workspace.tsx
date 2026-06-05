@@ -14,7 +14,7 @@ import {
   WalletCards
 } from "lucide-react";
 import { useMemo, useState } from "react";
-import { formatMoney } from "../_lib/formatters";
+import { formatMoney } from "../../_lib/formatters";
 
 type ContactSectionId = "clients" | "suppliers" | "employees";
 type ClientTabId = "info" | "contacts" | "payment" | "addresses" | "sales";

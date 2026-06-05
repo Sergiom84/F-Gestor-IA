@@ -48,7 +48,7 @@ export function formatDate(value: string): string {
 }
 
 export function resolveDashboardTab(value: string | undefined): DashboardTab {
-  if (value === "sales" || value === "news") {
+  if (value === "management" || value === "sales") {
     return value;
   }
 
@@ -65,7 +65,8 @@ export function resolveAppModule(value: string | undefined): AppModule {
     "banks",
     "accounting",
     "tax",
-    "reports"
+    "reports",
+    "settings"
   ]);
 
   return value && modules.has(value as AppModule) ? value as AppModule : "dashboard";

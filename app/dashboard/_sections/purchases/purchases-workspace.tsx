@@ -18,7 +18,7 @@ import {
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { useMemo, useRef, useState } from "react";
-import { formatMoney } from "../_lib/formatters";
+import { formatMoney } from "../../_lib/formatters";
 
 type PurchaseTabId = "all" | "review" | "pay" | "paid";
 

@@ -1,8 +1,8 @@
 import { FileSearch } from "lucide-react";
-import { applyModuleLiveValues, moduleCatalog } from "../_lib/module-catalog";
-import { slugify } from "../_lib/formatters";
-import type { AppModule } from "../_lib/types";
-import { SmallIndicatorCard } from "./erp-cards";
+import { SmallIndicatorCard } from "../../_components/erp-cards";
+import { applyModuleLiveValues, moduleCatalog } from "../../_lib/module-catalog";
+import { slugify } from "../../_lib/formatters";
+import type { AppModule } from "../../_lib/types";
 
 export function ModuleWorkspace({
   module,

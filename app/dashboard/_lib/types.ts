@@ -1,4 +1,4 @@
-export type DashboardTab = "accounting" | "sales" | "news";
+export type DashboardTab = "accounting" | "management" | "sales";
 
 export type AppModule =
   | "dashboard"
@@ -9,7 +9,8 @@ export type AppModule =
   | "banks"
   | "accounting"
   | "tax"
-  | "reports";
+  | "reports"
+  | "settings";
 
 export type OrganizationMember = {
   organization_id: string;

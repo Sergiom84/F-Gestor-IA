@@ -8,9 +8,9 @@ import {
   Users
 } from "lucide-react";
 import type { ReactNode } from "react";
-import { formatMoney } from "../_lib/formatters";
-import type { SalesInvoiceRow } from "../_lib/types";
-import { SmallIndicatorCard } from "./erp-cards";
+import { SmallIndicatorCard } from "../../_components/erp-cards";
+import { formatMoney } from "../../_lib/formatters";
+import type { SalesInvoiceRow } from "../../_lib/types";
 
 const salesInvoiceSeedRows: SalesInvoiceRow[] = [
   {
@@ -58,7 +58,7 @@ export function SalesDashboard({
   const activeClients = clientCount > 0 ? clientCount : 45;
 
   return (
-    <>
+    <div className="sales-dashboard-view">
       <section className="dashboard-section" aria-labelledby="outstanding-title">
         <h2 id="outstanding-title">Importes pendientes</h2>
         <div className="outstanding-grid">
@@ -179,7 +179,7 @@ export function SalesDashboard({
           description="Base documental actual para alimentar el futuro modulo comercial."
         />
       </section>
-    </>
+    </div>
   );
 }
 

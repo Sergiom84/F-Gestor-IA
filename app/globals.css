@@ -1382,6 +1382,90 @@ a {
   min-width: 820px;
 }
 
+.sales-dashboard-view {
+  --sales-type-title: 1.34rem;
+  --sales-type-body: 0.96rem;
+  --sales-type-action: 0.93rem;
+  --sales-weight-title: 760;
+  --sales-weight-body: 430;
+  --sales-weight-action: 620;
+  color: #111827;
+  font-family: var(--font-reading);
+}
+
+.sales-dashboard-view .dashboard-section h2,
+.sales-dashboard-view .sales-table-heading h2,
+.sales-dashboard-view .sales-quick-card h2 {
+  font-family: var(--font-display);
+  font-size: var(--sales-type-title);
+  font-weight: var(--sales-weight-title);
+  letter-spacing: 0;
+  line-height: 1.18;
+}
+
+.sales-dashboard-view .outstanding-title h3 {
+  font-family: var(--font-display);
+  font-size: var(--sales-type-title);
+  font-weight: var(--sales-weight-title);
+  letter-spacing: 0;
+  line-height: 1.18;
+}
+
+.sales-dashboard-view .sales-summary-tile p,
+.sales-dashboard-view .sales-table-heading p,
+.sales-dashboard-view .table-empty-state p,
+.sales-dashboard-view .small-indicator-card p {
+  color: #334155;
+  font-size: var(--sales-type-body);
+  font-weight: var(--sales-weight-body);
+  line-height: 1.45;
+}
+
+.sales-dashboard-view .outstanding-actions a,
+.sales-dashboard-view .sales-table-actions a,
+.sales-dashboard-view .sales-quick-card .quick-links a {
+  color: #006f2f;
+  font-size: var(--sales-type-action);
+  font-weight: var(--sales-weight-action);
+  line-height: 1.25;
+}
+
+.sales-dashboard-view .outstanding-actions a,
+.sales-dashboard-view .sales-table-actions a {
+  text-decoration: none;
+}
+
+.sales-dashboard-view .sales-quick-card .quick-links {
+  gap: 12px;
+}
+
+.sales-dashboard-view .sales-quick-card .quick-links a {
+  text-decoration: none;
+}
+
+.sales-dashboard-view .sales-quick-card .quick-links a:hover,
+.sales-dashboard-view .outstanding-actions a:hover,
+.sales-dashboard-view .sales-table-actions a:hover {
+  color: #004f25;
+  text-decoration: none;
+}
+
+.sales-dashboard-view .outstanding-card > strong,
+.sales-dashboard-view .sales-summary-tile strong,
+.sales-dashboard-view .small-indicator-card strong {
+  font-family: var(--font-display);
+  font-weight: 760;
+  letter-spacing: 0;
+}
+
+.sales-dashboard-view .sales-table th,
+.sales-dashboard-view .sales-table tfoot td,
+.sales-dashboard-view .expired-badge {
+  font-size: var(--sales-type-action);
+  font-weight: var(--sales-weight-action);
+  letter-spacing: 0;
+}
+
 .table-empty-state {
   align-items: center;
   display: flex;
@@ -1535,6 +1619,230 @@ a {
   line-height: 1.45;
   margin: 0;
   max-width: 86ch;
+}
+
+.accounting-dashboard-view {
+  --accounting-type-title: 1.34rem;
+  --accounting-type-body: 0.94rem;
+  --accounting-type-action: 0.93rem;
+  --accounting-weight-title: 760;
+  --accounting-weight-body: 430;
+  --accounting-weight-action: 620;
+  display: grid;
+  gap: 34px;
+  padding: 34px 28px 40px;
+}
+
+.accounting-dashboard-section {
+  display: grid;
+  gap: 28px;
+}
+
+.accounting-dashboard-section h2,
+.accounting-bottom-grid h2 {
+  color: #000000;
+  font-family: var(--font-display);
+  font-size: var(--accounting-type-title);
+  font-weight: var(--accounting-weight-title);
+  letter-spacing: 0;
+  line-height: 1.18;
+  margin: 0;
+}
+
+.accounting-profit-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 28px;
+}
+
+.accounting-performance-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 28px;
+}
+
+.accounting-wide-card,
+.accounting-ratio-card,
+.accounting-simple-card,
+.accounting-quick-card {
+  background: #ffffff;
+  border: 1px solid #c9d4dd;
+  border-radius: 8px;
+  box-shadow: none;
+}
+
+.accounting-wide-card {
+  display: grid;
+  gap: 28px;
+  min-height: 188px;
+  padding: 28px 20px 18px;
+}
+
+.accounting-card-heading {
+  align-items: start;
+  display: grid;
+  gap: 18px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+}
+
+.accounting-card-icon {
+  color: #008a45;
+  display: inline-flex;
+  padding-top: 2px;
+}
+
+.accounting-card-heading h3,
+.accounting-ratio-card h3,
+.accounting-simple-card h3 {
+  color: #000000;
+  font-family: var(--font-display);
+  font-size: var(--accounting-type-title);
+  font-weight: var(--accounting-weight-title);
+  letter-spacing: 0;
+  line-height: 1.2;
+  margin: 0;
+}
+
+.accounting-card-heading p,
+.accounting-ratio-card p,
+.accounting-simple-card p {
+  color: #24323a;
+  font-size: var(--accounting-type-body);
+  font-weight: var(--accounting-weight-body);
+  line-height: 1.35;
+  margin: 8px 0 0;
+}
+
+.accounting-card-heading > strong {
+  color: #000000;
+  font-size: 22px;
+  font-weight: var(--accounting-weight-title);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.15;
+  padding-top: 2px;
+  white-space: nowrap;
+}
+
+.accounting-metric-row {
+  display: grid;
+  margin-top: auto;
+}
+
+.accounting-metric-row.cols-2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.accounting-metric-row.cols-3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.accounting-metric {
+  display: grid;
+  gap: 12px;
+  justify-items: end;
+  min-width: 0;
+  padding: 0 18px;
+}
+
+.accounting-metric:not(:first-child) {
+  border-left: 1px solid #d2d8de;
+}
+
+.accounting-metric span {
+  color: #111111;
+  font-size: var(--accounting-type-action);
+  font-weight: var(--accounting-weight-action);
+  line-height: 1.2;
+  text-align: right;
+}
+
+.accounting-metric strong {
+  color: #000000;
+  font-size: 19px;
+  font-weight: var(--accounting-weight-title);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.accounting-ratio-card {
+  display: grid;
+  min-height: 260px;
+  padding: 28px 18px 18px;
+}
+
+.accounting-ratio-value {
+  align-self: center;
+  color: #000000;
+  font-size: 44px;
+  font-weight: 780;
+  line-height: 1;
+  text-align: center;
+  text-shadow: 0 2px 0 rgba(21, 39, 52, 0.35);
+}
+
+.accounting-bottom-grid {
+  align-items: start;
+  display: grid;
+  gap: 28px;
+  grid-template-columns: minmax(0, 3fr) minmax(300px, 1fr);
+}
+
+.accounting-bottom-grid > div,
+.accounting-quick-panel {
+  display: grid;
+  gap: 28px;
+}
+
+.accounting-additional-grid {
+  display: grid;
+  gap: 28px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.accounting-simple-card {
+  display: grid;
+  gap: 24px;
+  min-height: 188px;
+  padding: 28px 18px 20px;
+}
+
+.accounting-simple-card strong {
+  color: #000000;
+  font-size: 20px;
+  font-weight: var(--accounting-weight-title);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+}
+
+.accounting-simple-card p {
+  align-self: end;
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.accounting-quick-card {
+  display: grid;
+  gap: 20px;
+  min-height: 188px;
+  padding: 28px 20px;
+}
+
+.accounting-quick-card a {
+  color: #006f2f;
+  font-size: var(--accounting-type-action);
+  font-weight: var(--accounting-weight-action);
+  line-height: 1.2;
+  text-decoration: none;
+  width: fit-content;
+}
+
+.accounting-quick-card a:hover {
+  color: #004f25;
+  text-decoration: none;
 }
 
 .sales-workbench {
@@ -3946,6 +4254,651 @@ a {
   }
 }
 
+.accounting-module-shell {
+  background: #eef2f4;
+  display: grid;
+  grid-template-columns: 252px minmax(0, 1fr);
+  min-height: 100vh;
+}
+
+.accounting-secondary-nav {
+  background: #252525;
+  border-left: 1px solid #1c1c1c;
+  display: grid;
+  grid-auto-rows: min-content;
+  gap: 22px;
+  padding: 34px 28px;
+}
+
+.accounting-secondary-link {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: #ffffff;
+  cursor: pointer;
+  display: flex;
+  font-size: 1rem;
+  font-weight: 800;
+  gap: 12px;
+  justify-content: flex-start;
+  line-height: 1.25;
+  min-height: 32px;
+  padding: 0 4px;
+  text-align: left;
+}
+
+.accounting-secondary-link svg {
+  flex: 0 0 auto;
+}
+
+.accounting-secondary-link:hover,
+.accounting-secondary-link.active {
+  color: #ffffff;
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 5px;
+}
+
+.accounting-operation-surface {
+  min-width: 0;
+  padding: 22px 26px 0;
+}
+
+.accounting-operation-header,
+.accounting-form-header {
+  align-items: flex-start;
+  display: flex;
+  gap: 18px;
+  justify-content: space-between;
+}
+
+.accounting-operation-header h1,
+.accounting-form-header h1,
+.matching-pane-header h1,
+.matching-main-pane h1 {
+  color: #000000;
+  font-family: var(--font-display);
+  font-size: 1.72rem;
+  font-weight: 900;
+  letter-spacing: 0;
+  line-height: 1.1;
+  margin: 0;
+}
+
+.accounting-operation-header p,
+.accounting-form-header p {
+  color: #000000;
+  margin: 7px 0 0;
+}
+
+.accounting-header-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 28px;
+  justify-content: flex-end;
+}
+
+.accounting-text-action {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: #007d3f;
+  cursor: pointer;
+  display: inline-flex;
+  font-weight: 900;
+  gap: 10px;
+  min-height: 40px;
+  padding: 4px 0;
+}
+
+.accounting-list-toolbar {
+  align-items: end;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px 18px;
+  margin-top: 34px;
+}
+
+.accounting-field {
+  display: grid;
+  gap: 8px;
+  min-width: 138px;
+}
+
+.accounting-field span {
+  color: #000000;
+  font-weight: 900;
+}
+
+.accounting-field input,
+.accounting-field select {
+  background: #ffffff;
+  border: 1px solid #6f92a4;
+  border-radius: 5px;
+  color: #000000;
+  min-height: 46px;
+  padding: 9px 14px;
+  width: 100%;
+}
+
+.accounting-field input:disabled {
+  background: #eef2f4;
+  border-color: #c9d4dc;
+}
+
+.accounting-field input:focus,
+.accounting-field select:focus,
+.matching-category-button:focus {
+  border-color: #008a45;
+  box-shadow: 0 0 0 3px rgba(0, 138, 69, 0.12);
+  outline: none;
+}
+
+.accounting-toolbar-spacer {
+  flex: 1 1 24px;
+}
+
+.accounting-filter-strip {
+  margin-top: 16px;
+}
+
+.accounting-list-panel {
+  margin-top: 14px;
+  min-height: 506px;
+}
+
+.accounting-table-wrap {
+  overflow: auto;
+}
+
+.accounting-table {
+  border-collapse: separate;
+  border-spacing: 0;
+  width: 100%;
+}
+
+.accounting-table th {
+  background: #cbd6dc;
+  border-right: 2px solid #dfe6eb;
+  color: #000000;
+  font-size: 0.94rem;
+  font-weight: 900;
+  padding: 16px 18px;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.accounting-table th:last-child {
+  border-right: 0;
+}
+
+.accounting-table td {
+  border-bottom: 1px solid #d6dfe6;
+  color: #000000;
+  font-size: 0.96rem;
+  padding: 15px 18px;
+  vertical-align: middle;
+}
+
+.accounting-table td:first-child input[type="checkbox"] {
+  accent-color: #008a45;
+  height: 22px;
+  width: 22px;
+}
+
+.accounting-empty-state {
+  align-items: center;
+  color: #000000;
+  display: grid;
+  gap: 10px;
+  justify-items: center;
+  min-height: 360px;
+  text-align: center;
+}
+
+.accounting-empty-state svg {
+  color: #000000;
+  stroke-width: 2.8;
+}
+
+.accounting-empty-state strong {
+  font-size: 1.35rem;
+  font-weight: 900;
+}
+
+.accounting-empty-state p {
+  margin: 0;
+}
+
+.accounting-entry-form {
+  min-height: 100vh;
+  padding: 0 0 90px;
+}
+
+.entry-main-card {
+  background: #ffffff;
+  border: 1px solid #c8d4df;
+  border-radius: 8px;
+  margin-top: 40px;
+  padding: 30px 26px 28px;
+}
+
+.entry-main-grid {
+  align-items: end;
+  display: grid;
+  gap: 20px 18px;
+  grid-template-columns: minmax(150px, 0.85fr) minmax(150px, 0.85fr) minmax(260px, 2.25fr) minmax(160px, 0.9fr) minmax(155px, 0.9fr) minmax(130px, 0.7fr);
+}
+
+.entry-description-field {
+  min-width: 260px;
+}
+
+.required-error {
+  border-left: 3px solid #e01b3c;
+  padding-left: 10px;
+}
+
+.required-error strong {
+  color: #e01b3c;
+  font-size: 0.95rem;
+  font-weight: 900;
+}
+
+.required-mark {
+  color: #e01b3c;
+  display: inline;
+}
+
+.entry-lines-panel {
+  margin-top: 18px;
+  min-height: 110px;
+}
+
+.entry-empty-row {
+  text-align: center;
+}
+
+.entry-balance-button {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #d8e0e6;
+  border-radius: 999px;
+  color: #5a6872;
+  cursor: pointer;
+  display: inline-flex;
+  font-weight: 900;
+  justify-content: center;
+  margin-top: 18px;
+  min-height: 44px;
+  min-width: 106px;
+  padding: 10px 22px;
+}
+
+.entry-balance-button:disabled {
+  background: #f2f5f7;
+  color: #8a969f;
+  cursor: not-allowed;
+}
+
+.matching-workspace {
+  display: grid;
+  grid-template-columns: 360px minmax(0, 1fr);
+  margin: -22px -26px 0;
+  min-height: 100vh;
+}
+
+.matching-left-pane {
+  background: #ffffff;
+  border-right: 1px solid #c8d4df;
+  display: grid;
+  grid-template-rows: auto auto auto minmax(0, 1fr) auto;
+  min-height: 100vh;
+  position: relative;
+}
+
+.matching-pane-header {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  padding: 24px 18px 18px;
+}
+
+.matching-pane-header svg {
+  color: #008a45;
+}
+
+.matching-category-select {
+  padding: 8px 18px 14px;
+  position: relative;
+}
+
+.matching-category-button {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #6f92a4;
+  border-radius: 5px;
+  color: #000000;
+  cursor: pointer;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  min-height: 46px;
+  padding: 9px 12px;
+  width: 100%;
+}
+
+.matching-category-menu {
+  background: #ffffff;
+  border: 1px solid #d7e0e7;
+  border-radius: 8px;
+  box-shadow: 0 18px 36px rgba(23, 32, 42, 0.22);
+  display: grid;
+  left: 18px;
+  max-height: 340px;
+  overflow: auto;
+  padding: 12px 0;
+  position: absolute;
+  right: 18px;
+  top: 62px;
+  z-index: 30;
+}
+
+.matching-check-row {
+  align-items: center;
+  color: #000000;
+  cursor: pointer;
+  display: grid;
+  font-weight: 800;
+  gap: 12px;
+  grid-template-columns: 28px minmax(0, 1fr);
+  min-height: 54px;
+  padding: 8px 22px;
+}
+
+.matching-check-row:hover {
+  background: #eef2f4;
+}
+
+.matching-check-row input {
+  accent-color: #008a45;
+  height: 24px;
+  width: 24px;
+}
+
+.matching-search-control {
+  margin: 8px 18px 24px;
+  width: calc(100% - 36px);
+}
+
+.matching-subject-list {
+  overflow: auto;
+}
+
+.matching-subject-row {
+  align-items: center;
+  background: #ffffff;
+  border: 0;
+  border-top: 1px solid #c8d4df;
+  color: #000000;
+  cursor: pointer;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-height: 94px;
+  padding: 12px 24px;
+  text-align: left;
+  width: 100%;
+}
+
+.matching-subject-row:hover,
+.matching-subject-row.active {
+  background: #e3ebef;
+}
+
+.matching-subject-row strong,
+.matching-subject-row small {
+  display: block;
+}
+
+.matching-subject-row strong {
+  font-size: 1rem;
+  font-weight: 900;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.matching-subject-row small {
+  color: #000000;
+  font-size: 0.94rem;
+}
+
+.matching-subject-row em {
+  background: #edf1f4;
+  border-radius: 3px;
+  color: #000000;
+  font-style: normal;
+  font-weight: 900;
+  min-width: 86px;
+  padding: 2px 9px;
+  text-align: center;
+}
+
+.matching-subject-row.active em {
+  background: #d0dbe2;
+}
+
+.matching-count {
+  background: #e3ebef;
+  border-top: 1px solid #c8d4df;
+  color: #000000;
+  font-weight: 900;
+  min-height: 44px;
+  padding: 12px 18px;
+  text-align: center;
+}
+
+.matching-main-pane {
+  min-width: 0;
+  padding: 26px 36px 0;
+}
+
+.matching-filter-grid {
+  align-items: end;
+  display: grid;
+  gap: 18px;
+  grid-template-columns: minmax(220px, 264px) minmax(190px, 210px) minmax(190px, 226px);
+  margin-top: 34px;
+}
+
+.matching-actions-row {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  margin-top: 20px;
+}
+
+.matching-table-shell {
+  background: #ffffff;
+  border: 1px solid #d5dde5;
+  border-radius: 8px;
+  margin-top: 20px;
+  min-height: 488px;
+  overflow: hidden;
+}
+
+.matching-table-shell .accounting-table td:nth-child(8) {
+  text-align: right;
+}
+
+.matching-table-footer {
+  background: #cbd6dc;
+  border-top: 1px solid #b9c7cf;
+  min-height: 54px;
+}
+
+.matching-sticky-bar {
+  align-items: center;
+  background: #ffffff;
+  bottom: 0;
+  display: flex;
+  gap: 18px;
+  justify-content: flex-end;
+  margin: 18px -36px 0;
+  min-height: 78px;
+  padding: 10px 26px;
+  position: sticky;
+}
+
+.matching-summary-box {
+  align-items: center;
+  background: #eef2f4;
+  border-radius: 8px;
+  display: grid;
+  justify-items: center;
+  min-height: 58px;
+  min-width: 150px;
+  padding: 7px 16px;
+}
+
+.matching-summary-box strong {
+  color: #000000;
+  font-size: 1.45rem;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.matching-summary-box span {
+  color: #000000;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.matching-cancel-button {
+  background: transparent;
+  border: 0;
+  color: #008a45;
+  cursor: pointer;
+  font-weight: 900;
+  min-height: 44px;
+  padding: 8px 16px;
+}
+
+.matching-mark-button {
+  margin-top: 0;
+}
+
+.closing-summary-grid {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: 30px;
+}
+
+.closing-card {
+  background: #ffffff;
+  border: 1px solid #c8d4df;
+  border-radius: 8px;
+  display: grid;
+  gap: 8px;
+  padding: 20px;
+}
+
+.closing-card span {
+  color: #3c4650;
+  font-size: 0.84rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.closing-card strong {
+  color: #000000;
+  font-size: 1.3rem;
+  font-weight: 900;
+}
+
+.closing-card p {
+  color: #3c4650;
+  margin: 0;
+}
+
+.closing-status {
+  border-radius: 999px;
+  display: inline-flex;
+  font-weight: 900;
+  min-width: 92px;
+  padding: 4px 10px;
+  justify-content: center;
+}
+
+.closing-status.abierto {
+  background: #fff6d6;
+  color: #946200;
+}
+
+.closing-status.preparado {
+  background: #ecf8f0;
+  color: #007d3f;
+}
+
+.closing-status.cerrado {
+  background: #eef2f4;
+  color: #3c4650;
+}
+
+.accounting-reference-workspace .accounting-list-panel,
+.closings-workspace .accounting-list-panel {
+  margin-top: 24px;
+}
+
+@media (max-width: 1100px) {
+  .accounting-module-shell {
+    grid-template-columns: 210px minmax(0, 1fr);
+  }
+
+  .accounting-secondary-nav {
+    padding-inline: 16px;
+  }
+
+  .accounting-operation-surface {
+    padding: 22px 24px 0;
+  }
+
+  .accounting-list-toolbar,
+  .accounting-header-actions {
+    justify-content: flex-start;
+  }
+
+  .entry-main-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .entry-description-field {
+    min-width: 0;
+  }
+
+  .matching-workspace {
+    grid-template-columns: 308px minmax(0, 1fr);
+    margin: -22px -24px 0;
+  }
+
+  .matching-main-pane {
+    padding-inline: 24px;
+  }
+
+  .matching-filter-grid,
+  .closing-summary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .matching-actions-row {
+    justify-content: flex-start;
+  }
+}
+
 @media (max-width: 760px) {
   .fiscal-shell {
     grid-template-columns: 1fr;
@@ -4071,8 +5024,24 @@ a {
   .ratio-details,
   .small-card-grid,
   .sales-footnote-grid,
-  .module-stats-grid {
+  .module-stats-grid,
+  .accounting-profit-grid,
+  .accounting-performance-grid,
+  .accounting-bottom-grid,
+  .accounting-additional-grid {
     grid-template-columns: 1fr;
+  }
+
+  .accounting-card-heading {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .accounting-card-heading > strong {
+    grid-column: 1 / -1;
+  }
+
+  .accounting-metric {
+    padding-inline: 12px;
   }
 
   .module-hero {
@@ -4418,6 +5387,97 @@ a {
   .product-sticky-bar {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .accounting-module-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .accounting-secondary-nav {
+    align-items: center;
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    padding: 12px;
+  }
+
+  .accounting-secondary-link {
+    background: #1d1d1d;
+    border: 1px solid #343434;
+    border-radius: 6px;
+    flex: 0 0 auto;
+    min-height: 40px;
+    padding: 8px 14px;
+  }
+
+  .accounting-operation-surface {
+    padding: 18px 14px 0;
+  }
+
+  .accounting-operation-header,
+  .accounting-form-header,
+  .accounting-list-toolbar,
+  .accounting-header-actions {
+    align-items: stretch;
+    display: grid;
+    justify-content: stretch;
+  }
+
+  .accounting-field,
+  .accounting-text-action {
+    width: 100%;
+  }
+
+  .entry-main-card {
+    margin-top: 24px;
+    padding: 18px;
+  }
+
+  .entry-main-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .matching-workspace {
+    grid-template-columns: 1fr;
+    margin: 0;
+  }
+
+  .matching-left-pane {
+    border-right: 0;
+    min-height: auto;
+  }
+
+  .matching-subject-list {
+    max-height: 340px;
+  }
+
+  .matching-main-pane {
+    padding: 22px 14px 0;
+  }
+
+  .matching-filter-grid,
+  .matching-actions-row {
+    align-items: stretch;
+    display: grid;
+    gap: 12px;
+    grid-template-columns: 1fr;
+  }
+
+  .matching-sticky-bar {
+    display: grid;
+    gap: 10px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    margin-inline: -14px;
+    padding: 10px 14px;
+  }
+
+  .matching-summary-box {
+    min-width: 0;
+  }
+
+  .matching-cancel-button,
+  .matching-mark-button {
+    width: 100%;
+  }
 }
 
 @media (max-width: 520px) {
@@ -4502,6 +5562,17 @@ a {
   }
 
   .product-sticky-bar {
+    grid-template-columns: 1fr;
+  }
+
+  .accounting-operation-header h1,
+  .accounting-form-header h1,
+  .matching-pane-header h1,
+  .matching-main-pane h1 {
+    font-size: 1.4rem;
+  }
+
+  .matching-sticky-bar {
     grid-template-columns: 1fr;
   }
 }

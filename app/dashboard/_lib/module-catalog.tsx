@@ -5,6 +5,7 @@ import {
   Landmark,
   LayoutDashboard,
   PackageSearch,
+  Settings,
   ShoppingCart,
   SlidersHorizontal,
   Users
@@ -34,7 +35,8 @@ export const navigationItems = [
   { label: "Bancos", icon: Landmark, module: "banks" },
   { label: "Contabilidad", icon: SlidersHorizontal, module: "accounting" },
   { label: "Declaraciones", icon: BadgeEuro, module: "tax" },
-  { label: "Informes", icon: FileText, module: "reports" }
+  { label: "Informes", icon: FileText, module: "reports" },
+  { label: "Configuracion", icon: Settings, module: "settings" }
 ] satisfies Array<{ label: string; icon: typeof LayoutDashboard; module: AppModule }>;
 
 function referenceQuickActions(module: AppModule, fallback: string[]): string[] {
@@ -181,6 +183,22 @@ export const moduleCatalog: Record<AppModule, ModuleDefinition> = {
     tableHeaders: ["Informe", "Area", "Periodo", "Ultima ejecucion", "Estado", "Acciones"],
     emptyTitle: "No hay informes guardados.",
     emptyDescription: "Los informes financieros y fiscales apareceran aqui cuando se configuren."
+  },
+  settings: {
+    title: "Configuracion",
+    eyebrow: "Active_Settings",
+    description: "Preferencias de empresa, usuarios, permisos, impuestos, numeracion e integraciones.",
+    quickActions: referenceQuickActions("settings", ["Configurar empresa", "Gestionar usuarios", "Revisar impuestos"]),
+    stats: [
+      { label: "Usuarios", value: "0", description: "Miembros con acceso a la organizacion." },
+      { label: "Permisos", value: "Base", description: "Roles activos para las areas principales." },
+      { label: "Integraciones", value: "0", description: "Conexiones externas listas para activar." }
+    ],
+    tableTitle: "Ajustes principales",
+    tableDescription: "Configuraciones disponibles por area de GFiscal.",
+    tableHeaders: ["Area", "Estado", "Responsable", "Ultimo cambio", "Acciones"],
+    emptyTitle: "No hay ajustes personalizados.",
+    emptyDescription: "Los ajustes avanzados apareceran aqui cuando se conecten al modelo real."
   }
 };
 

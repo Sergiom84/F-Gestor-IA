@@ -11,7 +11,7 @@ import {
   X
 } from "lucide-react";
 import { useMemo, useState } from "react";
-import { formatMoney } from "../_lib/formatters";
+import { formatMoney } from "../../_lib/formatters";
 
 type ProductsView = "product" | "tariffs" | "tariff-form" | "discount-groups" | "discount-form";
 type ProductFormTab = "basic" | "pricing";

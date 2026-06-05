@@ -3,7 +3,17 @@
    Layered on top of styles.css + theme-fintech.css. Uses the same --ft-* vars.
    ========================================================================== */
 
-.dash-pro { display: grid; gap: var(--ft-gap, 24px); }
+.dash-pro {
+  --management-type-title: 1.06rem;
+  --management-type-body: 0.9rem;
+  --management-type-action: 0.84rem;
+  --management-weight-title: 760;
+  --management-weight-body: 430;
+  --management-weight-action: 620;
+  display: grid;
+  gap: var(--ft-gap, 24px);
+  font-family: var(--font-reading);
+}
 
 /* ---- KPI hero row -------------------------------------------------------- */
 .kpi-hero { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: var(--ft-gap, 24px); }
@@ -13,12 +23,12 @@
   padding: 20px 20px 16px; display: grid; gap: 10px; min-width: 0;
 }
 .kpi-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-.kpi-label { color: var(--ft-ink-soft); font-size: .82rem; font-weight: 700; letter-spacing: .01em; }
+.kpi-label { color: var(--ft-ink-soft); font-size: var(--management-type-action); font-weight: var(--management-weight-action); letter-spacing: 0; }
 .kpi-ic { width: 34px; height: 34px; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center; background: var(--ft-accent-soft); color: var(--ft-accent); }
 .kpi-ic svg { width: 18px; height: 18px; }
-.kpi-value { color: var(--ft-ink); font-weight: 800; font-size: 1.7rem; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; line-height: 1; white-space: nowrap; }
+.kpi-value { color: var(--ft-ink); font-weight: var(--management-weight-title); font-size: 1.7rem; letter-spacing: 0; font-variant-numeric: tabular-nums; line-height: 1; white-space: nowrap; }
 .kpi-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.kpi-delta { display: inline-flex; align-items: center; gap: 4px; font-size: .8rem; font-weight: 700; padding: 3px 8px; border-radius: 999px; white-space: nowrap; }
+.kpi-delta { display: inline-flex; align-items: center; gap: 4px; font-size: var(--management-type-action); font-weight: var(--management-weight-action); padding: 3px 8px; border-radius: 999px; white-space: nowrap; }
 .kpi-delta.up   { color: #0f8a5b; background: #e7f7f0; }
 .kpi-delta.down { color: #d6409f; background: #fdeef5; }
 .kpi-delta.warn { color: #b06a00; background: #fff4e2; }
@@ -37,8 +47,8 @@
 .copilot-head { display: flex; align-items: center; gap: 12px; padding: 18px 20px 4px; }
 .copilot-badge { display: inline-flex; align-items: center; justify-content: center; width: 38px; height: 38px; border-radius: 11px; background: var(--ft-accent); color: #fff; box-shadow: 0 8px 20px -8px var(--ft-accent); }
 .copilot-badge svg { width: 20px; height: 20px; }
-.copilot-head h3 { color: var(--ft-ink); font-size: 1.1rem; font-weight: 800; margin: 0; letter-spacing: -0.01em; }
-.copilot-head p { color: var(--ft-ink-soft); font-size: .82rem; margin: 2px 0 0; }
+.copilot-head h3 { color: var(--ft-ink); font-size: var(--management-type-title); font-weight: var(--management-weight-title); margin: 0; letter-spacing: 0; }
+.copilot-head p { color: var(--ft-ink-soft); font-size: var(--management-type-body); font-weight: var(--management-weight-body); margin: 2px 0 0; }
 .copilot-list { display: grid; gap: 0; padding: 12px 8px 8px; }
 .copilot-row { display: grid; grid-template-columns: 30px minmax(0,1fr) auto; gap: 12px; align-items: center; padding: 12px; border-radius: var(--ft-radius-sm); text-align: left; border: 0; background: transparent; cursor: pointer; width: 100%; font: inherit; }
 .copilot-row:hover { background: color-mix(in oklab, var(--ft-accent) 6%, transparent); }
@@ -48,9 +58,9 @@
 .copilot-dot.info { background: var(--ft-accent-soft); color: var(--ft-accent); }
 .copilot-dot.ok   { background: #e7f7f0; color: #0f8a5b; }
 .copilot-row .ct { min-width: 0; }
-.copilot-row .ct strong { display: block; color: var(--ft-ink); font-size: .92rem; font-weight: 700; }
-.copilot-row .ct span { color: var(--ft-ink-soft); font-size: .82rem; }
-.copilot-cta { color: var(--ft-accent); font-weight: 700; font-size: .85rem; white-space: nowrap; }
+.copilot-row .ct strong { display: block; color: var(--ft-ink); font-size: var(--management-type-body); font-weight: var(--management-weight-action); }
+.copilot-row .ct span { color: var(--ft-ink-soft); font-size: var(--management-type-action); font-weight: var(--management-weight-body); }
+.copilot-cta { color: var(--ft-accent); font-weight: var(--management-weight-action); font-size: var(--management-type-action); white-space: nowrap; }
 
 /* ---- Charts -------------------------------------------------------------- */
 .chart-row { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(260px, 1fr); gap: var(--ft-gap, 24px); }
@@ -59,31 +69,58 @@
   border-radius: var(--ft-radius); box-shadow: var(--ft-shadow); padding: 20px 22px;
 }
 .chart-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
-.chart-head h3 { color: var(--ft-ink); font-size: 1.05rem; font-weight: 800; margin: 0; letter-spacing: -0.01em; }
-.chart-head p { color: var(--ft-ink-soft); font-size: .82rem; margin: 2px 0 0; }
+.chart-head h3 { color: var(--ft-ink); font-size: var(--management-type-title); font-weight: var(--management-weight-title); margin: 0; letter-spacing: 0; }
+.chart-head p { color: var(--ft-ink-soft); font-size: var(--management-type-body); font-weight: var(--management-weight-body); margin: 2px 0 0; }
 .chart-legend { display: flex; gap: 14px; align-items: center; }
-.lg { display: inline-flex; align-items: center; gap: 6px; font-size: .8rem; color: var(--ft-ink-soft); font-weight: 600; }
+.lg { display: inline-flex; align-items: center; gap: 6px; font-size: var(--management-type-action); color: var(--ft-ink-soft); font-weight: var(--management-weight-action); }
 .lg i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
 .area-svg { width: 100%; height: 200px; display: block; }
 .bars-x { display: flex; justify-content: space-between; margin-top: 8px; }
-.bars-x span { color: var(--ft-ink-soft); font-size: .72rem; font-weight: 600; }
+.bars-x span { color: var(--ft-ink-soft); font-size: var(--management-type-action); font-weight: var(--management-weight-body); }
 
 /* Donut */
 .donut-wrap { display: grid; justify-items: center; gap: 14px; }
 .donut { position: relative; width: 168px; height: 168px; }
 .donut svg { transform: rotate(-90deg); }
 .donut-center { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; }
-.donut-center strong { display: block; color: var(--ft-ink); font-size: 2rem; font-weight: 800; letter-spacing: -0.02em; line-height: 1; }
-.donut-center span { color: var(--ft-ink-soft); font-size: .78rem; font-weight: 600; }
+.donut-center strong { display: block; color: var(--ft-ink); font-size: 2rem; font-weight: var(--management-weight-title); letter-spacing: 0; line-height: 1; }
+.donut-center span { color: var(--ft-ink-soft); font-size: var(--management-type-action); font-weight: var(--management-weight-body); }
 .donut-legend { display: grid; gap: 8px; width: 100%; }
-.donut-legend div { display: flex; align-items: center; justify-content: space-between; font-size: .85rem; color: var(--ft-ink-soft); }
-.donut-legend b { color: var(--ft-ink); font-variant-numeric: tabular-nums; }
+.donut-legend div { display: flex; align-items: center; justify-content: space-between; font-size: var(--management-type-action); color: var(--ft-ink-soft); font-weight: var(--management-weight-body); }
+.donut-legend b { color: var(--ft-ink); font-variant-numeric: tabular-nums; font-weight: var(--management-weight-action); }
 .donut-legend .k { display: inline-flex; align-items: center; gap: 8px; }
 .donut-legend .k i { width: 10px; height: 10px; border-radius: 3px; }
 
 /* ---- Bottom operational grid -------------------------------------------- */
 .ops-grid { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(300px, 1fr); gap: var(--ft-gap, 24px); align-items: start; }
 .ops-grid .panel { box-shadow: var(--ft-shadow); }
+
+.dash-pro .panel-header h2,
+.dash-pro .field span {
+  font-size: var(--management-type-title);
+  font-weight: var(--management-weight-title);
+  letter-spacing: 0;
+}
+
+.dash-pro .row-meta,
+.dash-pro .empty-state,
+.dash-pro .side-row .ct span,
+.dash-pro .field,
+.dash-pro .select,
+.dash-pro .data-table td {
+  font-size: var(--management-type-body);
+  font-weight: var(--management-weight-body);
+}
+
+.dash-pro .row-title,
+.dash-pro .link-row,
+.dash-pro .button,
+.dash-pro .data-table th,
+.dash-pro .status-pill {
+  font-size: var(--management-type-action);
+  font-weight: var(--management-weight-action);
+  letter-spacing: 0;
+}
 
 /* Compact density */
 .ft-compact .kpi-value { font-size: 1.5rem; }

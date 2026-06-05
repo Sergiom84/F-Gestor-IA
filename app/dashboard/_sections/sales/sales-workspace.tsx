@@ -17,7 +17,7 @@ import {
   X
 } from "lucide-react";
 import { useMemo, useState } from "react";
-import { formatMoney } from "../_lib/formatters";
+import { formatMoney } from "../../_lib/formatters";
 
 type SalesSectionId = "quotes" | "orders" | "delivery-notes" | "invoices" | "recurring-invoices";
 type QuoteFormTab = "products" | "totals" | "notes" | "client";
