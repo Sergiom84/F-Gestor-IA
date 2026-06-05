@@ -7,6 +7,7 @@ import {
   LineChart
 } from "lucide-react";
 import type { ReactNode } from "react";
+import { artificialAccountingValues } from "../../_data/artificial-business-data";
 import { formatMoney } from "../../_lib/formatters";
 
 type AccountingDashboardMetric = {
@@ -14,20 +15,7 @@ type AccountingDashboardMetric = {
   value: number;
 };
 
-const accountingValues = {
-  grossProfit: 33557.13,
-  sales: 38020.56,
-  purchases: 4463.43,
-  profitBeforeTax: 32950.35,
-  operatingResult: 32950.35,
-  financialResult: 0,
-  exceptionalResult: 0,
-  assets: 47069.64,
-  netWorth: 32950.35,
-  treasury: 0,
-  workingCapital: 32950.35,
-  staffCosts: 0
-};
+const accountingValues = artificialAccountingValues;
 
 const additionalIndicators = [
   {

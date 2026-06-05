@@ -9,38 +9,12 @@ import {
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { SmallIndicatorCard } from "../../_components/erp-cards";
+import {
+  artificialSalesDashboardRows,
+  artificialSalesDashboardTotals
+} from "../../_data/artificial-business-data";
 import { formatMoney } from "../../_lib/formatters";
 import type { SalesInvoiceRow } from "../../_lib/types";
-
-const salesInvoiceSeedRows: SalesInvoiceRow[] = [
-  {
-    id: "0013",
-    status: "Vencida",
-    invoiceDate: "30/05/2026",
-    invoiceNumber: "0013",
-    customer: "INTERVENCIONES ORIENTADAS SL",
-    customerCode: "47",
-    total: 18856.11
-  },
-  {
-    id: "0012",
-    status: "Vencida",
-    invoiceDate: "25/05/2026",
-    invoiceNumber: "0012",
-    customer: "SANSANO OIL SERVICE SL",
-    customerCode: "24",
-    total: 1294.70
-  },
-  {
-    id: "0011",
-    status: "Vencida",
-    invoiceDate: "25/05/2026",
-    invoiceNumber: "0011",
-    customer: "FENIX DISTRIBUCIONES SL",
-    customerCode: "26",
-    total: -1452
-  }
-];
 
 export function SalesDashboard({
   clientCount,
@@ -51,9 +25,11 @@ export function SalesDashboard({
   documentCount: number;
   fiscalEntityCount: number;
 }) {
-  const pendingCollection = 46004.88;
-  const pendingPayment = 6455.46;
-  const purchaseInvoicesTotal = 6134.97;
+  const {
+    pendingCollection,
+    pendingPayment,
+    purchaseInvoicesTotal
+  } = artificialSalesDashboardTotals;
   const convertedQuotes = Math.max(Math.min(documentCount, 1), 1);
   const activeClients = clientCount > 0 ? clientCount : 45;
 
@@ -107,7 +83,7 @@ export function SalesDashboard({
         </aside>
       </section>
 
-      <SalesInvoiceTable rows={salesInvoiceSeedRows} totalItems={13} />
+      <SalesInvoiceTable rows={artificialSalesDashboardRows} totalItems={13} />
 
       <section className="quotes-dashboard-grid" aria-label="Presupuestos">
         <div className="quotes-side-stack">

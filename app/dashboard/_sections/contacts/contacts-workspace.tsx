@@ -14,17 +14,18 @@ import {
   WalletCards
 } from "lucide-react";
 import { useMemo, useState } from "react";
+import {
+  artificialClientRows,
+  artificialEmployeeRows,
+  artificialSupplierRows
+} from "../../_data/artificial-business-data";
+import type { ArtificialContactListItem } from "../../_data/artificial-business-data";
 import { formatMoney } from "../../_lib/formatters";
 
 type ContactSectionId = "clients" | "suppliers" | "employees";
 type ClientTabId = "info" | "contacts" | "payment" | "addresses" | "sales";
 
-type ContactListItem = {
-  id: string;
-  name: string;
-  code: string;
-  taxId: string;
-};
+type ContactListItem = ArtificialContactListItem;
 
 const contactSections = [
   { id: "clients", label: "Clientes" },
@@ -40,25 +41,9 @@ const clientTabs = [
   { id: "sales", label: "Condiciones de venta" }
 ] satisfies Array<{ id: ClientTabId; label: string }>;
 
-const clientRows: ContactListItem[] = [
-  { id: "client-43", name: "AIRE NORTE 1649 SL", code: "43", taxId: "B26590299" },
-  { id: "client-2", name: "ANA ZORRILLA TORRAS", code: "2", taxId: "01495127N" },
-  { id: "client-38", name: "ANDA CONMIGO SL", code: "38", taxId: "B05315700" },
-  { id: "client-29", name: "ANDRES MAURICIO GIRALDO", code: "29", taxId: "60056406W" },
-  { id: "client-15", name: "ANTONIO LOPEZ DIAZ", code: "15", taxId: "50794342S" },
-  { id: "client-23", name: "AUTOALMACENAJE PERSONAL SL", code: "23", taxId: "B86713567" },
-  { id: "client-6", name: "CAJICATOLU SL", code: "6", taxId: "B87940912" },
-  { id: "client-45", name: "CESAR MANUEL MARINO BRAVO", code: "45", taxId: "53309922Q" }
-];
-
-const supplierRows: ContactListItem[] = [
-  { id: "supplier-1", name: "BRICOLAJE BRICOMAN SL", code: "102", taxId: "B84402031" },
-  { id: "supplier-2", name: "TALLERES PACHE 18 SL", code: "103", taxId: "B87900176" }
-];
-
-const employeeRows: ContactListItem[] = [
-  { id: "employee-1", name: "MARTA ADMINISTRACION", code: "E01", taxId: "00000001E" }
-];
+const clientRows: ContactListItem[] = artificialClientRows;
+const supplierRows: ContactListItem[] = artificialSupplierRows;
+const employeeRows: ContactListItem[] = artificialEmployeeRows;
 
 export function ContactsWorkspace({ organizationName }: { organizationName: string }) {
   const [activeSection, setActiveSection] = useState<ContactSectionId>("clients");

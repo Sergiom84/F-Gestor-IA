@@ -11,8 +11,8 @@
   --warning: #b45309;
   --danger: #b42318;
   --info: #1d4ed8;
-  --font-reading: "Inter", "Segoe UI", Roboto, Arial, sans-serif;
-  --font-display: "Segoe UI Variable Display", "Aptos Display", "Segoe UI", var(--font-reading);
+  --font-reading: var(--font-plus-jakarta), "Plus Jakarta Sans", "Segoe UI", Roboto, Arial, sans-serif;
+  --font-display: var(--font-plus-jakarta), "Plus Jakarta Sans", "Segoe UI Variable Display", "Segoe UI", var(--font-reading);
   --type-page-title: 2rem;
   --type-section-title: 1rem;
   --type-card-title: 0.9375rem;
@@ -689,7 +689,7 @@ a {
 
 .fiscal-workbench {
   min-width: 0;
-  padding: 38px 40px 42px;
+  padding: 22px 24px 42px;
 }
 
 .fiscal-header {
@@ -707,41 +707,47 @@ a {
   align-items: center;
   display: flex;
   flex-wrap: wrap;
-  gap: 14px;
+  gap: 12px;
 }
 
 .fiscal-title-row h1 {
   color: #000000;
   font-family: var(--font-display);
-  font-size: 1.85rem;
-  font-weight: 900;
-  line-height: 1.12;
+  font-size: 1.42rem;
+  font-weight: 760;
+  letter-spacing: 0;
+  line-height: 1.15;
   margin: 0;
 }
 
 .fiscal-title-block p {
   color: #000000;
-  font-size: 1rem;
-  margin: 12px 0 0;
+  font-size: 0.86rem;
+  font-weight: 430;
+  line-height: 1.35;
+  margin: 10px 0 0;
 }
 
 .insights-pill {
   align-items: center;
   background: #ffffff;
-  border: 2px solid #8957ff;
+  border: 1.5px solid #8957ff;
   border-left-color: #008c45;
   border-radius: 999px;
   color: #000000;
   display: inline-flex;
-  font-weight: 900;
-  gap: 8px;
-  min-height: 38px;
-  padding: 7px 15px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  gap: 7px;
+  min-height: 32px;
+  padding: 5px 12px;
   white-space: nowrap;
 }
 
 .insights-pill svg {
   color: #000000;
+  height: 16px;
+  width: 16px;
 }
 
 .fiscal-header-actions {
@@ -756,7 +762,7 @@ a {
   align-items: end;
   display: grid;
   gap: 8px;
-  grid-template-columns: minmax(190px, 250px) auto;
+  grid-template-columns: minmax(180px, 240px) auto;
 }
 
 .org-switcher label {
@@ -771,12 +777,14 @@ a {
   border: 1px solid #cbd5df;
   border-radius: 6px;
   color: #000000;
-  min-height: 40px;
-  padding: 8px 10px;
+  font-size: 0.86rem;
+  min-height: 36px;
+  padding: 7px 10px;
 }
 
 .button.compact {
-  min-height: 40px;
+  font-size: 0.86rem;
+  min-height: 36px;
   padding-inline: 12px;
 }
 
@@ -788,9 +796,9 @@ a {
   color: #1f2937;
   cursor: pointer;
   display: inline-flex;
-  height: 40px;
+  height: 36px;
   justify-content: center;
-  width: 40px;
+  width: 36px;
 }
 
 .icon-action:hover {
@@ -802,7 +810,7 @@ a {
   border-bottom: 1px solid #d3dbe3;
   display: flex;
   gap: 12px;
-  margin: 28px 0 0;
+  margin: 22px 0 0;
 }
 
 .tab {
@@ -1622,14 +1630,22 @@ a {
 }
 
 .accounting-dashboard-view {
-  --accounting-type-title: 1.34rem;
-  --accounting-type-body: 0.94rem;
-  --accounting-type-action: 0.93rem;
-  --accounting-weight-title: 760;
-  --accounting-weight-body: 430;
-  --accounting-weight-action: 620;
+  --accounting-font-ui: "Sage UI", var(--font-reading), sans-serif;
+  --accounting-font-headline: "Sage Headline", var(--font-display), sans-serif;
+  --accounting-font-text: "Sage Text", var(--font-reading), sans-serif;
+  --accounting-type-section: 24px;
+  --accounting-type-card: 18px;
+  --accounting-type-body: 12px;
+  --accounting-type-meta: 14px;
+  --accounting-type-value: 18px;
+  --accounting-type-impact: 36px;
+  --accounting-weight-normal: 400;
+  --accounting-weight-medium: 500;
+  --accounting-weight-bold: 700;
+  --accounting-weight-heavy: 900;
   display: grid;
   gap: 34px;
+  font-family: var(--accounting-font-ui);
   padding: 34px 28px 40px;
 }
 
@@ -1641,9 +1657,9 @@ a {
 .accounting-dashboard-section h2,
 .accounting-bottom-grid h2 {
   color: #000000;
-  font-family: var(--font-display);
-  font-size: var(--accounting-type-title);
-  font-weight: var(--accounting-weight-title);
+  font-family: var(--accounting-font-headline);
+  font-size: var(--accounting-type-section);
+  font-weight: var(--accounting-weight-heavy);
   letter-spacing: 0;
   line-height: 1.18;
   margin: 0;
@@ -1695,9 +1711,9 @@ a {
 .accounting-ratio-card h3,
 .accounting-simple-card h3 {
   color: #000000;
-  font-family: var(--font-display);
-  font-size: var(--accounting-type-title);
-  font-weight: var(--accounting-weight-title);
+  font-family: var(--accounting-font-headline);
+  font-size: var(--accounting-type-card);
+  font-weight: var(--accounting-weight-heavy);
   letter-spacing: 0;
   line-height: 1.2;
   margin: 0;
@@ -1707,16 +1723,18 @@ a {
 .accounting-ratio-card p,
 .accounting-simple-card p {
   color: #24323a;
+  font-family: var(--accounting-font-text);
   font-size: var(--accounting-type-body);
-  font-weight: var(--accounting-weight-body);
-  line-height: 1.35;
+  font-weight: var(--accounting-weight-normal);
+  line-height: 18px;
   margin: 8px 0 0;
 }
 
 .accounting-card-heading > strong {
   color: #000000;
-  font-size: 22px;
-  font-weight: var(--accounting-weight-title);
+  font-family: var(--accounting-font-headline);
+  font-size: var(--accounting-type-card);
+  font-weight: var(--accounting-weight-heavy);
   font-variant-numeric: tabular-nums;
   line-height: 1.15;
   padding-top: 2px;
@@ -1750,16 +1768,18 @@ a {
 
 .accounting-metric span {
   color: #111111;
-  font-size: var(--accounting-type-action);
-  font-weight: var(--accounting-weight-action);
-  line-height: 1.2;
+  font-family: var(--accounting-font-ui);
+  font-size: var(--accounting-type-meta);
+  font-weight: var(--accounting-weight-medium);
+  line-height: 21px;
   text-align: right;
 }
 
 .accounting-metric strong {
   color: #000000;
-  font-size: 19px;
-  font-weight: var(--accounting-weight-title);
+  font-family: var(--accounting-font-headline);
+  font-size: var(--accounting-type-value);
+  font-weight: var(--accounting-weight-heavy);
   font-variant-numeric: tabular-nums;
   line-height: 1.2;
   text-align: right;
@@ -1775,8 +1795,9 @@ a {
 .accounting-ratio-value {
   align-self: center;
   color: #000000;
-  font-size: 44px;
-  font-weight: 780;
+  font-family: var(--accounting-font-headline);
+  font-size: var(--accounting-type-impact);
+  font-weight: var(--accounting-weight-heavy);
   line-height: 1;
   text-align: center;
   text-shadow: 0 2px 0 rgba(21, 39, 52, 0.35);
@@ -1810,8 +1831,9 @@ a {
 
 .accounting-simple-card strong {
   color: #000000;
-  font-size: 20px;
-  font-weight: var(--accounting-weight-title);
+  font-family: var(--accounting-font-headline);
+  font-size: var(--accounting-type-card);
+  font-weight: var(--accounting-weight-heavy);
   font-variant-numeric: tabular-nums;
   line-height: 1.2;
 }
@@ -1833,9 +1855,10 @@ a {
 
 .accounting-quick-card a {
   color: #006f2f;
-  font-size: var(--accounting-type-action);
-  font-weight: var(--accounting-weight-action);
-  line-height: 1.2;
+  font-family: var(--accounting-font-ui);
+  font-size: var(--accounting-type-meta);
+  font-weight: var(--accounting-weight-medium);
+  line-height: 21px;
   text-decoration: none;
   width: fit-content;
 }
@@ -1904,11 +1927,15 @@ a {
   padding: 22px 32px 0;
 }
 
+.sales-module-shell.sections-collapsed .sales-operation-surface {
+  padding-top: 0;
+}
+
 .sales-operation-header,
 .quote-form-heading {
   align-items: center;
   display: flex;
-  gap: 18px;
+  gap: 14px;
   justify-content: space-between;
 }
 
@@ -1929,6 +1956,10 @@ a {
   letter-spacing: 0;
   line-height: 1.1;
   margin: 0;
+}
+
+.quote-form-heading h1 {
+  font-size: 1.44rem;
 }
 
 .sales-insights-pill {
@@ -1973,12 +2004,15 @@ a {
 }
 
 .sales-popover button {
+  align-items: center;
   background: transparent;
   border: 0;
   border-radius: 6px;
   color: #000000;
   cursor: pointer;
+  display: flex;
   font-weight: 700;
+  gap: 8px;
   min-height: 36px;
   padding: 8px 10px;
   text-align: left;
@@ -1996,6 +2030,38 @@ a {
   margin-top: 34px;
 }
 
+.sales-live-notice {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #c8d4df;
+  border-left: 4px solid #008a45;
+  border-radius: 8px;
+  color: #000000;
+  display: flex;
+  gap: 10px;
+  margin-top: 14px;
+  min-height: 42px;
+  padding: 8px 12px;
+}
+
+.sales-live-notice.warning {
+  border-left-color: #b45309;
+}
+
+.sales-live-notice > button,
+.panel-icon-button {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: #17475a;
+  cursor: pointer;
+  display: inline-flex;
+  height: 30px;
+  justify-content: center;
+  margin-left: auto;
+  width: 30px;
+}
+
 .sales-toolbar-actions {
   align-items: center;
   display: flex;
@@ -2005,7 +2071,8 @@ a {
 }
 
 .sage-primary-button,
-.sage-outline-button {
+.sage-outline-button,
+.sage-danger-button {
   align-items: center;
   border-radius: 999px;
   cursor: pointer;
@@ -2036,6 +2103,16 @@ a {
 
 .sage-outline-button:hover {
   background: #ecf8f0;
+}
+
+.sage-danger-button {
+  background: #c82d46;
+  border: 1px solid #b4233a;
+  color: #ffffff;
+}
+
+.sage-danger-button:hover {
+  background: #a91f35;
 }
 
 .sales-search-control {
@@ -2092,6 +2169,93 @@ a {
 
 .columns-strip input {
   accent-color: #008a45;
+}
+
+.sales-action-panel {
+  background: #ffffff;
+  border: 1px solid #c8d4df;
+  border-radius: 8px;
+  box-shadow: 0 12px 30px rgba(23, 32, 42, 0.08);
+  color: #000000;
+  display: grid;
+  gap: 14px;
+  margin-top: 16px;
+  padding: 16px;
+}
+
+.sales-action-panel header,
+.sales-action-panel footer {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.sales-action-panel header > div,
+.insights-panel > div:first-child {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+}
+
+.sales-action-panel h2 {
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  font-weight: 850;
+  line-height: 1.15;
+  margin: 0;
+}
+
+.sales-action-panel p {
+  color: #263741;
+  line-height: 1.35;
+  margin: 0;
+}
+
+.sales-action-grid {
+  background: #eef2f4;
+  border-radius: 8px;
+  display: grid;
+  gap: 3px;
+  padding: 12px;
+}
+
+.sales-action-grid span {
+  color: #475569;
+  font-size: 0.82rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.sales-action-grid strong {
+  color: #000000;
+  font-weight: 850;
+}
+
+.settings-panel-grid,
+.document-detail-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.settings-panel-grid .span-2 {
+  grid-column: span 2;
+}
+
+.document-action-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.delete-panel {
+  border-color: #f0bdc6;
+}
+
+.delete-panel header svg {
+  color: #c82d46;
 }
 
 .sage-list-panel {
@@ -2197,7 +2361,7 @@ a {
 
 .quote-form-screen {
   min-height: 100vh;
-  padding: 18px 0 102px;
+  padding: 0 0 64px;
 }
 
 .quote-close-button {
@@ -2207,34 +2371,34 @@ a {
   color: #1b5366;
   cursor: pointer;
   display: inline-flex;
-  height: 44px;
+  height: 32px;
   justify-content: center;
-  width: 44px;
+  width: 32px;
 }
 
 .quote-main-card {
   background: #ffffff;
   border: 1px solid #c8d4df;
   border-radius: 8px;
-  margin-top: 28px;
-  padding: 30px;
+  margin-top: 6px;
+  padding: 16px 22px;
 }
 
 .quote-top-grid,
 .quote-contact-grid {
   display: grid;
-  gap: 22px 20px;
+  gap: 12px 18px;
 }
 
 .quote-top-grid {
   border-bottom: 1px solid #c9d4dc;
   grid-template-columns: minmax(230px, 1.15fr) minmax(190px, 1fr) minmax(160px, 0.8fr) minmax(170px, 0.75fr);
-  padding-bottom: 30px;
+  padding-bottom: 14px;
 }
 
 .quote-contact-grid {
   grid-template-columns: repeat(6, minmax(0, 1fr));
-  padding-top: 30px;
+  padding-top: 14px;
 }
 
 .quote-contact-grid .sage-field {
@@ -2248,7 +2412,7 @@ a {
 .sage-field,
 .sage-textarea-field {
   display: grid;
-  gap: 8px;
+  gap: 5px;
 }
 
 .sage-field span,
@@ -2272,8 +2436,8 @@ a {
   border: 1px solid #6f92a4;
   border-radius: 5px;
   color: #000000;
-  min-height: 50px;
-  padding: 10px 14px;
+  min-height: 38px;
+  padding: 7px 11px;
   width: 100%;
 }
 
@@ -2296,13 +2460,13 @@ a {
   border-radius: 5px;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  min-height: 50px;
-  padding-right: 10px;
+  min-height: 38px;
+  padding-right: 8px;
 }
 
 .date-input-shell input {
   border: 0;
-  min-height: 48px;
+  min-height: 36px;
 }
 
 .date-input-shell svg {
@@ -2313,7 +2477,7 @@ a {
   border-bottom: 1px solid #d5dde5;
   display: flex;
   gap: 0;
-  margin-top: 24px;
+  margin-top: 10px;
   overflow-x: auto;
 }
 
@@ -2325,8 +2489,8 @@ a {
   cursor: pointer;
   display: inline-flex;
   font-size: 0.98rem;
-  min-height: 56px;
-  padding: 0 22px;
+  min-height: 44px;
+  padding: 0 20px;
   position: relative;
   white-space: nowrap;
 }
@@ -2348,13 +2512,13 @@ a {
 
 .quote-tab-panel {
   background: #ffffff;
-  min-height: 320px;
-  padding: 36px 30px;
+  min-height: 204px;
+  padding: 18px 22px;
 }
 
 .quote-products-panel {
   display: grid;
-  gap: 12px;
+  gap: 10px;
   justify-items: start;
 }
 
@@ -2375,7 +2539,7 @@ a {
   border-right: 2px solid #dfe6eb;
   color: #000000;
   font-weight: 900;
-  padding: 16px 18px;
+  padding: 8px 14px;
   text-align: left;
   white-space: nowrap;
 }
@@ -2383,7 +2547,7 @@ a {
 .quote-lines-table td {
   border-bottom: 1px solid #d6dfe6;
   color: #000000;
-  padding: 10px 12px;
+  padding: 7px 10px;
 }
 
 .quote-lines-table th:nth-child(4),
@@ -2413,7 +2577,7 @@ a {
   display: flex;
   gap: 12px;
   justify-content: center;
-  min-height: 88px;
+  min-height: 58px;
 }
 
 .totals-panel {
@@ -2430,14 +2594,14 @@ a {
   display: grid;
   gap: 3px;
   justify-items: center;
-  min-height: 64px;
-  padding: 10px 16px;
+  min-height: 48px;
+  padding: 6px 14px;
   text-align: center;
 }
 
 .quote-summary-box strong {
   color: #000000;
-  font-size: 1.55rem;
+  font-size: 1.32rem;
   font-variant-numeric: tabular-nums;
   font-weight: 900;
   line-height: 1;
@@ -2445,7 +2609,7 @@ a {
 
 .quote-summary-box span {
   color: #000000;
-  font-size: 0.9rem;
+  font-size: 0.84rem;
   font-weight: 800;
 }
 
@@ -2569,18 +2733,18 @@ a {
   border-top: 1px solid #e3e8ed;
   bottom: 0;
   display: flex;
-  gap: 20px;
+  gap: 16px;
   justify-content: flex-end;
   left: 0;
-  min-height: 80px;
-  padding: 10px 26px;
+  min-height: 58px;
+  padding: 6px 24px;
   position: sticky;
   right: 0;
   z-index: 15;
 }
 
 .quote-sticky-bar .quote-summary-box {
-  min-width: 140px;
+  min-width: 132px;
 }
 
 .quote-cancel-action {
@@ -2589,8 +2753,8 @@ a {
   color: #008a45;
   cursor: pointer;
   font-weight: 900;
-  min-height: 44px;
-  padding: 8px 14px;
+  min-height: 38px;
+  padding: 6px 12px;
 }
 
 .quote-create-action,
@@ -2603,7 +2767,7 @@ a {
   display: inline-flex;
   font-weight: 900;
   justify-content: center;
-  min-height: 50px;
+  min-height: 42px;
 }
 
 .quote-create-action {
@@ -5130,13 +5294,23 @@ a {
 
   .quote-top-grid,
   .quote-contact-grid,
+  .settings-panel-grid,
+  .document-detail-grid,
   .totals-panel {
     grid-template-columns: 1fr;
   }
 
   .quote-contact-grid .sage-field,
-  .quote-contact-grid .span-2 {
+  .quote-contact-grid .span-2,
+  .settings-panel-grid .span-2 {
     grid-column: auto;
+  }
+
+  .sales-action-panel header,
+  .sales-action-panel footer,
+  .document-action-strip {
+    align-items: stretch;
+    display: grid;
   }
 
   .sales-document-table {

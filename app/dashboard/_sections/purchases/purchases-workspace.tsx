@@ -18,104 +18,21 @@ import {
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { useMemo, useRef, useState } from "react";
+import {
+  artificialPurchaseRows,
+  artificialPurchaseTabs
+} from "../../_data/artificial-business-data";
+import type {
+  ArtificialPurchaseInvoiceRow,
+  ArtificialPurchaseTabId
+} from "../../_data/artificial-business-data";
 import { formatMoney } from "../../_lib/formatters";
 
-type PurchaseTabId = "all" | "review" | "pay" | "paid";
+type PurchaseTabId = ArtificialPurchaseTabId;
+type PurchaseInvoiceRow = ArtificialPurchaseInvoiceRow;
 
-type PurchaseInvoiceRow = {
-  id: string;
-  importDate: string;
-  fileName: string;
-  status: "Vencida" | "Pendiente" | "Pagada";
-  description: string;
-  supplier: string;
-  invoiceDate: string;
-  invoiceNumber: string;
-  total: number;
-  tab: Exclude<PurchaseTabId, "all">;
-};
-
-const purchaseTabs = [
-  { id: "all", label: "Todas" },
-  { id: "review", label: "Por revisar", count: 1 },
-  { id: "pay", label: "Por pagar", count: 57 },
-  { id: "paid", label: "Pagadas" }
-] satisfies Array<{ id: PurchaseTabId; label: string; count?: number }>;
-
-const purchaseRows: PurchaseInvoiceRow[] = [
-  {
-    id: "purchase-001",
-    importDate: "19/03/2026",
-    fileName: "20260319173...",
-    status: "Vencida",
-    description: "La factura esta contabilizada.",
-    supplier: "BRICOLAJE BRICOMAN,...",
-    invoiceDate: "26/01/2026",
-    invoiceNumber: "004-0001-677...",
-    total: 54,
-    tab: "pay"
-  },
-  {
-    id: "purchase-002",
-    importDate: "19/03/2026",
-    fileName: "20260319173...",
-    status: "Vencida",
-    description: "La factura esta contabilizada.",
-    supplier: "BRICOLAJE BRICOMAN,...",
-    invoiceDate: "07/03/2026",
-    invoiceNumber: "012-0003-006...",
-    total: 12,
-    tab: "pay"
-  },
-  {
-    id: "purchase-003",
-    importDate: "19/03/2026",
-    fileName: "20260319173...",
-    status: "Vencida",
-    description: "La factura esta contabilizada.",
-    supplier: "BRICOLAJE BRICOMAN,...",
-    invoiceDate: "27/02/2026",
-    invoiceNumber: "004-0002-736...",
-    total: 6,
-    tab: "pay"
-  },
-  {
-    id: "purchase-004",
-    importDate: "19/03/2026",
-    fileName: "20260319173...",
-    status: "Vencida",
-    description: "La factura esta contabilizada.",
-    supplier: "BRICOLAJE BRICOMAN,...",
-    invoiceDate: "21/01/2026",
-    invoiceNumber: "004-0001-668...",
-    total: 8,
-    tab: "pay"
-  },
-  {
-    id: "purchase-005",
-    importDate: "19/03/2026",
-    fileName: "20260319173...",
-    status: "Pendiente",
-    description: "Los datos se han extraido. Inspeccion pendiente.",
-    supplier: "TALLERES PACHE 18 SL",
-    invoiceDate: "27/02/2026",
-    invoiceNumber: "176",
-    total: 21.87,
-    tab: "review"
-  },
-  {
-    id: "purchase-006",
-    importDate: "18/03/2026",
-    fileName: "20260318142...",
-    status: "Pagada",
-    description: "La factura esta contabilizada y pagada.",
-    supplier: "SUMINISTROS COSTA SL",
-    invoiceDate: "18/03/2026",
-    invoiceNumber: "A-2026-118",
-    total: 142.36,
-    tab: "paid"
-  }
-];
+const purchaseTabs = artificialPurchaseTabs;
+const purchaseRows: PurchaseInvoiceRow[] = artificialPurchaseRows;
 
 export function PurchasesWorkspace({ organizationName }: { organizationName: string }) {
   const [activeTab, setActiveTab] = useState<PurchaseTabId>("all");

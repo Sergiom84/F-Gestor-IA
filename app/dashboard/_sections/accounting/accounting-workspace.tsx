@@ -18,6 +18,17 @@ import {
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { useMemo, useState } from "react";
+import {
+  artificialClosingPeriods,
+  artificialMatchingCategories,
+  artificialMatchingLines,
+  artificialMatchingSubjects
+} from "../../_data/artificial-business-data";
+import type {
+  ArtificialClosingPeriod,
+  ArtificialMatchingLine,
+  ArtificialMatchingSubject
+} from "../../_data/artificial-business-data";
 import { formatMoney } from "../../_lib/formatters";
 
 type AccountingSectionId = "entries" | "matching" | "closings" | "fixed-assets" | "fixed-asset-transactions";
@@ -30,37 +41,9 @@ type AccountingSection = {
   group?: "matching" | "closings";
 };
 
-type MatchingSubject = {
-  id: string;
-  name: string;
-  type: string;
-  category: string;
-  count: number;
-  amount: number;
-};
-
-type MatchingLine = {
-  id: string;
-  journal: string;
-  date: string;
-  entryNumber: string;
-  documentNumber: string;
-  account: string;
-  thirdParty: string;
-  description: string;
-  debit: number;
-  credit: number;
-  mark: string;
-};
-
-type ClosingPeriod = {
-  id: string;
-  period: string;
-  kind: string;
-  status: string;
-  checks: string;
-  date: string;
-};
+type MatchingSubject = ArtificialMatchingSubject;
+type MatchingLine = ArtificialMatchingLine;
+type ClosingPeriod = ArtificialClosingPeriod;
 
 const accountingSections: AccountingSection[] = [
   { id: "entries", label: "Asientos" },
@@ -70,73 +53,10 @@ const accountingSections: AccountingSection[] = [
   { id: "fixed-asset-transactions", label: "Transacciones de inmovilizado" }
 ];
 
-const matchingCategories = [
-  "Clientes",
-  "Proveedores",
-  "Banco",
-  "Efectivo",
-  "Gastos",
-  "Ingresos",
-  "Capital",
-  "Inmovilizado",
-  "Empleados",
-  "Anticipos de clientes",
-  "Anticipos a proveedores",
-  "Impuestos soportados",
-  "Impuestos repercutidos",
-  "Envases y embalajes a devolver a proveedores",
-  "Envases y embalajes a devolver por clientes"
-];
-
-const matchingSubjects: MatchingSubject[] = [
-  { id: "aire-norte", name: "AIRE NORTE 1649 SL", type: "Cliente", category: "Clientes", count: 43, amount: 6814.72 },
-  { id: "bricolaje", name: "BRICOLAJE BRICOMAN SL", type: "Proveedor", category: "Proveedores", count: 3, amount: -96.63 },
-  { id: "comunidad-a", name: "COMUNIDAD DE PROPIETARIOS OLIVO", type: "Cliente", category: "Clientes", count: 12, amount: 883.3 },
-  { id: "comunidad-b", name: "COMUNIDAD PROPIETARIOS LAGO", type: "Cliente", category: "Clientes", count: 46, amount: 278.3 },
-  { id: "cristobal", name: "CRISTOBAL SANCHEZ DIAZ", type: "Cliente", category: "Clientes", count: 45, amount: 205.7 },
-  { id: "echafan", name: "ECHAFAN SL", type: "Cliente", category: "Clientes", count: 44, amount: 895.4 },
-  { id: "electronica", name: "ELECTRONICA EMBARCADA SL", type: "Proveedor", category: "Proveedores", count: 23, amount: -21.02 },
-  { id: "capital-social", name: "Capital social", type: "Capital", category: "Capital", count: 0, amount: 0 }
-];
-
-const matchingLines: Record<string, MatchingLine[]> = {
-  "aire-norte": [
-    {
-      id: "line-001",
-      journal: "VEN - Facturas emitidas",
-      date: "21/04/2026",
-      entryNumber: "60",
-      documentNumber: "0005",
-      account: "43000000 - Clientes",
-      thirdParty: "AIRE NORTE 1649 SL",
-      description: "Factura de venta no 0005",
-      debit: 6814.72,
-      credit: 0,
-      mark: ""
-    }
-  ],
-  "bricolaje": [
-    {
-      id: "line-002",
-      journal: "COM - Facturas recibidas",
-      date: "07/03/2026",
-      entryNumber: "28",
-      documentNumber: "004-0003",
-      account: "40000000 - Proveedores",
-      thirdParty: "BRICOLAJE BRICOMAN SL",
-      description: "Factura de compra pendiente",
-      debit: 0,
-      credit: 96.63,
-      mark: ""
-    }
-  ]
-};
-
-const closingPeriods: ClosingPeriod[] = [
-  { id: "close-2026-06", period: "Junio 2026", kind: "Cierre mensual", status: "Abierto", checks: "3 controles pendientes", date: "30/06/2026" },
-  { id: "close-2026-05", period: "Mayo 2026", kind: "Cierre mensual", status: "Preparado", checks: "Sin descuadre", date: "31/05/2026" },
-  { id: "close-2025", period: "Ejercicio 2025", kind: "Cierre anual", status: "Cerrado", checks: "FEC exportado", date: "31/12/2025" }
-];
+const matchingCategories = artificialMatchingCategories;
+const matchingSubjects: MatchingSubject[] = artificialMatchingSubjects;
+const matchingLines: Record<string, MatchingLine[]> = artificialMatchingLines;
+const closingPeriods: ClosingPeriod[] = artificialClosingPeriods;
 
 export function AccountingWorkspace({ organizationName }: { organizationName: string }) {
   const [activeSectionId, setActiveSectionId] = useState<AccountingSectionId>("entries");

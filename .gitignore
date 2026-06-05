@@ -18,6 +18,10 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
+# Generated local reviews/artifacts
+output/
+revision.txt
+
 # Local OS/editor files
 .DS_Store
 Thumbs.db
