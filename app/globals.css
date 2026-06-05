@@ -1856,12 +1856,19 @@ a {
   min-height: 100vh;
 }
 
+.sales-module-shell.sections-collapsed {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .sales-secondary-nav {
   background: #252525;
   border-left: 1px solid #1c1c1c;
+  border-radius: 0 8px 8px 0;
   display: grid;
   grid-auto-rows: min-content;
   gap: 20px;
+  height: fit-content;
+  margin-top: 0;
   padding: 34px 24px;
 }
 
@@ -1876,16 +1883,20 @@ a {
   font-weight: 800;
   justify-content: flex-start;
   min-height: 32px;
-  padding: 0 8px;
+  padding: 0 20px;
   text-align: left;
 }
 
-.sales-secondary-link:hover,
+.sales-secondary-link:hover {
+  color: #52c878;
+}
+
 .sales-secondary-link.active {
+  background: #07833e;
+  border-radius: 8px;
   color: #ffffff;
-  text-decoration: underline;
-  text-decoration-thickness: 2px;
-  text-underline-offset: 5px;
+  min-height: 48px;
+  text-decoration: none;
 }
 
 .sales-operation-surface {

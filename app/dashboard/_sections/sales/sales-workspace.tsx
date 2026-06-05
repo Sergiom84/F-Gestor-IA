@@ -16,7 +16,8 @@ import {
   Trash2,
   X
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
 import { formatMoney } from "../../_lib/formatters";
 
 type SalesSectionId = "quotes" | "orders" | "delivery-notes" | "invoices" | "recurring-invoices";
@@ -113,14 +114,33 @@ const seedRows: Record<SalesSectionId, SalesDocumentRow[]> = {
   "recurring-invoices": []
 };
 
+const salesSectionIds = new Set<SalesSectionId>(salesSections.map((section) => section.id));
+
+function resolveSalesSectionId(value: string | null): SalesSectionId | null {
+  return value && salesSectionIds.has(value as SalesSectionId) ? value as SalesSectionId : null;
+}
+
 export function SalesWorkspace({ organizationName }: { organizationName: string }) {
-  const [activeSectionId, setActiveSectionId] = useState<SalesSectionId>("quotes");
+  const searchParams = useSearchParams();
+  const sectionFromUrl = resolveSalesSectionId(searchParams.get("salesSection"));
+  const [activeSectionId, setActiveSectionId] = useState<SalesSectionId>(sectionFromUrl ?? "quotes");
+  const [showSectionNav, setShowSectionNav] = useState(sectionFromUrl === null);
   const [isCreating, setIsCreating] = useState(false);
   const [query, setQuery] = useState("");
   const [showFilters, setShowFilters] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showColumns, setShowColumns] = useState(false);
   const activeSection = salesSections.find((section) => section.id === activeSectionId) ?? salesSections[0]!;
+
+  useEffect(() => {
+    if (sectionFromUrl) {
+      setActiveSectionId(sectionFromUrl);
+      setShowSectionNav(false);
+    } else {
+      setShowSectionNav(true);
+    }
+  }, [sectionFromUrl]);
+
   const rows = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
 
@@ -139,27 +159,35 @@ export function SalesWorkspace({ organizationName }: { organizationName: string 
   }, [activeSectionId, query]);
 
   const openSection = (sectionId: SalesSectionId) => {
+    const nextParams = new URLSearchParams(searchParams.toString());
+
+    nextParams.set("module", "sales");
+    nextParams.set("salesSection", sectionId);
     setActiveSectionId(sectionId);
     setIsCreating(false);
     setQuery("");
     setShowFilters(false);
     setShowColumns(false);
+    setShowSectionNav(false);
+    window.history.pushState(null, "", `/dashboard?${nextParams.toString()}`);
   };
 
   return (
-    <section className="sales-module-shell" aria-label="Modulo de ventas">
-      <aside className="sales-secondary-nav" aria-label="Documentos de ventas">
-        {salesSections.map((section) => (
-          <button
-            className={`sales-secondary-link${section.id === activeSectionId ? " active" : ""}`}
-            key={section.id}
-            onClick={() => openSection(section.id)}
-            type="button"
-          >
-            <span>{section.label}</span>
-          </button>
-        ))}
-      </aside>
+    <section className={`sales-module-shell${showSectionNav ? "" : " sections-collapsed"}`} aria-label="Modulo de ventas">
+      {showSectionNav ? (
+        <aside className="sales-secondary-nav" aria-label="Documentos de ventas">
+          {salesSections.map((section) => (
+            <button
+              className={`sales-secondary-link${section.id === activeSectionId ? " active" : ""}`}
+              key={section.id}
+              onClick={() => openSection(section.id)}
+              type="button"
+            >
+              <span>{section.label}</span>
+            </button>
+          ))}
+        </aside>
+      ) : null}
 
       <div className="sales-operation-surface">
         {isCreating ? (

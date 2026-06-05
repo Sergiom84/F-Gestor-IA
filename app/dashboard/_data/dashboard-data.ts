@@ -87,6 +87,23 @@ export async function readDashboardData(params?: DashboardSearchParams): Promise
     redirect("/onboarding");
   }
 
+  const activeModule = resolveAppModule(params?.module);
+  const activeTab = resolveDashboardTab(params?.tab);
+  const canUseLightModulePayload = activeModule === "sales"
+    || activeModule === "purchases"
+    || activeModule === "contacts"
+    || activeModule === "products"
+    || activeModule === "accounting";
+  const lightModulePayload: [
+    DocumentRow[],
+    ReviewTaskRow[],
+    number,
+    number,
+    number,
+    number,
+    number,
+    FiscalEntityRow[]
+  ] = [[], [], 0, 0, 0, 0, 0, []];
   const [
     documents,
     reviewTasks,
@@ -96,16 +113,18 @@ export async function readDashboardData(params?: DashboardSearchParams): Promise
     clientCount,
     fiscalEntityCount,
     fiscalEntities
-  ] = await Promise.all([
-    readDocuments(activeOrganization.id),
-    readReviewTasks(activeOrganization.id),
-    readDocumentCount(activeOrganization.id),
-    readNeedsReviewCount(activeOrganization.id),
-    readOcrRequiredCount(activeOrganization.id),
-    readClientCount(activeOrganization.id),
-    readFiscalEntityCount(activeOrganization.id),
-    readFiscalEntities(activeOrganization.id)
-  ]);
+  ] = canUseLightModulePayload
+    ? lightModulePayload
+    : await Promise.all([
+      readDocuments(activeOrganization.id),
+      readReviewTasks(activeOrganization.id),
+      readDocumentCount(activeOrganization.id),
+      readNeedsReviewCount(activeOrganization.id),
+      readOcrRequiredCount(activeOrganization.id),
+      readClientCount(activeOrganization.id),
+      readFiscalEntityCount(activeOrganization.id),
+      readFiscalEntities(activeOrganization.id)
+    ]);
 
   const cleanDocumentCount = Math.max(documentCount - needsReviewCount - ocrRequiredCount, 0);
   const automationRate = documentCount > 0 ? Math.round((cleanDocumentCount / documentCount) * 100) : 0;
@@ -114,9 +133,9 @@ export async function readDashboardData(params?: DashboardSearchParams): Promise
 
   return {
     activeMembership,
-    activeModule: resolveAppModule(params?.module),
+    activeModule,
     activeOrganization,
-    activeTab: resolveDashboardTab(params?.tab),
+    activeTab,
     aiBudget: formatCurrency(activeOrganization.ai_monthly_budget_cents / 100),
     automationRate,
     cleanDocumentCount,
