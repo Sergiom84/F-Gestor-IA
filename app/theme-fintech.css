@@ -1,0 +1,163 @@
+/* ==========================================================================
+   GFiscal — "Fintech Premium" light reskin
+   Layered ON TOP of the product's real styles.css. Same markup, new skin.
+   Driven by theme vars on :root so the Tweaks panel can swap the accent palette.
+   ========================================================================== */
+
+:root {
+  /* Accent palette — overridden live by the Tweaks panel */
+  --ft-accent: #4f46e5;          /* electric indigo */
+  --ft-accent-strong: #4338ca;
+  --ft-accent-soft: #eef0ff;
+  --ft-sidebar: #0c1322;         /* deep ink navy */
+  --ft-sidebar-2: #141c2e;
+
+  /* Neutrals & surfaces */
+  --ft-bg: #f3f4f7;
+  --ft-card: #ffffff;
+  --ft-card-border: #ecedf2;
+  --ft-line: #f0f1f5;
+  --ft-ink: #0f1729;
+  --ft-ink-soft: #5b6473;
+
+  /* Shape & depth */
+  --ft-radius: 16px;
+  --ft-radius-sm: 12px;
+  --ft-shadow: 0 1px 2px rgba(16,24,40,.04), 0 12px 30px rgba(16,24,40,.06);
+  --ft-shadow-lg: 0 1px 2px rgba(16,24,40,.05), 0 24px 60px rgba(16,24,40,.10);
+  --ft-pad: 24px;   /* card padding, density-controlled */
+  --ft-gap: 24px;   /* grid gap, density-controlled */
+}
+
+/* ---- Base ---------------------------------------------------------------- */
+body { background: var(--ft-bg); color: var(--ft-ink); letter-spacing: -0.006em; }
+.fiscal-shell { background: var(--ft-bg); grid-template-columns: 168px minmax(0,1fr); }
+.login-screen { background:
+  radial-gradient(1200px 600px at 80% -10%, var(--ft-accent-soft), transparent 60%),
+  var(--ft-bg); }
+
+/* ---- Sidebar (premium dark rail) ---------------------------------------- */
+.fiscal-sidebar { background: var(--ft-sidebar); }
+.sidebar-brand { padding: 26px 16px 20px; gap: 10px; }
+.sidebar-brand-mark { background: var(--ft-accent); color: #fff; border-radius: 9px; box-shadow: 0 6px 16px -6px var(--ft-accent); }
+.sidebar-brand span:last-child { color: #fff; letter-spacing: -0.01em; }
+.sidebar-nav { padding: 6px 0 20px; gap: 4px; }
+.sidebar-link { color: rgba(255,255,255,.62); font-weight: 600; min-height: 70px; margin-inline: 10px; padding-inline: 8px; border-radius: 14px; transition: color .14s ease; }
+.sidebar-link svg { color: rgba(255,255,255,.6); }
+.sidebar-link:hover { background: rgba(255,255,255,.06); color: #fff; }
+.sidebar-link:hover svg { color: #fff; }
+.sidebar-link.active,
+.sidebar-link.active:hover { background: var(--ft-accent); color: #fff; box-shadow: 0 10px 24px -8px var(--ft-accent); margin-inline: 10px; padding-inline: 8px; }
+.sidebar-link.active svg { color: #fff; }
+.sidebar-chevron { display: none; }
+
+/* ---- Workbench header ---------------------------------------------------- */
+.fiscal-workbench { padding: 34px 38px 44px; }
+.fiscal-title-row h1 { color: var(--ft-ink); font-weight: 800; letter-spacing: -0.02em; font-size: 1.9rem; }
+.fiscal-title-block p { color: var(--ft-ink-soft); }
+.insights-pill { background: var(--ft-card); border: 1px solid var(--ft-card-border); border-left-color: var(--ft-card-border); color: var(--ft-accent); box-shadow: var(--ft-shadow); border-radius: 999px; font-weight: 700; }
+.insights-pill svg { color: var(--ft-accent); }
+.org-switcher select,
+.icon-action { border: 1px solid var(--ft-card-border); border-radius: var(--ft-radius-sm); color: var(--ft-ink); background: var(--ft-card); box-shadow: 0 1px 2px rgba(16,24,40,.04); }
+.org-switcher label { color: var(--ft-ink-soft); }
+.icon-action:hover { background: var(--ft-accent-soft); border-color: var(--ft-accent); color: var(--ft-accent); }
+
+/* ---- Tabs ---------------------------------------------------------------- */
+.fiscal-tabs { border-bottom: 1px solid var(--ft-card-border); gap: 6px; }
+.tab { color: var(--ft-ink-soft); font-weight: 600; }
+.tab.active { background: transparent; color: var(--ft-ink); font-weight: 700; }
+.tab.active::after { background: var(--ft-accent); height: 3px; border-radius: 3px 3px 0 0; }
+
+/* ---- Section headings ---------------------------------------------------- */
+.dashboard-section h2,
+.section-heading,
+.module-hero h2 { color: var(--ft-ink); font-weight: 800; letter-spacing: -0.02em; }
+
+/* ---- Unified card surface ------------------------------------------------ */
+.statement-card, .ratio-card, .small-indicator-card, .quick-card,
+.outstanding-card, .sales-summary-tile, .sales-quick-card, .sales-table-card,
+.module-hero, .module-quick-panel, .module-roadmap-card, .fiscal-shell .panel {
+  background: var(--ft-card);
+  border: 1px solid var(--ft-card-border);
+  border-radius: var(--ft-radius);
+  box-shadow: var(--ft-shadow);
+}
+.statement-card { padding: var(--ft-pad); }
+.ratio-card, .small-indicator-card, .quick-card { padding: var(--ft-pad); }
+
+/* Card accents → indigo */
+.statement-icon, .side-row-icon, .file-drop svg, .outstanding-title span,
+.sales-tile-icon svg { color: var(--ft-accent); }
+.statement-heading h3, .ratio-card h3, .small-indicator-card h3,
+.statement-heading strong, .statement-details strong, .ratio-details strong,
+.small-indicator-card strong, .outstanding-card h3, .outstanding-card > strong,
+.sales-summary-tile strong { color: var(--ft-ink); }
+.statement-copy p, .ratio-card p, .small-indicator-card p,
+.outstanding-card p, .sales-summary-tile p, .module-hero p { color: var(--ft-ink-soft); }
+.ratio-value { color: var(--ft-accent); letter-spacing: -0.03em; }
+
+/* KPI tile chips */
+.sales-tile-icon.green { background: var(--ft-accent-soft); color: var(--ft-accent); }
+.sales-tile-icon.rose  { background: #fdeef5; color: #d6409f; }
+.sales-tile-icon.blue  { background: #e6f6fb; color: #0a9bc4; }
+.sales-tile-icon.green svg { color: var(--ft-accent); }
+.sales-tile-icon.rose svg  { color: #d6409f; }
+.sales-tile-icon.blue svg  { color: #0a9bc4; }
+
+/* Outstanding amount bar → slim rounded gradient */
+.outstanding-bar { height: 10px; border-radius: 999px;
+  background: linear-gradient(90deg, var(--ft-accent), color-mix(in oklab, var(--ft-accent) 55%, #ec4899)); }
+
+/* ---- Buttons & links ----------------------------------------------------- */
+.button { background: var(--ft-accent); border-color: var(--ft-accent); border-radius: var(--ft-radius-sm); font-weight: 700; box-shadow: 0 1px 2px rgba(16,24,40,.06); }
+.button:hover { background: var(--ft-accent-strong); border-color: var(--ft-accent-strong); }
+.button.secondary { background: var(--ft-card); border: 1px solid var(--ft-card-border); color: var(--ft-ink); box-shadow: 0 1px 2px rgba(16,24,40,.04); }
+.button.secondary:hover { background: var(--ft-accent-soft); border-color: var(--ft-accent); color: var(--ft-accent); }
+.input, .select { border: 1px solid var(--ft-card-border); border-radius: var(--ft-radius-sm); }
+.input:focus, .select:focus { border-color: var(--ft-accent); box-shadow: 0 0 0 4px color-mix(in oklab, var(--ft-accent) 16%, transparent); }
+.field span { color: var(--ft-ink-soft); }
+
+.quick-links a, .outstanding-actions a, .sales-table-actions a,
+.invoice-link, .link-row:hover { color: var(--ft-accent); }
+.invoice-link svg { color: var(--ft-accent); }
+.module-eyebrow { color: var(--ft-accent); }
+.module-action-strip a { border: 1px solid var(--ft-card-border); border-radius: var(--ft-radius-sm); color: var(--ft-accent); }
+.module-action-strip a:first-child { background: var(--ft-accent); border-color: var(--ft-accent); color: #fff; }
+
+/* ---- Tables -------------------------------------------------------------- */
+.sales-table th { background: #f7f8fb; color: var(--ft-ink); border-right: 1px solid var(--ft-card-border); font-weight: 700; }
+.sales-table td { border-bottom: 1px solid var(--ft-line); color: var(--ft-ink); }
+.sales-table tfoot td { background: #f7f8fb; }
+.data-table th { color: var(--ft-ink-soft); }
+.data-table th, .data-table td { border-bottom: 1px solid var(--ft-line); }
+.fiscal-shell .panel-header { border-bottom: 1px solid var(--ft-card-border); }
+.panel-header h2, .fiscal-shell .panel-header h2 { color: var(--ft-ink); }
+.row-title { color: var(--ft-ink); }
+.row-meta { color: var(--ft-ink-soft); }
+
+/* Overdue badge → soft rounded pill (was hard red rectangle) */
+.expired-badge { background: #fdecee; color: #d63d4a; border-radius: 999px; font-weight: 700; }
+
+/* Status pills slightly rounder */
+.status-pill { border-radius: 999px; }
+
+/* File drop */
+.file-drop { background: var(--ft-accent-soft); border: 1px dashed color-mix(in oklab, var(--ft-accent) 45%, #fff); border-radius: var(--ft-radius-sm); }
+.file-drop span { color: var(--ft-ink); }
+
+/* ---- Login --------------------------------------------------------------- */
+.login-panel { border: 1px solid var(--ft-card-border); border-radius: 20px; box-shadow: var(--ft-shadow-lg); }
+.login-panel h1, .page-title h1 { color: var(--ft-ink); letter-spacing: -0.02em; }
+.brand-lockup { color: var(--ft-accent); }
+.brand-mark { background: var(--ft-accent); border-radius: 9px; box-shadow: 0 6px 16px -6px var(--ft-accent); }
+.brand-name { color: var(--ft-ink); }
+.supporting-text { color: var(--ft-ink-soft); }
+.notice.success { border-radius: var(--ft-radius-sm); }
+
+/* ---- Density modifiers --------------------------------------------------- */
+:root.ft-compact { --ft-pad: 18px; --ft-gap: 16px; }
+:root.ft-comfy   { --ft-pad: 30px; --ft-gap: 30px; }
+.ft-compact .fiscal-workbench { padding: 26px 30px 36px; }
+.ft-comfy   .fiscal-workbench { padding: 42px 48px 52px; }
+.statement-grid, .ratio-grid, .small-card-grid, .sales-overview-grid,
+.outstanding-grid, .module-stats-grid { gap: var(--ft-gap); }

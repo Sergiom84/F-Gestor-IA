@@ -1,0 +1,30 @@
+/* ==========================================================================
+   GFiscal — Brand palette tokens (premium reskin)
+   Pick ONE palette for production and set it as the default on :root.
+   These are the SAME variables theme-fintech.css consumes.
+
+   In the prototype these were swappable via a Tweaks panel; in production you
+   just hardcode the chosen palette here (this file is imported AFTER
+   theme-fintech.css, so it wins).
+   ========================================================================== */
+
+:root {
+  /* === DEFAULT: Indigo eléctrico (the most "fintech premium") === */
+  --ft-accent:        #4f46e5;   /* primary action, links, active nav, chart line */
+  --ft-accent-strong: #4338ca;   /* hover / pressed */
+  --ft-accent-soft:   #eef0ff;   /* tinted chip/zone backgrounds */
+  --ft-sidebar:       #0c1322;   /* dark nav rail */
+}
+
+/* --- Alternative palettes -------------------------------------------------
+   To use one, copy its four values into the :root block above.
+
+   Esmeralda  (cercano al verde de marca original):
+     --ft-accent:#0d9f6e; --ft-accent-strong:#0b8a5f; --ft-accent-soft:#e7f7f0; --ft-sidebar:#0c1f1a;
+
+   Violeta    (el más atrevido):
+     --ft-accent:#7c3aed; --ft-accent-strong:#6d28d9; --ft-accent-soft:#f1ecff; --ft-sidebar:#160c28;
+--------------------------------------------------------------------------- */
+
+/* Density (optional). Add class "ft-comfy" or "ft-compact" to <html> or a
+   wrapper to change card padding + grid gaps globally. Default = regular. */
