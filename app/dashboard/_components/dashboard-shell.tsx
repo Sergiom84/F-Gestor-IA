@@ -36,6 +36,7 @@ export function DashboardShell({
   userEmail
 }: DashboardShellProps) {
   const isOperationalModule = activeModule === "sales"
+    || activeModule === "quotes"
     || activeModule === "purchases"
     || activeModule === "contacts"
     || activeModule === "products"

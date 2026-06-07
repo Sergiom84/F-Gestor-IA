@@ -5,6 +5,7 @@ import { SalesDashboardSection } from "./dashboard/sales-dashboard-section";
 import { ContactsSection } from "./contacts/contacts-section";
 import { ProductsWorkspace } from "./products/products-workspace";
 import { PurchasesSection } from "./purchases/purchases-section";
+import { QuotesSection } from "./quotes/quotes-section";
 import { SalesSection } from "./sales/sales-section";
 import { ModuleWorkspace } from "./shared/module-workspace";
 import type { ReactNode } from "react";
@@ -32,6 +33,7 @@ const sectionRegistry = {
       organizationName={data.activeOrganization.name}
     />
   ),
+  quotes: () => <QuotesSection />,
   products: (data) => (
     <ProductsWorkspace organizationName={data.activeOrganization.name} />
   ),

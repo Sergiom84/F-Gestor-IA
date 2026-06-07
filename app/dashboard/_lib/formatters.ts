@@ -59,6 +59,7 @@ export function resolveAppModule(value: string | undefined): AppModule {
   const modules = new Set<AppModule>([
     "dashboard",
     "sales",
+    "quotes",
     "purchases",
     "contacts",
     "products",

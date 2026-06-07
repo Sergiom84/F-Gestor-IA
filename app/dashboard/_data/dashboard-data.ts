@@ -90,6 +90,7 @@ export async function readDashboardData(params?: DashboardSearchParams): Promise
   const activeModule = resolveAppModule(params?.module);
   const activeTab = resolveDashboardTab(params?.tab);
   const canUseLightModulePayload = activeModule === "sales"
+    || activeModule === "quotes"
     || activeModule === "purchases"
     || activeModule === "contacts"
     || activeModule === "products"
