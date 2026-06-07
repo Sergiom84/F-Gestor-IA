@@ -19,7 +19,8 @@ import {
   X
 } from "lucide-react";
 import type { ReactNode } from "react";
-import { useMemo, useRef, useState } from "react";
+import { useTransition, useMemo, useRef, useState } from "react";
+import { markPurchaseInvoicePaid, softDeletePurchaseInvoice } from "../../commercial-actions";
 import {
   artificialPurchaseRows,
   artificialPurchaseTabs
@@ -55,6 +56,7 @@ export function PurchasesWorkspace({ organizationName, initialInvoices }: Purcha
   const [rowMenuId, setRowMenuId] = useState<string | null>(null);
   const [notice, setNotice] = useState<PurchaseNotice | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [, startTransition] = useTransition();
 
   const rows = useMemo(() => {
     const byTab = activeTab === "all"
@@ -98,6 +100,9 @@ export function PurchasesWorkspace({ organizationName, initialInvoices }: Purcha
     setNotice({ tone: "success", text: "Factura marcada como pagada." });
     setRowMenuId(null);
     setSelectedRow(null);
+    if (/^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(rowId)) {
+      startTransition(() => { void markPurchaseInvoicePaid(rowId); });
+    }
   };
 
   const duplicateInvoice = (row: PurchaseInvoiceRow) => {
@@ -110,10 +115,13 @@ export function PurchasesWorkspace({ organizationName, initialInvoices }: Purcha
 
   const deleteInvoice = (rowId: string) => {
     setInvoices((current) => current.filter((r) => r.id !== rowId));
-    setNotice({ tone: "warning", text: "Factura eliminada de la vista." });
+    setNotice({ tone: "warning", text: "Factura eliminada." });
     setRowMenuId(null);
     if (selectedRow?.id === rowId) {
       setSelectedRow(null);
+    }
+    if (/^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(rowId)) {
+      startTransition(() => { void softDeletePurchaseInvoice(rowId); });
     }
   };
 
