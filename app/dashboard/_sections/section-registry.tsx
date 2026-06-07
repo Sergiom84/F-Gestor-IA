@@ -1,11 +1,11 @@
 import { AccountingWorkspace } from "./accounting/accounting-workspace";
 import { AccountingDashboard } from "./dashboard/accounting-dashboard";
 import { GestoriaDashboard } from "./dashboard/gestoria-dashboard";
-import { SalesDashboard } from "./dashboard/sales-dashboard";
-import { ContactsWorkspace } from "./contacts/contacts-workspace";
+import { SalesDashboardSection } from "./dashboard/sales-dashboard-section";
+import { ContactsSection } from "./contacts/contacts-section";
 import { ProductsWorkspace } from "./products/products-workspace";
-import { PurchasesWorkspace } from "./purchases/purchases-workspace";
-import { SalesWorkspace } from "./sales/sales-workspace";
+import { PurchasesSection } from "./purchases/purchases-section";
+import { SalesSection } from "./sales/sales-section";
 import { ModuleWorkspace } from "./shared/module-workspace";
 import type { ReactNode } from "react";
 import type { DashboardData } from "../_data/dashboard-data";
@@ -15,13 +15,22 @@ type SectionRenderer = (data: DashboardData) => ReactNode;
 
 const sectionRegistry = {
   sales: (data) => (
-    <SalesWorkspace organizationName={data.activeOrganization.name} />
+    <SalesSection
+      organizationId={data.activeOrganization.id}
+      organizationName={data.activeOrganization.name}
+    />
   ),
   purchases: (data) => (
-    <PurchasesWorkspace organizationName={data.activeOrganization.name} />
+    <PurchasesSection
+      organizationId={data.activeOrganization.id}
+      organizationName={data.activeOrganization.name}
+    />
   ),
   contacts: (data) => (
-    <ContactsWorkspace organizationName={data.activeOrganization.name} />
+    <ContactsSection
+      organizationId={data.activeOrganization.id}
+      organizationName={data.activeOrganization.name}
+    />
   ),
   products: (data) => (
     <ProductsWorkspace organizationName={data.activeOrganization.name} />
@@ -70,7 +79,8 @@ function DashboardHomeSection({ data }: { data: DashboardData }) {
 
   if (data.activeTab === "sales") {
     return (
-      <SalesDashboard
+      <SalesDashboardSection
+        organizationId={data.activeOrganization.id}
         clientCount={data.clientCount}
         documentCount={data.documentCount}
         fiscalEntityCount={data.fiscalEntityCount}

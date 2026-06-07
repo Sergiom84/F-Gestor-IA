@@ -1,7 +1,9 @@
 "use client";
 
 import {
+  AlertTriangle,
   ArrowUp,
+  CheckCircle2,
   ChevronDown,
   Cpu,
   FileText,
@@ -30,23 +32,34 @@ import { formatMoney } from "../../_lib/formatters";
 
 type PurchaseTabId = ArtificialPurchaseTabId;
 type PurchaseInvoiceRow = ArtificialPurchaseInvoiceRow;
+type PurchaseNotice = { tone: "success" | "warning"; text: string };
 
 const purchaseTabs = artificialPurchaseTabs;
-const purchaseRows: PurchaseInvoiceRow[] = artificialPurchaseRows;
 
-export function PurchasesWorkspace({ organizationName }: { organizationName: string }) {
+type PurchasesWorkspaceProps = {
+  organizationName: string;
+  initialInvoices?: PurchaseInvoiceRow[];
+};
+
+export function PurchasesWorkspace({ organizationName, initialInvoices }: PurchasesWorkspaceProps) {
   const [activeTab, setActiveTab] = useState<PurchaseTabId>("all");
   const [query, setQuery] = useState("");
   const [showFilters, setShowFilters] = useState(false);
   const [showColumns, setShowColumns] = useState(false);
   const [showEmailPanel, setShowEmailPanel] = useState(true);
   const [uploadedFiles, setUploadedFiles] = useState<string[]>([]);
+  const [invoices, setInvoices] = useState<PurchaseInvoiceRow[]>(initialInvoices ?? artificialPurchaseRows);
+  const [showInsights, setShowInsights] = useState(false);
+  const [showEmailAddress, setShowEmailAddress] = useState(false);
+  const [selectedRow, setSelectedRow] = useState<PurchaseInvoiceRow | null>(null);
+  const [rowMenuId, setRowMenuId] = useState<string | null>(null);
+  const [notice, setNotice] = useState<PurchaseNotice | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const rows = useMemo(() => {
     const byTab = activeTab === "all"
-      ? purchaseRows
-      : purchaseRows.filter((row) => row.tab === activeTab);
+      ? invoices
+      : invoices.filter((row) => row.tab === activeTab);
     const normalizedQuery = query.trim().toLowerCase();
 
     if (!normalizedQuery) {
@@ -62,7 +75,7 @@ export function PurchasesWorkspace({ organizationName }: { organizationName: str
       || row.invoiceDate.toLowerCase().includes(normalizedQuery)
       || row.invoiceNumber.toLowerCase().includes(normalizedQuery)
     ));
-  }, [activeTab, query]);
+  }, [activeTab, invoices, query]);
 
   const addManualInvoice = () => {
     setActiveTab("review");
@@ -78,13 +91,46 @@ export function PurchasesWorkspace({ organizationName }: { organizationName: str
     setActiveTab("review");
   };
 
+  const markAsPaid = (rowId: string) => {
+    setInvoices((current) => current.map((row) =>
+      row.id === rowId ? { ...row, status: "Pagada" as const, tab: "paid" as const } : row
+    ));
+    setNotice({ tone: "success", text: "Factura marcada como pagada." });
+    setRowMenuId(null);
+    setSelectedRow(null);
+  };
+
+  const duplicateInvoice = (row: PurchaseInvoiceRow) => {
+    const copy: PurchaseInvoiceRow = { ...row, id: `${row.id}-copy-${Date.now()}` };
+
+    setInvoices((current) => [copy, ...current]);
+    setNotice({ tone: "success", text: `Factura ${row.invoiceNumber} duplicada.` });
+    setRowMenuId(null);
+  };
+
+  const deleteInvoice = (rowId: string) => {
+    setInvoices((current) => current.filter((r) => r.id !== rowId));
+    setNotice({ tone: "warning", text: "Factura eliminada de la vista." });
+    setRowMenuId(null);
+    if (selectedRow?.id === rowId) {
+      setSelectedRow(null);
+    }
+  };
+
   return (
     <section className="purchases-workspace" aria-label="Facturas de compra">
       <header className="purchases-header">
         <div>
           <div className="sales-operation-title">
             <h1>Facturas de compra</h1>
-            <button className="insights-pill sales-insights-pill" type="button">
+            <button
+              className="insights-pill sales-insights-pill"
+              onClick={() => {
+                setShowInsights((current) => !current);
+                setShowEmailAddress(false);
+              }}
+              type="button"
+            >
               <Sparkles aria-hidden="true" size={18} fill="currentColor" />
               Copilot Insights
             </button>
@@ -93,8 +139,37 @@ export function PurchasesWorkspace({ organizationName }: { organizationName: str
             Introduce los datos de las facturas de compra en tus registros contables mediante la subida de un PDF o una imagen. Tambien lo puedes hacer manualmente.
           </p>
         </div>
-        <button className="purchase-email-link" title={organizationName} type="button">Ver direccion de e-mail</button>
+        <button
+          className="purchase-email-link"
+          onClick={() => {
+            setShowEmailAddress((current) => !current);
+            setShowInsights(false);
+          }}
+          title={organizationName}
+          type="button"
+        >Ver direccion de e-mail</button>
       </header>
+
+      {notice ? (
+        <div className={`sales-live-notice ${notice.tone}`} role="status">
+          {notice.tone === "success"
+            ? <CheckCircle2 aria-hidden="true" size={18} />
+            : <AlertTriangle aria-hidden="true" size={18} />}
+          <span>{notice.text}</span>
+          <button onClick={() => setNotice(null)} type="button" aria-label="Cerrar aviso">
+            <X aria-hidden="true" size={16} />
+          </button>
+        </div>
+      ) : null}
+
+      {showInsights ? <PurchaseInsightsPanel rows={rows} /> : null}
+
+      {showEmailAddress ? (
+        <PurchaseEmailPanel
+          organizationName={organizationName}
+          onClose={() => setShowEmailAddress(false)}
+        />
+      ) : null}
 
       {showEmailPanel ? (
         <section className="purchase-mail-panel" aria-label="Clasificacion por e-mail">
@@ -246,14 +321,39 @@ export function PurchasesWorkspace({ organizationName }: { organizationName: str
                   <td>{row.invoiceNumber}</td>
                   <td>{formatMoney(row.total)}</td>
                   <td>
-                    <button className="sage-table-button" type="button" aria-label={`Editar ${row.invoiceNumber}`}>
+                    <button
+                      className="sage-table-button"
+                      onClick={() => {
+                        setSelectedRow(row);
+                        setRowMenuId(null);
+                      }}
+                      type="button"
+                      aria-label={`Editar ${row.invoiceNumber}`}
+                    >
                       <PenLine aria-hidden="true" size={25} fill="currentColor" />
                     </button>
                   </td>
                   <td>
-                    <button className="sage-table-button" type="button" aria-label={`Acciones ${row.invoiceNumber}`}>
-                      <MoreVertical aria-hidden="true" size={25} />
-                    </button>
+                    <div className="purchase-row-actions">
+                      <button
+                        className="sage-table-button"
+                        onClick={() => {
+                          setRowMenuId(rowMenuId === row.id ? null : row.id);
+                          setSelectedRow(null);
+                        }}
+                        type="button"
+                        aria-label={`Acciones ${row.invoiceNumber}`}
+                      >
+                        <MoreVertical aria-hidden="true" size={25} />
+                      </button>
+                      {rowMenuId === row.id ? (
+                        <div className="sales-popover" role="menu">
+                          <button onClick={() => markAsPaid(row.id)} type="button">Marcar pagada</button>
+                          <button onClick={() => duplicateInvoice(row)} type="button">Duplicar</button>
+                          <button onClick={() => deleteInvoice(row.id)} type="button">Eliminar</button>
+                        </div>
+                      ) : null}
+                    </div>
                   </td>
                 </tr>
               )) : (
@@ -271,6 +371,115 @@ export function PurchasesWorkspace({ organizationName }: { organizationName: str
           </table>
         </div>
       </section>
+
+      {selectedRow ? (
+        <PurchaseDetailPanel
+          row={selectedRow}
+          onClose={() => setSelectedRow(null)}
+          onMarkPaid={() => markAsPaid(selectedRow.id)}
+          onDelete={() => deleteInvoice(selectedRow.id)}
+        />
+      ) : null}
+    </section>
+  );
+}
+
+function PurchaseInsightsPanel({ rows }: { rows: PurchaseInvoiceRow[] }) {
+  const total = rows.reduce((sum, row) => sum + row.total, 0);
+  const topSupplier = rows[0]?.supplier ?? "Sin proveedor destacado";
+
+  return (
+    <section className="sales-action-panel insights-panel" aria-label="Insights de compras">
+      <div>
+        <Sparkles aria-hidden="true" size={22} fill="currentColor" />
+        <h2>Resumen inteligente de facturas de compra</h2>
+      </div>
+      <p>
+        Hay {rows.length} factura{rows.length === 1 ? "" : "s"} en la vista por {formatMoney(total)}.
+        Proveedor con mas actividad: {topSupplier}.
+      </p>
+      <div className="sales-action-grid">
+        <span>Proxima accion</span>
+        <strong>{rows.length > 0 ? "Revisar vencimientos y preparar pagos" : "Sube la primera factura de compra"}</strong>
+      </div>
+    </section>
+  );
+}
+
+function PurchaseEmailPanel({
+  organizationName,
+  onClose
+}: {
+  organizationName: string;
+  onClose: () => void;
+}) {
+  const emailSlug = organizationName.toLowerCase().replace(/\s+/g, "-");
+
+  return (
+    <section className="sales-action-panel insights-panel" aria-label="Direccion de e-mail">
+      <div>
+        <Mail aria-hidden="true" size={22} />
+        <h2>Direccion de e-mail de {organizationName}</h2>
+      </div>
+      <p>Reenvía tus facturas de compra a esta dirección y se clasificarán automáticamente:</p>
+      <strong>facturas@{emailSlug}.gfiscal.local</strong>
+      <footer>
+        <button className="sage-outline-button" onClick={onClose} type="button">Cerrar</button>
+      </footer>
+    </section>
+  );
+}
+
+function PurchaseDetailPanel({
+  row,
+  onClose,
+  onMarkPaid,
+  onDelete
+}: {
+  row: PurchaseInvoiceRow;
+  onClose: () => void;
+  onMarkPaid: () => void;
+  onDelete: () => void;
+}) {
+  return (
+    <section className="sales-action-panel document-detail-panel" aria-label={`Editar ${row.invoiceNumber}`}>
+      <header>
+        <div>
+          <PenLine aria-hidden="true" size={22} />
+          <h2>Factura {row.invoiceNumber}</h2>
+        </div>
+        <button className="panel-icon-button" onClick={onClose} type="button" aria-label="Cerrar edicion">
+          <X aria-hidden="true" size={18} />
+        </button>
+      </header>
+
+      <div className="document-detail-grid">
+        <label className="sage-field">
+          <span>Estado</span>
+          <select defaultValue={row.status}>
+            <option>Vencida</option>
+            <option>Pendiente</option>
+            <option>Pagada</option>
+          </select>
+        </label>
+        <label className="sage-field">
+          <span>Fecha de factura</span>
+          <input defaultValue={row.invoiceDate} />
+        </label>
+        <label className="sage-field">
+          <span>Proveedor</span>
+          <input defaultValue={row.supplier} />
+        </label>
+        <label className="sage-field">
+          <span>Total</span>
+          <input defaultValue={formatMoney(row.total)} />
+        </label>
+      </div>
+
+      <div className="document-action-strip">
+        <button className="sage-danger-button" onClick={onDelete} type="button">Eliminar</button>
+        <button className="sage-primary-button" onClick={onMarkPaid} type="button">Marcar pagada</button>
+      </div>
     </section>
   );
 }
