@@ -15,7 +15,7 @@ import {
 import { useMemo, useState } from "react";
 import { formatMoney } from "../../_lib/formatters";
 
-type ProductsView = "product" | "tariffs" | "tariff-form" | "discount-groups" | "discount-form";
+type ProductsView = "product-list" | "product" | "tariffs" | "tariff-form" | "discount-groups" | "discount-form";
 type ProductFormTab = "basic" | "pricing";
 type ProductCategory = "product" | "service";
 
@@ -30,70 +30,147 @@ const tariffItemColumns = ["Codigo de producto o servicio", "Nombre", "Unidad de
 const discountItemColumns = ["Codigo de producto o servicio", "Nombre", "Unidad de medida", "Activo", "Descuento", "Tramos", "Editar", "Eliminar"];
 
 export function ProductsWorkspace({ organizationName }: { organizationName: string }) {
-  const [view, setView] = useState<ProductsView>("product");
-  const [formKey, setFormKey] = useState(0);
+  const [view, setView] = useState<ProductsView>("product-list");
+  const [showNav, setShowNav] = useState(true);
+  const [notice, setNotice] = useState<string | null>(null);
 
-  const openProduct = () => setView("product");
-  const openTariffs = () => setView("tariffs");
-  const openDiscountGroups = () => setView("discount-groups");
+  const openProduct = () => { setView("product-list"); setShowNav(false); };
+  const openTariffs = () => { setView("tariffs"); setShowNav(false); };
+  const openDiscountGroups = () => { setView("discount-groups"); setShowNav(false); };
 
   return (
-    <section className="products-module-shell" aria-label={`Productos y servicios de ${organizationName}`}>
-      <aside className="products-secondary-nav" aria-label="Navegacion de productos y servicios">
-        <strong>Productos y servicios</strong>
-        <button
-          className={`products-secondary-main${view === "product" ? " active" : ""}`}
-          onClick={openProduct}
-          type="button"
-        >
-          <ChevronUp aria-hidden="true" size={19} />
-          <span>Precios y descuentos</span>
-        </button>
-        <button
-          className={`products-secondary-sub${view === "tariffs" || view === "tariff-form" ? " active" : ""}`}
-          onClick={openTariffs}
-          type="button"
-        >
-          Tarifas
-        </button>
-        <button
-          className={`products-secondary-sub${view === "discount-groups" || view === "discount-form" ? " active" : ""}`}
-          onClick={openDiscountGroups}
-          type="button"
-        >
-          Grupos de descuentos
-        </button>
-      </aside>
+    <section className={`products-module-shell${showNav ? "" : " nav-collapsed"}`} aria-label={`Productos y servicios de ${organizationName}`}>
+      {showNav ? (
+        <aside className="products-secondary-nav" aria-label="Navegacion de productos y servicios">
+          <strong>Productos y servicios</strong>
+          <button
+            className={`products-secondary-main${view === "product-list" || view === "product" ? " active" : ""}`}
+            onClick={openProduct}
+            type="button"
+          >
+            <ChevronUp aria-hidden="true" size={19} />
+            <span>Precios y descuentos</span>
+          </button>
+          <button
+            className={`products-secondary-sub${view === "tariffs" || view === "tariff-form" ? " active" : ""}`}
+            onClick={openTariffs}
+            type="button"
+          >
+            Tarifas
+          </button>
+          <button
+            className={`products-secondary-sub${view === "discount-groups" || view === "discount-form" ? " active" : ""}`}
+            onClick={openDiscountGroups}
+            type="button"
+          >
+            Grupos de descuentos
+          </button>
+        </aside>
+      ) : null}
 
       <div className="products-operation-surface">
-        {view === "product" ? (
-          <ProductServiceForm key={formKey} onCancel={() => setFormKey((k) => k + 1)} />
+        {notice ? (
+          <div className="sales-live-notice success" role="status" style={{ marginBottom: "16px" }}>
+            <span>{notice}</span>
+            <button onClick={() => setNotice(null)} type="button" aria-label="Cerrar aviso">
+              <X aria-hidden="true" size={16} />
+            </button>
+          </div>
+        ) : null}
+        {view === "product-list" ? (
+          <ProductsList
+            onBack={() => setShowNav(true)}
+            onCreate={() => setView("product")}
+          />
+        ) : view === "product" ? (
+          <ProductServiceForm
+            onCancel={() => setView("product-list")}
+            onCreate={() => { setView("product-list"); setNotice("Producto guardado en la lista local."); }}
+          />
         ) : view === "tariffs" ? (
           <ReferenceList
             columns={tariffColumns}
+            onBack={() => setShowNav(true)}
             onCreate={() => setView("tariff-form")}
             searchLabel="Buscar tarifas"
             title="Tarifas"
           />
         ) : view === "tariff-form" ? (
-          <TariffForm onCancel={openTariffs} />
+          <TariffForm
+            onCancel={openTariffs}
+            onCreate={() => { openTariffs(); setNotice("Tarifa guardada en la lista local."); }}
+          />
         ) : view === "discount-groups" ? (
           <ReferenceList
             columns={discountGroupColumns}
             focusCreate
+            onBack={() => setShowNav(true)}
             onCreate={() => setView("discount-form")}
             searchLabel="Buscar grupos de descuentos"
             title="Grupos de descuentos"
           />
         ) : (
-          <DiscountGroupForm onCancel={openDiscountGroups} />
+          <DiscountGroupForm
+            onCancel={openDiscountGroups}
+            onCreate={() => { openDiscountGroups(); setNotice("Grupo de descuentos guardado en la lista local."); }}
+          />
         )}
       </div>
     </section>
   );
 }
 
-function ProductServiceForm({ onCancel }: { onCancel?: () => void }) {
+function ProductsList({ onBack, onCreate }: { onBack: () => void; onCreate: () => void }) {
+  return (
+    <section className="products-list-view" aria-label="Productos y servicios">
+      <div className="products-list-breadcrumb">
+        <button className="products-back-button" onClick={onBack} type="button">
+          ← Productos y servicios
+        </button>
+        <h1>Precios y descuentos</h1>
+      </div>
+      <div className="products-list-toolbar">
+        <button className="sage-primary-button" onClick={onCreate} type="button">
+          <Plus aria-hidden="true" size={22} />
+          Crear
+        </button>
+        <div className="products-toolbar-actions">
+          <label className="sales-search-control">
+            <Search aria-hidden="true" size={24} />
+            <input aria-label="Buscar productos" placeholder="Buscar..." type="search" />
+          </label>
+          <button className="sage-outline-button" type="button">
+            <Filter aria-hidden="true" size={20} fill="currentColor" />
+            Filtrar
+          </button>
+        </div>
+      </div>
+      <div className="products-reference-panel">
+        <table className="products-data-table">
+          <thead>
+            <tr>
+              <th>Codigo</th>
+              <th>Nombre</th>
+              <th>Categoria</th>
+              <th>Grupo de impuestos</th>
+              <th>Precio</th>
+              <th>Estado</th>
+              <th>Editar</th>
+              <th>Eliminar</th>
+            </tr>
+          </thead>
+        </table>
+        <div className="products-empty-state">
+          <SearchX aria-hidden="true" size={94} strokeWidth={2.7} />
+          <strong>Esta lista esta en blanco.</strong>
+          <p>Crea el primer producto o servicio.</p>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function ProductServiceForm({ onCancel, onCreate }: { onCancel: () => void; onCreate: () => void }) {
   const [activeTab, setActiveTab] = useState<ProductFormTab>("basic");
   const [category, setCategory] = useState<ProductCategory>("product");
   const [code, setCode] = useState("");
@@ -282,7 +359,8 @@ function ProductServiceForm({ onCancel }: { onCancel?: () => void }) {
 
       <ProductStickyBar
         canCreate={canCreate}
-        {...(onCancel !== undefined ? { onCancel } : {})}
+        onCancel={onCancel}
+        onCreate={onCreate}
         summaries={[
           { label: "Precio", value: priceValue },
           { label: "Precio con IVA y descuento", value: priceWithTax }
@@ -295,12 +373,14 @@ function ProductServiceForm({ onCancel }: { onCancel?: () => void }) {
 function ReferenceList({
   columns,
   focusCreate = false,
+  onBack,
   onCreate,
   searchLabel,
   title
 }: {
   columns: string[];
   focusCreate?: boolean;
+  onBack: () => void;
   onCreate: () => void;
   searchLabel: string;
   title: string;
@@ -315,6 +395,11 @@ function ReferenceList({
 
   return (
     <section className="products-list-view" aria-label={title}>
+      <div className="products-list-breadcrumb">
+        <button className="products-back-button" onClick={onBack} type="button">
+          ← Productos y servicios
+        </button>
+      </div>
       <h1>{title}</h1>
       <div className="products-list-toolbar">
         <button className={`sage-primary-button${focusCreate ? " focused" : ""}`} onClick={onCreate} type="button">
@@ -370,7 +455,7 @@ function ReferenceList({
 type TariffItemRow = { id: number };
 type DiscountItemRow = { id: number };
 
-function TariffForm({ onCancel }: { onCancel: () => void }) {
+function TariffForm({ onCancel, onCreate }: { onCancel: () => void; onCreate: () => void }) {
   const [code, setCode] = useState("");
   const [name, setName] = useState("");
   const [active, setActive] = useState(true);
@@ -425,12 +510,12 @@ function TariffForm({ onCancel }: { onCancel: () => void }) {
         items={items}
         onRemoveItem={(id) => setItems((current) => current.filter((item) => item.id !== id))}
       />
-      <ProductStickyBar canCreate={canCreate} onCancel={onCancel} />
+      <ProductStickyBar canCreate={canCreate} onCancel={onCancel} onCreate={onCreate} />
     </section>
   );
 }
 
-function DiscountGroupForm({ onCancel }: { onCancel: () => void }) {
+function DiscountGroupForm({ onCancel, onCreate }: { onCancel: () => void; onCreate: () => void }) {
   const [code, setCode] = useState("");
   const [description, setDescription] = useState("");
   const [active, setActive] = useState(true);
@@ -477,7 +562,7 @@ function DiscountGroupForm({ onCancel }: { onCancel: () => void }) {
         items={items}
         onRemoveItem={(id) => setItems((current) => current.filter((item) => item.id !== id))}
       />
-      <ProductStickyBar canCreate={canCreate} onCancel={onCancel} />
+      <ProductStickyBar canCreate={canCreate} onCancel={onCancel} onCreate={onCreate} />
     </section>
   );
 }
@@ -643,10 +728,12 @@ function FormItemsTable({
 function ProductStickyBar({
   canCreate,
   onCancel,
+  onCreate,
   summaries = []
 }: {
   canCreate: boolean;
   onCancel?: () => void;
+  onCreate?: () => void;
   summaries?: Array<{ label: string; value: number }>;
 }) {
   return (
@@ -655,7 +742,7 @@ function ProductStickyBar({
         <SummaryBox key={summary.label} label={summary.label} value={summary.value} />
       ))}
       <button className="quote-cancel-action" onClick={onCancel} type="button">Cancelar</button>
-      <button className="quote-create-action" disabled={!canCreate} type="button">Crear</button>
+      <button className="quote-create-action" disabled={!canCreate} onClick={canCreate ? onCreate : undefined} type="button">Crear</button>
       <button className="quote-create-more" disabled={!canCreate} type="button" aria-label="Mas opciones de creacion">
         <ChevronDown aria-hidden="true" size={18} />
       </button>

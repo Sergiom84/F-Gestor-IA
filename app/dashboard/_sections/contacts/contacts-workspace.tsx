@@ -17,9 +17,7 @@ import {
 } from "lucide-react";
 import { useMemo, useState } from "react";
 import {
-  artificialClientRows,
-  artificialEmployeeRows,
-  artificialSupplierRows
+  artificialEmployeeRows
 } from "../../_data/artificial-business-data";
 import type { ArtificialContactListItem } from "../../_data/artificial-business-data";
 
@@ -62,6 +60,8 @@ export function ContactsWorkspace({ organizationName, initialClients, initialSup
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
   const [activeClientTab, setActiveClientTab] = useState<ClientTabId>("info");
   const [notice, setNotice] = useState<ContactNotice | null>(null);
+  const [isCreatingContact, setIsCreatingContact] = useState(false);
+  const [contactsNotice, setContactsNotice] = useState<string | null>(null);
   const currentSection = contactSections.find((section) => section.id === activeSection) ?? contactSections[0]!;
   const rows = activeSection === "clients"
     ? clientRows
@@ -207,7 +207,17 @@ export function ContactsWorkspace({ organizationName, initialClients, initialSup
       </aside>
 
       <section className="contacts-detail-pane" aria-label="Detalle de contacto">
-        {activeSection !== "clients" ? (
+        {contactsNotice ? (
+          <div className="sales-live-notice success contacts-notice" role="status">
+            <span>{contactsNotice}</span>
+            <button onClick={() => setContactsNotice(null)} type="button" aria-label="Cerrar aviso">
+              <X aria-hidden="true" size={16} />
+            </button>
+          </div>
+        ) : null}
+        {isCreatingContact ? (
+          <NewContactForm sectionLabel={currentSection.label} onCancel={() => setIsCreatingContact(false)} />
+        ) : activeSection !== "clients" ? (
           <ContactCategoryPlaceholder sectionLabel={currentSection.label} />
         ) : selectedClient ? (
           <ClientDetail
@@ -593,6 +603,57 @@ function ClientBlockToggle({ title, description }: { title: string; description:
         <button type="button">OFF</button>
       </div>
     </div>
+  );
+}
+
+function NewContactForm({ sectionLabel, onCancel }: { sectionLabel: string; onCancel: () => void }) {
+  const [name, setName] = useState("");
+  const [code, setCode] = useState("");
+  const [taxId, setTaxId] = useState("");
+  const [email, setEmail] = useState("");
+  const canCreate = name.trim().length > 0 && code.trim().length > 0;
+
+  return (
+    <section className="new-contact-form" aria-label={`Nuevo ${sectionLabel.toLowerCase().replace(/s$/, "")}`}>
+      <header className="client-detail-header">
+        <div className="client-title-row">
+          <h1>Nuevo {sectionLabel.toLowerCase().replace(/s$/, "")}</h1>
+        </div>
+      </header>
+      <div className="client-info-grid new-contact-grid">
+        <section>
+          <h2>Informacion de empresa</h2>
+          <label className="sage-field">
+            <span>Codigo *</span>
+            <input value={code} onChange={(e) => setCode(e.target.value)} />
+          </label>
+          <label className="sage-field">
+            <span>Razon social o nombre *</span>
+            <input value={name} onChange={(e) => setName(e.target.value)} />
+          </label>
+          <label className="sage-field">
+            <span>NIF/CIF</span>
+            <input value={taxId} onChange={(e) => setTaxId(e.target.value)} />
+          </label>
+          <label className="sage-field">
+            <span>E-mail</span>
+            <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" />
+          </label>
+          <label className="sage-field">
+            <span>Pais</span>
+            <select defaultValue="ES - ES">
+              <option>ES - ES</option>
+              <option>PT - PT</option>
+              <option>FR - FR</option>
+            </select>
+          </label>
+        </section>
+      </div>
+      <footer className="client-sticky-bar">
+        <button className="quote-cancel-action" onClick={onCancel} type="button">Cancelar</button>
+        <button className="client-update-action" disabled={!canCreate} type="button">Crear</button>
+      </footer>
+    </section>
   );
 }
 

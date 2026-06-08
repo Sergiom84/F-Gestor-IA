@@ -22,7 +22,6 @@ import type { ReactNode } from "react";
 import { useTransition, useMemo, useRef, useState } from "react";
 import { markPurchaseInvoicePaid, softDeletePurchaseInvoice } from "../../commercial-actions";
 import {
-  artificialPurchaseRows,
   artificialPurchaseTabs
 } from "../../_data/artificial-business-data";
 import type {
@@ -30,6 +29,7 @@ import type {
   ArtificialPurchaseTabId
 } from "../../_data/artificial-business-data";
 import { formatMoney } from "../../_lib/formatters";
+import type { PurchaseDocRow } from "../../_lib/types";
 
 type PurchaseTabId = ArtificialPurchaseTabId;
 type PurchaseInvoiceRow = ArtificialPurchaseInvoiceRow;
@@ -207,7 +207,7 @@ export function PurchasesWorkspace({ organizationName, initialInvoices }: Purcha
       ) : null}
 
       <section className="purchase-intake-row" aria-label="Entrada de facturas">
-        <button className="sage-primary-button purchase-create-button" onClick={addManualInvoice} type="button">
+        <button className="sage-primary-button purchase-create-button" onClick={() => setIsCreating(true)} type="button">
           <Plus aria-hidden="true" size={22} />
           Crear
         </button>
@@ -488,6 +488,54 @@ function PurchaseDetailPanel({
         <button className="sage-danger-button" onClick={onDelete} type="button">Eliminar</button>
         <button className="sage-primary-button" onClick={onMarkPaid} type="button">Marcar pagada</button>
       </div>
+    </section>
+  );
+}
+
+function PurchaseInvoiceForm({ onCancel }: { onCancel: () => void }) {
+  const [supplier, setSupplier] = useState("");
+  const [invoiceNumber, setInvoiceNumber] = useState("");
+  const [invoiceDate, setInvoiceDate] = useState("");
+  const [total, setTotal] = useState("");
+  const [description, setDescription] = useState("");
+  const canCreate = supplier.trim().length > 0 && invoiceNumber.trim().length > 0;
+
+  return (
+    <section className="purchase-create-form" aria-label="Nueva factura de compra">
+      <header className="purchase-form-header">
+        <h1>Nueva factura de compra</h1>
+        <button className="quote-close-button" onClick={onCancel} type="button" aria-label="Cerrar formulario">
+          <X aria-hidden="true" size={34} />
+        </button>
+      </header>
+
+      <div className="purchase-form-grid">
+        <label className="sage-field">
+          <span>Proveedor *</span>
+          <input value={supplier} onChange={(e) => setSupplier(e.target.value)} placeholder="Nombre o codigo de proveedor" />
+        </label>
+        <label className="sage-field">
+          <span>Numero de factura *</span>
+          <input value={invoiceNumber} onChange={(e) => setInvoiceNumber(e.target.value)} />
+        </label>
+        <label className="sage-field">
+          <span>Fecha de factura</span>
+          <input value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} type="date" />
+        </label>
+        <label className="sage-field">
+          <span>Total</span>
+          <input value={total} onChange={(e) => setTotal(e.target.value)} inputMode="decimal" placeholder="0,00" />
+        </label>
+        <label className="sage-textarea-field purchase-form-full-width">
+          <span>Descripcion</span>
+          <textarea value={description} onChange={(e) => setDescription(e.target.value)} maxLength={500} rows={3} />
+        </label>
+      </div>
+
+      <footer className="purchase-form-footer">
+        <button className="quote-cancel-action" onClick={onCancel} type="button">Cancelar</button>
+        <button className="sage-primary-button" disabled={!canCreate} type="button">Crear</button>
+      </footer>
     </section>
   );
 }

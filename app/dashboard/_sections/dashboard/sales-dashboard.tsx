@@ -99,7 +99,7 @@ export function SalesDashboard({
         </aside>
       </section>
 
-      <SalesInvoiceTable rows={artificialSalesDashboardRows} totalItems={13} />
+      <SalesInvoiceTable rows={overdueInvoices} totalItems={overdueInvoices.length} />
 
       <section className="quotes-dashboard-grid" aria-label="Presupuestos">
         <div className="quotes-side-stack">

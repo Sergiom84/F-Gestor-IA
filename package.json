@@ -43,6 +43,7 @@
     "@types/node": "^24.10.1",
     "@types/react": "^19.2.16",
     "@types/react-dom": "^19.2.3",
+    "playwright": "^1.60.0",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3"
   },

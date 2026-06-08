@@ -54,9 +54,9 @@ export default async function OnboardingPage({ searchParams }: OnboardingPagePro
       <header className="topbar">
         <div className="page-title">
           <BrandLockup />
-          <h1>Configurar espacio fiscal</h1>
+          <h1>Configurar tu espacio de trabajo</h1>
           <p className="supporting-text">
-            Crea la organizacion, el primer cliente y la entidad fiscal para poder subir documentos.
+            Crea tu despacho o gestoría. Después añadirás clientes desde Contactos.
           </p>
         </div>
         <div className="topbar-actions">
@@ -75,58 +75,24 @@ export default async function OnboardingPage({ searchParams }: OnboardingPagePro
 
       <section className="panel onboarding-panel" aria-labelledby="onboarding-title">
         <div className="panel-header">
-          <h2 id="onboarding-title">Alta inicial</h2>
-          <span className="row-meta">RLS activo · owner automatico</span>
+          <h2 id="onboarding-title">Alta de gestor</h2>
+          <span className="row-meta">RLS activo · owner automático</span>
         </div>
         <form className="onboarding-form" action={createOnboardingWorkspace}>
           <div className="form-grid">
             <label className="field">
-              <span>Organizacion</span>
+              <span>Nombre del despacho / gestoría</span>
               <input
                 className="input"
                 name="organization_name"
-                defaultValue={defaultName ? `${defaultName} Fiscal` : ""}
+                defaultValue={defaultName ? `${defaultName} Asesores` : ""}
+                placeholder="Ej: García & Asociados Asesores"
                 maxLength={120}
                 required
               />
-            </label>
-
-            <label className="field">
-              <span>Cliente</span>
-              <input className="input" name="client_name" defaultValue={defaultName} maxLength={120} required />
-            </label>
-
-            <label className="field">
-              <span>Tipo cliente</span>
-              <select className="select" name="client_type" defaultValue="company" required>
-                <option value="company">Empresa</option>
-                <option value="individual">Particular/autonomo</option>
-              </select>
-            </label>
-
-            <label className="field">
-              <span>Entidad fiscal</span>
-              <input
-                className="input"
-                name="fiscal_entity_legal_name"
-                defaultValue={defaultName}
-                maxLength={160}
-                required
-              />
-            </label>
-
-            <label className="field">
-              <span>NIF/CIF</span>
-              <input className="input" name="fiscal_entity_tax_id" autoComplete="off" maxLength={32} />
-            </label>
-
-            <label className="field">
-              <span>Tipo entidad</span>
-              <select className="select" name="fiscal_entity_type" defaultValue="company" required>
-                <option value="company">Sociedad</option>
-                <option value="self_employed">Autonomo</option>
-                <option value="other">Otra</option>
-              </select>
+              <small className="field-hint">
+                Este es tu espacio de trabajo. Desde aquí gestionarás todos tus clientes.
+              </small>
             </label>
           </div>
 

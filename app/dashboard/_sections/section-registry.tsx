@@ -86,6 +86,8 @@ function DashboardHomeSection({ data }: { data: DashboardData }) {
         clientCount={data.clientCount}
         documentCount={data.documentCount}
         fiscalEntityCount={data.fiscalEntityCount}
+        totals={data.salesDashboardTotals}
+        overdueInvoices={data.overdueInvoices}
       />
     );
   }
@@ -126,6 +128,7 @@ function ReferenceModuleSection({
       fiscalEntityCount={data.fiscalEntityCount}
       needsReviewCount={data.needsReviewCount}
       ocrRequiredCount={data.ocrRequiredCount}
+      memberCount={data.memberCount}
     />
   );
 }

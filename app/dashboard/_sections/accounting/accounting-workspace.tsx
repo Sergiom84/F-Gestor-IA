@@ -98,7 +98,7 @@ export function AccountingWorkspace({ organizationName }: { organizationName: st
         ) : activeSection.id === "fixed-assets" ? (
           <ReferenceWorkspace
             title="Inmovilizado"
-            description="Activos, amortizaciones y bajas pendientes de conectar al modelo real."
+            description=""
             columns={["Codigo", "Descripcion", "Fecha de alta", "Cuenta", "Valor", "Estado", "Editar", "Eliminar"]}
           />
         ) : (
@@ -286,12 +286,12 @@ function MatchingWorkspace() {
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [showCategoryMenu, setShowCategoryMenu] = useState(false);
   const [query, setQuery] = useState("");
-  const [selectedSubjectId, setSelectedSubjectId] = useState(matchingSubjects[0]!.id);
+  const [selectedSubjectId, setSelectedSubjectId] = useState<string | null>(matchingSubjects[0]?.id ?? null);
   const [status, setStatus] = useState<MatchingStatus>("Apuntes sin marcar");
   const [showFilters, setShowFilters] = useState(false);
   const [showColumns, setShowColumns] = useState(false);
-  const selectedSubject = matchingSubjects.find((subject) => subject.id === selectedSubjectId) ?? matchingSubjects[0]!;
-  const lines = matchingLines[selectedSubject.id] ?? [];
+  const selectedSubject = matchingSubjects.find((subject) => subject.id === selectedSubjectId) ?? null;
+  const lines = selectedSubject ? (matchingLines[selectedSubject.id] ?? []) : [];
   const filteredSubjects = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
 
@@ -370,7 +370,7 @@ function MatchingWorkspace() {
         <div className="matching-subject-list">
           {filteredSubjects.map((subject) => (
             <button
-              className={`matching-subject-row${subject.id === selectedSubject.id ? " active" : ""}`}
+              className={`matching-subject-row${subject.id === selectedSubject?.id ? " active" : ""}`}
               key={subject.id}
               onClick={() => setSelectedSubjectId(subject.id)}
               type="button"
@@ -388,7 +388,7 @@ function MatchingWorkspace() {
       </aside>
 
       <section className="matching-main-pane">
-        <h1>{selectedSubject.name}</h1>
+        <h1>{selectedSubject?.name ?? "—"}</h1>
         <div className="matching-filter-grid">
           <AccountingField label="Estado">
             <select value={status} onChange={(event) => setStatus(event.target.value as MatchingStatus)}>
@@ -468,8 +468,8 @@ function MatchingWorkspace() {
         </section>
 
         <footer className="matching-sticky-bar">
-          <SummaryBox label="Saldo de cuenta" value={formatMoney(selectedSubject.amount)} />
-          <SummaryBox label="Descuadre" value={formatMoney(balance - selectedSubject.amount)} />
+          <SummaryBox label="Saldo de cuenta" value={formatMoney(selectedSubject?.amount ?? 0)} />
+          <SummaryBox label="Descuadre" value={formatMoney(balance - (selectedSubject?.amount ?? 0))} />
           <button className="matching-cancel-button" type="button">Cancelar</button>
           <button className="entry-balance-button matching-mark-button" disabled={lines.length === 0} type="button">Marcar</button>
         </footer>
@@ -496,9 +496,9 @@ function ClosingsWorkspace() {
       </header>
 
       <section className="closing-summary-grid" aria-label="Resumen de cierres">
-        <ClosingCard title="Cierre mensual" value="Junio abierto" description="Revisa descuadres, marcaje y documentos pendientes antes de cerrar." />
-        <ClosingCard title="Cierre de ejercicio" value="2026 en curso" description="El cierre anual queda disponible cuando todos los meses esten preparados." />
-        <ClosingCard title="FEC" value="No exportado" description="Archivo de escrituras contables pendiente de generacion." />
+        <ClosingCard title="Cierre mensual" value="Sin datos" description="" />
+        <ClosingCard title="Cierre de ejercicio" value="Sin datos" description="" />
+        <ClosingCard title="FEC" value="Sin datos" description="" />
       </section>
 
       <section className="sage-list-panel accounting-list-panel" aria-label="Periodos de cierre">

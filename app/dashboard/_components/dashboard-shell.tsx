@@ -110,14 +110,7 @@ function DashboardHeader({
       <div className="fiscal-title-block">
         <div className="fiscal-title-row">
           <h1>Hola, {displayName}</h1>
-          <span className="insights-pill">
-            <Sparkles aria-hidden="true" size={18} fill="currentColor" />
-            Copilot Insights
-          </span>
         </div>
-        <p>
-          En esta página se muestra información clave sobre tu negocio. Sage Active actualiza tus KPI cada 5 minutos.
-        </p>
       </div>
       <div className="fiscal-header-actions">
         <form className="org-switcher" action="/dashboard">

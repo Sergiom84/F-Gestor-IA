@@ -1,7 +1,9 @@
-import { FileSearch } from "lucide-react";
+"use client";
+
+import { FileSearch, Plus, UploadCloud, X } from "lucide-react";
+import { useState } from "react";
 import { SmallIndicatorCard } from "../../_components/erp-cards";
 import { applyModuleLiveValues, moduleCatalog } from "../../_lib/module-catalog";
-import { slugify } from "../../_lib/formatters";
 import type { AppModule } from "../../_lib/types";
 
 export function ModuleWorkspace({
@@ -10,7 +12,8 @@ export function ModuleWorkspace({
   documentCount,
   fiscalEntityCount,
   needsReviewCount,
-  ocrRequiredCount
+  ocrRequiredCount,
+  memberCount = 0
 }: {
   module: AppModule;
   clientCount: number;
@@ -18,15 +21,22 @@ export function ModuleWorkspace({
   fiscalEntityCount: number;
   needsReviewCount: number;
   ocrRequiredCount: number;
+  memberCount?: number;
 }) {
+  const [activeAction, setActiveAction] = useState<string | null>(null);
   const definition = moduleCatalog[module];
   const stats = applyModuleLiveValues(module, definition.stats, {
     clientCount,
     documentCount,
     fiscalEntityCount,
     needsReviewCount,
-    ocrRequiredCount
+    ocrRequiredCount,
+    memberCount
   });
+
+  const handleAction = (action: string) => {
+    setActiveAction((current) => (current === action ? null : action));
+  };
 
   return (
     <section className="module-workspace" aria-labelledby={`${module}-module-title`}>
@@ -37,11 +47,26 @@ export function ModuleWorkspace({
           <p>{definition.description}</p>
         </div>
         <div className="module-action-strip">
-          {definition.quickActions.slice(0, 2).map((action) => (
-            <a href={`#${module}-${slugify(action)}`} key={action}>{action}</a>
+          {definition.quickActions.slice(0, 2).map((action, index) => (
+            <button
+              key={action}
+              className={index === 0 ? "sage-primary-button" : "sage-ghost-link"}
+              onClick={() => handleAction(action)}
+              type="button"
+            >
+              {action}
+            </button>
           ))}
         </div>
       </div>
+
+      {activeAction ? (
+        <ActionPanel
+          action={activeAction}
+          module={module}
+          onClose={() => setActiveAction(null)}
+        />
+      ) : null}
 
       <div className="module-stats-grid">
         {stats.map((stat) => (
@@ -59,7 +84,14 @@ export function ModuleWorkspace({
           <h3>Accesos rapidos</h3>
           <div className="quick-links">
             {definition.quickActions.map((action) => (
-              <a href={`#${module}-${slugify(action)}`} key={action}>{action}</a>
+              <button
+                key={action}
+                className={`quick-link-button${activeAction === action ? " active" : ""}`}
+                onClick={() => handleAction(action)}
+                type="button"
+              >
+                {action}
+              </button>
             ))}
           </div>
         </aside>
@@ -108,5 +140,125 @@ export function ModuleWorkspace({
         </p>
       </section>
     </section>
+  );
+}
+
+function ActionPanel({
+  action,
+  module,
+  onClose
+}: {
+  action: string;
+  module: AppModule;
+  onClose: () => void;
+}) {
+  const isImport = action.toLowerCase().includes("importar") || action.toLowerCase().includes("subir") || action.toLowerCase().includes("ejecutar");
+  const isCreate = action.toLowerCase().includes("crear") || action.toLowerCase().includes("anadir");
+
+  return (
+    <div className="module-action-panel" role="region" aria-label={action}>
+      <div className="module-action-panel-header">
+        <h3>{action}</h3>
+        <button className="panel-icon-button" onClick={onClose} type="button" aria-label="Cerrar panel">
+          <X aria-hidden="true" size={18} />
+        </button>
+      </div>
+
+      {isImport ? (
+        <ImportActionBody action={action} onClose={onClose} />
+      ) : isCreate ? (
+        <CreateActionBody action={action} module={module} onClose={onClose} />
+      ) : (
+        <ComingSoonBody action={action} />
+      )}
+    </div>
+  );
+}
+
+function ImportActionBody({ action, onClose }: { action: string; onClose: () => void }) {
+  const [files, setFiles] = useState<string[]>([]);
+
+  const registerFiles = (fileList: FileList | null) => {
+    if (!fileList?.length) return;
+    setFiles(Array.from(fileList).map((f) => f.name));
+  };
+
+  return (
+    <div className="module-action-body">
+      <label
+        className="purchase-drop-zone module-drop-zone"
+        onDragOver={(e) => e.preventDefault()}
+        onDrop={(e) => { e.preventDefault(); registerFiles(e.dataTransfer.files); }}
+      >
+        <input
+          accept="application/pdf,text/csv,application/vnd.ms-excel,.xlsx,.ofx,.qif"
+          multiple
+          onChange={(e) => registerFiles(e.target.files)}
+          type="file"
+        />
+        <UploadCloud aria-hidden="true" size={72} />
+        <span>
+          <strong>Arrastra los ficheros hasta aqui</strong>
+          <small>PDF, CSV, Excel, OFX o QIF</small>
+        </span>
+      </label>
+      {files.length > 0 ? (
+        <div className="purchase-upload-strip">
+          <strong>{files.length} fichero(s) listo(s)</strong>
+          <span>{files.join(", ")}</span>
+        </div>
+      ) : null}
+      <div className="module-action-footer">
+        <button className="quote-cancel-action" onClick={onClose} type="button">Cancelar</button>
+        <button className="sage-primary-button" disabled={files.length === 0} type="button">
+          Importar
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function CreateActionBody({ action, module, onClose }: { action: string; module: AppModule; onClose: () => void }) {
+  const [name, setName] = useState("");
+  const [code, setCode] = useState("");
+  const canCreate = name.trim().length > 0;
+
+  const fieldLabel = module === "banks" ? "Nombre del banco" : "Nombre";
+  const codeLabel = module === "banks" ? "IBAN / numero de cuenta" : "Codigo";
+
+  return (
+    <div className="module-action-body">
+      <div className="module-create-grid">
+        <label className="sage-field">
+          <span>{fieldLabel} *</span>
+          <input value={name} onChange={(e) => setName(e.target.value)} />
+        </label>
+        <label className="sage-field">
+          <span>{codeLabel}</span>
+          <input value={code} onChange={(e) => setCode(e.target.value)} />
+        </label>
+        {module === "banks" ? (
+          <label className="sage-field">
+            <span>Alias</span>
+            <input placeholder="Ej. Cuenta principal" />
+          </label>
+        ) : null}
+      </div>
+      <div className="module-action-footer">
+        <button className="quote-cancel-action" onClick={onClose} type="button">Cancelar</button>
+        <button className="sage-primary-button" disabled={!canCreate} type="button">Crear</button>
+      </div>
+    </div>
+  );
+}
+
+function ComingSoonBody({ action }: { action: string }) {
+  return (
+    <div className="module-action-body module-coming-soon">
+      <p>
+        <strong>{action}</strong> estara disponible cuando esta seccion se conecte al modelo real de datos.
+      </p>
+      <p className="module-coming-soon-sub">Esta superficie tiene la estructura y logica visual preparada.</p>
+    </div>
   );
 }

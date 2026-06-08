@@ -87,7 +87,7 @@ export function AccountingDashboard({
           <AccountingRatioCard
             title="Rendimiento sobre ventas"
             description="Resultado de explotación dividido entre ventas por 100 (ejercicio en curso hasta la fecha)"
-            ratio="87%"
+            ratio="0%"
             metrics={[
               { label: "Resultado de explotación", value: accountingValues.operatingResult },
               { label: "Ventas", value: accountingValues.sales }
@@ -96,7 +96,7 @@ export function AccountingDashboard({
           <AccountingRatioCard
             title="Rendimiento sobre activos"
             description="Resultado de explotación dividido entre activos por 100 (ejercicio en curso hasta la fecha)"
-            ratio="70%"
+            ratio="0%"
             metrics={[
               { label: "Resultado de explotación", value: accountingValues.operatingResult },
               { label: "Activos", value: accountingValues.assets }
@@ -105,7 +105,7 @@ export function AccountingDashboard({
           <AccountingRatioCard
             title="Rendimiento sobre patrimonio neto"
             description="Resultado neto dividido entre patrimonio neto por 100 (ejercicio en curso hasta la fecha)"
-            ratio="100%"
+            ratio="0%"
             metrics={[
               { label: "Resultado neto", value: accountingValues.profitBeforeTax },
               { label: "Patrimonio neto", value: accountingValues.netWorth }

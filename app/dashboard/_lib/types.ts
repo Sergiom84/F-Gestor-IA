@@ -61,3 +61,41 @@ export type SalesInvoiceRow = {
   customerCode: string;
   total: number;
 };
+
+export type ClientRow = {
+  id: string;
+  name: string;
+  type: "individual" | "company";
+  contact_email: string | null;
+  contact_phone: string | null;
+  status: string;
+};
+
+export type SupplierRow = {
+  id: string;
+  name: string;
+  tax_id: string | null;
+  contact_email: string | null;
+  status: string;
+};
+
+export type SalesDocRow = {
+  id: string;
+  status: string;
+  date: string;
+  number: string;
+  reference: string;
+  clientName: string;
+  total: number;
+};
+
+export type PurchaseDocRow = {
+  id: string;
+  status: string;
+  invoiceDate: string;
+  dueDate: string;
+  invoiceNumber: string;
+  supplierName: string;
+  total: number;
+  tab: "review" | "pay" | "paid";
+};

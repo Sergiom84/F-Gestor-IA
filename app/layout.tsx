@@ -23,7 +23,7 @@ export default function RootLayout({
   children: ReactNode;
 }>) {
   return (
-    <html lang="es">
+    <html className="gfiscal-zoom-out ft-compact" lang="es">
       <body className={plusJakartaSans.variable}>
         <div className="app-shell">{children}</div>
       </body>

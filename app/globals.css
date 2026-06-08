@@ -3775,13 +3775,20 @@ a {
   min-height: 100vh;
 }
 
+.products-module-shell.nav-collapsed {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .products-secondary-nav {
   background: #252525;
   border-left: 1px solid #1c1c1c;
+  border-radius: 0 8px 8px 0;
   color: #ffffff;
   display: grid;
   grid-auto-rows: min-content;
   gap: 18px;
+  height: fit-content;
+  align-self: start;
   padding: 18px 8px 28px;
 }
 
@@ -5760,4 +5767,100 @@ a {
   .matching-sticky-bar {
     grid-template-columns: 1fr;
   }
+}
+
+/* Module workspace action panel */
+.module-action-panel {
+  background: #ffffff;
+  border: 1px solid #dde3e8;
+  border-radius: 10px;
+  margin-bottom: 20px;
+  padding: 20px 24px;
+}
+
+.module-action-panel-header {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.module-action-panel-header h3 {
+  font-size: 1.05rem;
+  font-weight: 700;
+  margin: 0;
+}
+
+.module-action-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.module-drop-zone {
+  max-width: 480px;
+}
+
+.module-create-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: 1fr 1fr;
+  max-width: 520px;
+}
+
+.module-action-footer {
+  display: flex;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.module-coming-soon {
+  color: #555;
+  max-width: 420px;
+}
+
+.module-coming-soon-sub {
+  color: #888;
+  font-size: 0.88rem;
+}
+
+/* Quick link buttons replacing <a> tags */
+.quick-link-button {
+  background: transparent;
+  border: 0;
+  color: var(--sage-primary, #5c5bff);
+  cursor: pointer;
+  display: block;
+  font-size: 0.9rem;
+  font-weight: 600;
+  padding: 4px 0;
+  text-align: left;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.quick-link-button:hover {
+  opacity: 0.75;
+}
+
+.quick-link-button.active {
+  color: #1a1a1a;
+  text-decoration: none;
+}
+
+/* Ghost link style for header secondary action */
+.sage-ghost-link {
+  background: transparent;
+  border: 0;
+  color: var(--sage-primary, #5c5bff);
+  cursor: pointer;
+  font-size: 0.95rem;
+  font-weight: 600;
+  padding: 8px 16px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.sage-ghost-link:hover {
+  opacity: 0.75;
 }

@@ -142,15 +142,15 @@ export const moduleCatalog: Record<AppModule, ModuleDefinition> = {
   banks: {
     title: "Bancos",
     eyebrow: "Active_Bank",
-    description: "Cuentas bancarias, efectivo, extractos, conciliacion y movimientos.",
+    description: "",
     quickActions: referenceQuickActions("banks", ["Importar extracto", "Conciliar movimientos", "Crear cuenta bancaria"]),
     stats: [
-      { label: "Cuentas", value: "0", description: "Cuentas bancarias o efectivo configuradas." },
-      { label: "Movimientos", value: "0", description: "Transacciones pendientes de procesar." },
-      { label: "Sin conciliar", value: "0", description: "Asientos bancarios no conciliados." }
+      { label: "Cuentas", value: "0", description: "" },
+      { label: "Movimientos", value: "0", description: "" },
+      { label: "Sin conciliar", value: "0", description: "" }
     ],
     tableTitle: "Movimientos bancarios",
-    tableDescription: "Transacciones para importar, clasificar y conciliar.",
+    tableDescription: "",
     tableHeaders: ["Fecha", "Cuenta", "Descripcion", "Importe", "Estado", "Acciones"],
     emptyTitle: "No hay movimientos bancarios.",
     emptyDescription: "Conecta una cuenta o importa un extracto para empezar."
@@ -174,15 +174,15 @@ export const moduleCatalog: Record<AppModule, ModuleDefinition> = {
   tax: {
     title: "Declaraciones",
     eyebrow: "Active_TaxDeclaration",
-    description: "IVA, modelos oficiales, VeriFactu, obligaciones legales y presentaciones.",
+    description: "",
     quickActions: referenceQuickActions("tax", ["Preparar declaracion", "Revisar IVA", "Ver obligaciones"]),
     stats: [
-      { label: "Declaraciones", value: "0", description: "Modelos preparados o presentados." },
-      { label: "IVA", value: "Pendiente", description: "Proxima liquidacion por revisar." },
-      { label: "VeriFactu", value: "Preparado", description: "Superficie para estado normativo de facturas." }
+      { label: "Declaraciones", value: "0", description: "" },
+      { label: "IVA", value: "Pendiente", description: "" },
+      { label: "VeriFactu", value: "Preparado", description: "" }
     ],
     tableTitle: "Obligaciones fiscales",
-    tableDescription: "Modelos y declaraciones pendientes de preparar o presentar.",
+    tableDescription: "",
     tableHeaders: ["Modelo", "Periodo", "Estado", "Vencimiento", "Importe", "Acciones"],
     emptyTitle: "No hay declaraciones pendientes.",
     emptyDescription: "Configura impuestos y periodos para activar el calendario fiscal."
@@ -190,15 +190,15 @@ export const moduleCatalog: Record<AppModule, ModuleDefinition> = {
   reports: {
     title: "Informes",
     eyebrow: "Active_ReportAccounting",
-    description: "Informes financieros, cierre de ejercicio, clientes, proveedores y favoritos.",
+    description: "",
     quickActions: referenceQuickActions("reports", ["Ejecutar informe", "Exportar balance", "Guardar favorito"]),
     stats: [
-      { label: "Informes", value: "0", description: "Vistas guardadas o disponibles para consulta." },
-      { label: "Favoritos", value: "0", description: "Informes marcados para acceso rapido." },
-      { label: "Exportaciones", value: "0", description: "Descargas generadas en el periodo." }
+      { label: "Informes", value: "0", description: "" },
+      { label: "Favoritos", value: "0", description: "" },
+      { label: "Exportaciones", value: "0", description: "" }
     ],
     tableTitle: "Biblioteca de informes",
-    tableDescription: "Informes clave para analizar actividad, resultados y cumplimiento.",
+    tableDescription: "",
     tableHeaders: ["Informe", "Area", "Periodo", "Ultima ejecucion", "Estado", "Acciones"],
     emptyTitle: "No hay informes guardados.",
     emptyDescription: "Los informes financieros y fiscales apareceran aqui cuando se configuren."
@@ -206,15 +206,15 @@ export const moduleCatalog: Record<AppModule, ModuleDefinition> = {
   settings: {
     title: "Configuracion",
     eyebrow: "Active_Settings",
-    description: "Preferencias de empresa, usuarios, permisos, impuestos, numeracion e integraciones.",
+    description: "",
     quickActions: referenceQuickActions("settings", ["Configurar empresa", "Gestionar usuarios", "Revisar impuestos"]),
     stats: [
-      { label: "Usuarios", value: "0", description: "Miembros con acceso a la organizacion." },
-      { label: "Permisos", value: "Base", description: "Roles activos para las areas principales." },
-      { label: "Integraciones", value: "0", description: "Conexiones externas listas para activar." }
+      { label: "Usuarios", value: "0", description: "" },
+      { label: "Permisos", value: "Base", description: "" },
+      { label: "Integraciones", value: "0", description: "" }
     ],
     tableTitle: "Ajustes principales",
-    tableDescription: "Configuraciones disponibles por area de GFiscal.",
+    tableDescription: "",
     tableHeaders: ["Area", "Estado", "Responsable", "Ultimo cambio", "Acciones"],
     emptyTitle: "No hay ajustes personalizados.",
     emptyDescription: "Los ajustes avanzados apareceran aqui cuando se conecten al modelo real."
@@ -230,6 +230,7 @@ export function applyModuleLiveValues(
     fiscalEntityCount: number;
     needsReviewCount: number;
     ocrRequiredCount: number;
+    memberCount: number;
   }
 ) {
   return stats.map((stat) => {
@@ -251,6 +252,10 @@ export function applyModuleLiveValues(
 
     if (module === "tax" && stat.label === "Declaraciones") {
       return { ...stat, value: counts.fiscalEntityCount.toLocaleString("es-ES") };
+    }
+
+    if (module === "settings" && stat.label === "Usuarios") {
+      return { ...stat, value: counts.memberCount.toLocaleString("es-ES") };
     }
 
     return stat;

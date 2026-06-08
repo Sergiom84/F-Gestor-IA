@@ -25,15 +25,9 @@ import {
 } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import {
-  artificialSalesCustomers,
-  artificialSalesDefaults,
-  artificialSalesDocuments
-} from "../../_data/artificial-business-data";
-import type {
-  ArtificialSalesDocumentRow,
-  SalesSectionId
-} from "../../_data/artificial-business-data";
+import { artificialSalesDefaults } from "../../_data/artificial-business-data";
+import type { SalesSectionId } from "../../_data/artificial-business-data";
+import type { SalesDocRow } from "../../_lib/types";
 import { formatMoney } from "../../_lib/formatters";
 
 type QuoteFormTab = "products" | "totals" | "notes" | "client";
@@ -52,7 +46,16 @@ type SalesSection = {
   numberLabel: string;
 };
 
-type SalesDocumentRow = ArtificialSalesDocumentRow;
+type SalesDocumentRow = {
+  id: string;
+  status: string;
+  date: string;
+  number: string;
+  reference: string;
+  clientCode: string;
+  client: string;
+  total: number;
+};
 
 type QuoteLine = {
   id: number;
@@ -312,17 +315,6 @@ function DocumentList({
       <header className="sales-operation-header">
         <div className="sales-operation-title">
           <h1>{activeSection.title}</h1>
-          <button
-            className="insights-pill sales-insights-pill"
-            onClick={() => {
-              setShowInsights((current) => !current);
-              onSettingsPanelChange(null);
-            }}
-            type="button"
-          >
-            <Sparkles aria-hidden="true" size={18} fill="currentColor" />
-            Copilot Insights
-          </button>
         </div>
         <div className="sales-settings-menu">
           <button className="sales-settings-button" onClick={onToggleSettings} type="button">
@@ -781,7 +773,7 @@ function QuoteForm({ section, onCancel }: { section: SalesSection; onCancel: () 
   const [activeTab, setActiveTab] = useState<QuoteFormTab>("products");
   const [client, setClient] = useState("");
   const [reference, setReference] = useState("");
-  const [quoteDate, setQuoteDate] = useState(artificialSalesDefaults.quoteDate);
+  const [quoteDate, setQuoteDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [lines, setLines] = useState<QuoteLine[]>([]);
   const [discountPercent, setDiscountPercent] = useState(0);
   const [customMessage, setCustomMessage] = useState("");
@@ -837,9 +829,6 @@ function QuoteForm({ section, onCancel }: { section: SalesSection; onCancel: () 
             <span>Cliente</span>
             <select value={client} onChange={(event) => setClient(event.target.value)}>
               <option value="">Seleccionar...</option>
-              {artificialSalesCustomers.map((customer) => (
-                <option key={customer} value={customer}>{customer}</option>
-              ))}
             </select>
           </label>
           <label className="sage-field">
