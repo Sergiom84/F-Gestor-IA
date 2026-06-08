@@ -90,6 +90,7 @@ export async function readDashboardData(params?: DashboardSearchParams): Promise
   const activeModule = resolveAppModule(params?.module);
   const activeTab = resolveDashboardTab(params?.tab);
   const canUseLightModulePayload = activeModule === "sales"
+    || activeModule === "quotes"
     || activeModule === "purchases"
     || activeModule === "contacts"
     || activeModule === "products"
@@ -129,7 +130,9 @@ export async function readDashboardData(params?: DashboardSearchParams): Promise
   const cleanDocumentCount = Math.max(documentCount - needsReviewCount - ocrRequiredCount, 0);
   const automationRate = documentCount > 0 ? Math.round((cleanDocumentCount / documentCount) * 100) : 0;
   const reviewRate = documentCount > 0 ? Math.round((needsReviewCount / documentCount) * 100) : 0;
-  const uploadCoverage = fiscalEntityCount > 0 ? 100 : 0;
+  const uploadCoverage = clientCount > 0
+    ? Math.round((fiscalEntityCount / clientCount) * 100)
+    : 0;
 
   return {
     activeMembership,

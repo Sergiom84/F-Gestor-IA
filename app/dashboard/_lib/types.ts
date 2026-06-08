@@ -3,6 +3,7 @@ export type DashboardTab = "accounting" | "management" | "sales";
 export type AppModule =
   | "dashboard"
   | "sales"
+  | "quotes"
   | "purchases"
   | "contacts"
   | "products"

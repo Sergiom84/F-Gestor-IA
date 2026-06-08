@@ -106,19 +106,22 @@ const salesSections: SalesSection[] = [
   }
 ];
 
-const initialSalesDocuments: Record<SalesSectionId, SalesDocumentRow[]> = artificialSalesDocuments;
-
 const salesSectionIds = new Set<SalesSectionId>(salesSections.map((section) => section.id));
 
 function resolveSalesSectionId(value: string | null): SalesSectionId | null {
   return value && salesSectionIds.has(value as SalesSectionId) ? value as SalesSectionId : null;
 }
 
-export function SalesWorkspace({ organizationName }: { organizationName: string }) {
+type SalesWorkspaceProps = {
+  organizationName: string;
+  initialDocuments?: Record<SalesSectionId, SalesDocumentRow[]>;
+};
+
+export function SalesWorkspace({ organizationName, initialDocuments }: SalesWorkspaceProps) {
   const searchParams = useSearchParams();
   const sectionFromUrl = resolveSalesSectionId(searchParams.get("salesSection"));
   const [activeSectionId, setActiveSectionId] = useState<SalesSectionId>(sectionFromUrl ?? "quotes");
-  const [documentsBySection, setDocumentsBySection] = useState<Record<SalesSectionId, SalesDocumentRow[]>>(initialSalesDocuments);
+  const [documentsBySection, setDocumentsBySection] = useState<Record<SalesSectionId, SalesDocumentRow[]>>(initialDocuments ?? artificialSalesDocuments);
   const [showSectionNav, setShowSectionNav] = useState(sectionFromUrl === null);
   const [isCreating, setIsCreating] = useState(false);
   const [query, setQuery] = useState("");

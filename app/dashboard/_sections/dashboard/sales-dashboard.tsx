@@ -11,26 +11,40 @@ import type { ReactNode } from "react";
 import { SmallIndicatorCard } from "../../_components/erp-cards";
 import {
   artificialSalesDashboardRows,
-  artificialSalesDashboardTotals
+  artificialSalesDashboardTotals,
+  artificialSalesDocuments
 } from "../../_data/artificial-business-data";
+
+type SalesDashboardMetrics = {
+  pendingCollection?: number;
+  pendingPayment?: number;
+  overdueCollection?: number;
+  overduePayment?: number;
+  purchaseInvoicesTotal?: number;
+};
 import { formatMoney } from "../../_lib/formatters";
 import type { SalesInvoiceRow } from "../../_lib/types";
 
 export function SalesDashboard({
   clientCount,
   documentCount,
-  fiscalEntityCount
+  fiscalEntityCount,
+  pendingCollection: pendingCollectionProp,
+  pendingPayment: pendingPaymentProp,
+  overdueCollection: overdueCollectionProp,
+  overduePayment: overduePaymentProp,
+  purchaseInvoicesTotal: purchaseInvoicesTotalProp
 }: {
   clientCount: number;
   documentCount: number;
   fiscalEntityCount: number;
-}) {
-  const {
-    pendingCollection,
-    pendingPayment,
-    purchaseInvoicesTotal
-  } = artificialSalesDashboardTotals;
-  const convertedQuotes = Math.max(Math.min(documentCount, 1), 1);
+} & SalesDashboardMetrics) {
+  const pendingCollection = pendingCollectionProp ?? artificialSalesDashboardTotals.pendingCollection;
+  const pendingPayment = pendingPaymentProp ?? artificialSalesDashboardTotals.pendingPayment;
+  const overdueCollection = overdueCollectionProp ?? artificialSalesDashboardTotals.overdueCollection;
+  const overduePayment = overduePaymentProp ?? artificialSalesDashboardTotals.overduePayment;
+  const purchaseInvoicesTotal = purchaseInvoicesTotalProp ?? artificialSalesDashboardTotals.purchaseInvoicesTotal;
+  const convertedQuotes = artificialSalesDocuments.quotes.filter((q) => q.status === "Cerrado").length;
   const activeClients = clientCount > 0 ? clientCount : 45;
 
   return (
@@ -42,12 +56,14 @@ export function SalesDashboard({
             icon={<FileText aria-hidden="true" size={27} />}
             title="Pendiente de cobro"
             amount={pendingCollection}
+            overdueAmount={overdueCollection}
             links={["Ver vencimientos", "Ver antiguedad de saldos"]}
           />
           <OutstandingAmountCard
             icon={<BadgeEuro aria-hidden="true" size={27} />}
             title="Pendiente de pago"
             amount={pendingPayment}
+            overdueAmount={overduePayment}
             links={["Ver vencimientos", "Ver antiguedad de saldos"]}
           />
         </div>
@@ -163,11 +179,13 @@ function OutstandingAmountCard({
   icon,
   title,
   amount,
+  overdueAmount,
   links
 }: {
   icon: ReactNode;
   title: string;
   amount: number;
+  overdueAmount: number;
   links: string[];
 }) {
   return (
@@ -177,7 +195,7 @@ function OutstandingAmountCard({
         <h3>{title}</h3>
       </div>
       <p>
-        {formatMoney(amount)} <span>Importe vencido:</span>
+        <span>Importe vencido:</span> {formatMoney(overdueAmount)}
       </p>
       <div className="outstanding-bar" aria-hidden="true" />
       <strong>{formatMoney(amount)} Total</strong>

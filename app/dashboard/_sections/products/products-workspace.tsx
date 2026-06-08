@@ -5,9 +5,11 @@ import {
   ChevronDown,
   ChevronUp,
   Filter,
+  PenLine,
   Plus,
   Search,
   SearchX,
+  Trash2,
   X
 } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -29,6 +31,7 @@ const discountItemColumns = ["Codigo de producto o servicio", "Nombre", "Unidad 
 
 export function ProductsWorkspace({ organizationName }: { organizationName: string }) {
   const [view, setView] = useState<ProductsView>("product");
+  const [formKey, setFormKey] = useState(0);
 
   const openProduct = () => setView("product");
   const openTariffs = () => setView("tariffs");
@@ -64,7 +67,7 @@ export function ProductsWorkspace({ organizationName }: { organizationName: stri
 
       <div className="products-operation-surface">
         {view === "product" ? (
-          <ProductServiceForm />
+          <ProductServiceForm key={formKey} onCancel={() => setFormKey((k) => k + 1)} />
         ) : view === "tariffs" ? (
           <ReferenceList
             columns={tariffColumns}
@@ -90,7 +93,7 @@ export function ProductsWorkspace({ organizationName }: { organizationName: stri
   );
 }
 
-function ProductServiceForm() {
+function ProductServiceForm({ onCancel }: { onCancel?: () => void }) {
   const [activeTab, setActiveTab] = useState<ProductFormTab>("basic");
   const [category, setCategory] = useState<ProductCategory>("product");
   const [code, setCode] = useState("");
@@ -114,7 +117,7 @@ function ProductServiceForm() {
   return (
     <section className="product-form-screen" aria-label="Alta de producto o servicio">
       <header className="product-form-close-row">
-        <button className="quote-close-button" type="button" aria-label="Cerrar formulario">
+        <button className="quote-close-button" onClick={onCancel} type="button" aria-label="Cerrar formulario">
           <X aria-hidden="true" size={34} />
         </button>
       </header>
@@ -279,6 +282,7 @@ function ProductServiceForm() {
 
       <ProductStickyBar
         canCreate={canCreate}
+        {...(onCancel !== undefined ? { onCancel } : {})}
         summaries={[
           { label: "Precio", value: priceValue },
           { label: "Precio con IVA y descuento", value: priceWithTax }
@@ -363,10 +367,14 @@ function ReferenceList({
   );
 }
 
+type TariffItemRow = { id: number };
+type DiscountItemRow = { id: number };
+
 function TariffForm({ onCancel }: { onCancel: () => void }) {
   const [code, setCode] = useState("");
   const [name, setName] = useState("");
   const [active, setActive] = useState(true);
+  const [items, setItems] = useState<TariffItemRow[]>([]);
   const canCreate = code.trim().length > 0 && name.trim().length > 0;
 
   return (
@@ -404,12 +412,20 @@ function TariffForm({ onCancel }: { onCancel: () => void }) {
           <ToggleButton active={active} activeLabel="ON" inactiveLabel="OFF" onToggle={() => setActive((current) => !current)} />
         </div>
       </div>
-      <button className="sage-primary-button product-add-line-button" type="button">
+      <button
+        className="sage-primary-button product-add-line-button"
+        onClick={() => setItems((current) => [...current, { id: Date.now() }])}
+        type="button"
+      >
         <Plus aria-hidden="true" size={22} />
         Anadir
       </button>
-      <FormItemsTable columns={tariffItemColumns} />
-      <ProductStickyBar canCreate={canCreate} />
+      <FormItemsTable
+        columns={tariffItemColumns}
+        items={items}
+        onRemoveItem={(id) => setItems((current) => current.filter((item) => item.id !== id))}
+      />
+      <ProductStickyBar canCreate={canCreate} onCancel={onCancel} />
     </section>
   );
 }
@@ -418,6 +434,7 @@ function DiscountGroupForm({ onCancel }: { onCancel: () => void }) {
   const [code, setCode] = useState("");
   const [description, setDescription] = useState("");
   const [active, setActive] = useState(true);
+  const [items, setItems] = useState<DiscountItemRow[]>([]);
   const canCreate = code.trim().length > 0 && description.trim().length > 0;
 
   return (
@@ -447,12 +464,20 @@ function DiscountGroupForm({ onCancel }: { onCancel: () => void }) {
           <ToggleButton active={active} activeLabel="ON" inactiveLabel="OFF" onToggle={() => setActive((current) => !current)} />
         </div>
       </div>
-      <button className="sage-primary-button product-add-line-button" type="button">
+      <button
+        className="sage-primary-button product-add-line-button"
+        onClick={() => setItems((current) => [...current, { id: Date.now() }])}
+        type="button"
+      >
         <Plus aria-hidden="true" size={22} />
         Anadir
       </button>
-      <FormItemsTable columns={discountItemColumns} />
-      <ProductStickyBar canCreate={canCreate} />
+      <FormItemsTable
+        columns={discountItemColumns}
+        items={items}
+        onRemoveItem={(id) => setItems((current) => current.filter((item) => item.id !== id))}
+      />
+      <ProductStickyBar canCreate={canCreate} onCancel={onCancel} />
     </section>
   );
 }
@@ -563,7 +588,15 @@ function InlineEmptyTable({ columns, title }: { columns: string[]; title: string
   );
 }
 
-function FormItemsTable({ columns }: { columns: string[] }) {
+function FormItemsTable({
+  columns,
+  items = [],
+  onRemoveItem
+}: {
+  columns: string[];
+  items?: Array<{ id: number }>;
+  onRemoveItem?: (id: number) => void;
+}) {
   return (
     <div className="product-form-table-wrap">
       <table className="products-data-table product-form-table">
@@ -575,9 +608,32 @@ function FormItemsTable({ columns }: { columns: string[] }) {
           </tr>
         </thead>
         <tbody>
-          <tr>
-            <td colSpan={columns.length}>Esta lista esta en blanco.</td>
-          </tr>
+          {items.length > 0 ? items.map((item) => (
+            <tr key={item.id}>
+              {columns.slice(0, -2).map((col) => (
+                <td key={col}><input className="products-table-input" /></td>
+              ))}
+              <td>
+                <button className="sage-table-button" type="button" aria-label="Editar">
+                  <PenLine aria-hidden="true" size={20} fill="currentColor" />
+                </button>
+              </td>
+              <td>
+                <button
+                  className="sage-table-button danger"
+                  onClick={() => onRemoveItem?.(item.id)}
+                  type="button"
+                  aria-label="Eliminar"
+                >
+                  <Trash2 aria-hidden="true" size={20} fill="currentColor" />
+                </button>
+              </td>
+            </tr>
+          )) : (
+            <tr>
+              <td colSpan={columns.length}>Esta lista esta en blanco.</td>
+            </tr>
+          )}
         </tbody>
       </table>
     </div>
@@ -586,9 +642,11 @@ function FormItemsTable({ columns }: { columns: string[] }) {
 
 function ProductStickyBar({
   canCreate,
+  onCancel,
   summaries = []
 }: {
   canCreate: boolean;
+  onCancel?: () => void;
   summaries?: Array<{ label: string; value: number }>;
 }) {
   return (
@@ -596,7 +654,7 @@ function ProductStickyBar({
       {summaries.map((summary) => (
         <SummaryBox key={summary.label} label={summary.label} value={summary.value} />
       ))}
-      <button className="quote-cancel-action" type="button">Cancelar</button>
+      <button className="quote-cancel-action" onClick={onCancel} type="button">Cancelar</button>
       <button className="quote-create-action" disabled={!canCreate} type="button">Crear</button>
       <button className="quote-create-more" disabled={!canCreate} type="button" aria-label="Mas opciones de creacion">
         <ChevronDown aria-hidden="true" size={18} />

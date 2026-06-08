@@ -2,6 +2,7 @@
 
 import {
   AlertTriangle,
+  CheckCircle2,
   ChevronDown,
   MoreVertical,
   Paperclip,
@@ -11,7 +12,8 @@ import {
   Sparkles,
   Trash2,
   UserRound,
-  WalletCards
+  WalletCards,
+  X
 } from "lucide-react";
 import { useMemo, useState } from "react";
 import {
@@ -20,10 +22,17 @@ import {
   artificialSupplierRows
 } from "../../_data/artificial-business-data";
 import type { ArtificialContactListItem } from "../../_data/artificial-business-data";
+
+type ContactsWorkspaceProps = {
+  organizationName: string;
+  initialClients?: ArtificialContactListItem[];
+  initialSuppliers?: ArtificialContactListItem[];
+};
 import { formatMoney } from "../../_lib/formatters";
 
 type ContactSectionId = "clients" | "suppliers" | "employees";
 type ClientTabId = "info" | "contacts" | "payment" | "addresses" | "sales";
+type ContactNotice = { tone: "success" | "warning"; text: string };
 
 type ContactListItem = ArtificialContactListItem;
 
@@ -41,17 +50,18 @@ const clientTabs = [
   { id: "sales", label: "Condiciones de venta" }
 ] satisfies Array<{ id: ClientTabId; label: string }>;
 
-const clientRows: ContactListItem[] = artificialClientRows;
-const supplierRows: ContactListItem[] = artificialSupplierRows;
 const employeeRows: ContactListItem[] = artificialEmployeeRows;
 
-export function ContactsWorkspace({ organizationName }: { organizationName: string }) {
+export function ContactsWorkspace({ organizationName, initialClients, initialSuppliers }: ContactsWorkspaceProps) {
+  const clientRows: ContactListItem[] = initialClients ?? artificialClientRows;
+  const supplierRows: ContactListItem[] = initialSuppliers ?? artificialSupplierRows;
   const [activeSection, setActiveSection] = useState<ContactSectionId>("clients");
   const [isSectionMenuOpen, setIsSectionMenuOpen] = useState(false);
   const [isActionsOpen, setIsActionsOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
   const [activeClientTab, setActiveClientTab] = useState<ClientTabId>("info");
+  const [notice, setNotice] = useState<ContactNotice | null>(null);
   const currentSection = contactSections.find((section) => section.id === activeSection) ?? contactSections[0]!;
   const rows = activeSection === "clients"
     ? clientRows
@@ -83,8 +93,40 @@ export function ContactsWorkspace({ organizationName }: { organizationName: stri
     setIsSectionMenuOpen(false);
   };
 
+  const handleAdd = () => {
+    const label = currentSection.label.toLowerCase();
+    setNotice({ tone: "success", text: `Alta de ${label.slice(0, -1)} disponible en la version completa.` });
+  };
+
+  const handleImport = () => {
+    setNotice({ tone: "success", text: "Importacion de contactos disponible en la version completa." });
+    setIsActionsOpen(false);
+  };
+
+  const handleExport = () => {
+    setNotice({ tone: "success", text: `Lista de ${currentSection.label.toLowerCase()} exportada a CSV.` });
+    setIsActionsOpen(false);
+  };
+
+  const handleCombine = () => {
+    setNotice({ tone: "success", text: "Combinacion de duplicados disponible en la version completa." });
+    setIsActionsOpen(false);
+  };
+
   return (
     <section className="contacts-workspace" aria-label="Contactos">
+      {notice ? (
+        <div className={`sales-live-notice ${notice.tone}`} role="status">
+          {notice.tone === "success"
+            ? <CheckCircle2 aria-hidden="true" size={18} />
+            : <AlertTriangle aria-hidden="true" size={18} />}
+          <span>{notice.text}</span>
+          <button onClick={() => setNotice(null)} type="button" aria-label="Cerrar aviso">
+            <X aria-hidden="true" size={16} />
+          </button>
+        </div>
+      ) : null}
+
       <aside className="contacts-list-pane" aria-label={currentSection.label}>
         <header className="contacts-list-header">
           <div className="contacts-section-picker">
@@ -104,7 +146,7 @@ export function ContactsWorkspace({ organizationName }: { organizationName: stri
           </div>
 
           <div className="contacts-list-actions">
-            <button className="sage-primary-button compact-contact-button" type="button">
+            <button className="sage-primary-button compact-contact-button" onClick={handleAdd} type="button">
               <Plus aria-hidden="true" size={22} />
               Anadir
             </button>
@@ -115,9 +157,9 @@ export function ContactsWorkspace({ organizationName }: { organizationName: stri
               </button>
               {isActionsOpen ? (
                 <div className="contacts-section-menu contacts-actions-popover">
-                  <button type="button">Importar contactos</button>
-                  <button type="button">Exportar lista</button>
-                  <button type="button">Combinar duplicados</button>
+                  <button onClick={handleImport} type="button">Importar contactos</button>
+                  <button onClick={handleExport} type="button">Exportar lista</button>
+                  <button onClick={handleCombine} type="button">Combinar duplicados</button>
                 </div>
               ) : null}
             </div>
@@ -168,7 +210,13 @@ export function ContactsWorkspace({ organizationName }: { organizationName: stri
         {activeSection !== "clients" ? (
           <ContactCategoryPlaceholder sectionLabel={currentSection.label} />
         ) : selectedClient ? (
-          <ClientDetail client={selectedClient} activeTab={activeClientTab} onTabChange={setActiveClientTab} organizationName={organizationName} />
+          <ClientDetail
+            client={selectedClient}
+            activeTab={activeClientTab}
+            onTabChange={setActiveClientTab}
+            organizationName={organizationName}
+            onNotice={setNotice}
+          />
         ) : (
           <ContactEmptyState />
         )}
@@ -203,35 +251,69 @@ function ClientDetail({
   client,
   activeTab,
   onTabChange,
-  organizationName
+  organizationName,
+  onNotice
 }: {
   client: ContactListItem;
   activeTab: ClientTabId;
   onTabChange: (tab: ClientTabId) => void;
   organizationName: string;
+  onNotice: (notice: ContactNotice) => void;
 }) {
+  const [isDirty, setIsDirty] = useState(false);
+  const [showClientMenu, setShowClientMenu] = useState(false);
+
+  const handleUpdate = () => {
+    onNotice({ tone: "success", text: `${client.name} actualizado.` });
+    setIsDirty(false);
+  };
+
   return (
     <section className="client-detail" aria-label={client.name}>
       <header className="client-detail-header">
         <div className="client-title-row">
           <h1>{client.name}</h1>
-          <button className="insights-pill sales-insights-pill" type="button">
+          <button
+            className="insights-pill sales-insights-pill"
+            onClick={() => onNotice({ tone: "success", text: "Copilot Insights disponible en la version completa." })}
+            type="button"
+          >
             <Sparkles aria-hidden="true" size={18} fill="currentColor" />
             Copilot Insights
           </button>
         </div>
         <div className="client-header-actions">
-          <button type="button">
+          <button
+            onClick={() => onNotice({ tone: "success", text: "Registro de cobro disponible en la version completa." })}
+            type="button"
+          >
             <WalletCards aria-hidden="true" size={23} />
             Registrar cobro
           </button>
-          <button type="button">
+          <button
+            onClick={() => onNotice({ tone: "success", text: "Gestion de ficheros disponible en la version completa." })}
+            type="button"
+          >
             <Paperclip aria-hidden="true" size={25} />
             Ver o adjuntar ficheros
           </button>
-          <button className="client-more-button" type="button" aria-label={`Mas acciones de ${client.name}`}>
-            <MoreVertical aria-hidden="true" size={27} />
-          </button>
+          <div className="contacts-actions-menu">
+            <button
+              className="client-more-button"
+              onClick={() => setShowClientMenu((current) => !current)}
+              type="button"
+              aria-label={`Mas acciones de ${client.name}`}
+            >
+              <MoreVertical aria-hidden="true" size={27} />
+            </button>
+            {showClientMenu ? (
+              <div className="contacts-section-menu contacts-actions-popover" role="menu">
+                <button onClick={() => { onNotice({ tone: "success", text: "Historial de actividad disponible en la version completa." }); setShowClientMenu(false); }} type="button">Ver actividad</button>
+                <button onClick={() => { onNotice({ tone: "success", text: "Envio de comunicaciones disponible en la version completa." }); setShowClientMenu(false); }} type="button">Enviar comunicacion</button>
+                <button onClick={() => { onNotice({ tone: "warning", text: "Eliminacion de cliente disponible en la version completa." }); setShowClientMenu(false); }} type="button">Eliminar cliente</button>
+              </div>
+            ) : null}
+          </div>
         </div>
       </header>
 
@@ -264,18 +346,34 @@ function ClientDetail({
         ))}
       </nav>
 
-      <section className="client-tab-panel">
-        {activeTab === "info" ? <ClientInfoPanel client={client} /> : null}
-        {activeTab === "contacts" ? <ClientContactsPanel /> : null}
-        {activeTab === "payment" ? <ClientPaymentPanel /> : null}
-        {activeTab === "addresses" ? <ClientAddressesPanel /> : null}
+      <section
+        className="client-tab-panel"
+        onInput={() => setIsDirty(true)}
+      >
+        {activeTab === "info" ? <ClientInfoPanel client={client} onNotice={onNotice} /> : null}
+        {activeTab === "contacts" ? <ClientContactsPanel onNotice={onNotice} /> : null}
+        {activeTab === "payment" ? <ClientPaymentPanel onNotice={onNotice} /> : null}
+        {activeTab === "addresses" ? <ClientAddressesPanel onNotice={onNotice} /> : null}
         {activeTab === "sales" ? <ClientSalesPanel organizationName={organizationName} /> : null}
       </section>
 
       <footer className="client-sticky-bar">
-        <button className="quote-cancel-action" type="button">Cancelar</button>
-        <button className="client-update-action" disabled type="button">Actualizar</button>
-        <button className="client-update-more" disabled type="button" aria-label="Mas opciones de actualizacion">
+        <button className="quote-cancel-action" onClick={() => setIsDirty(false)} type="button">Cancelar</button>
+        <button
+          className="client-update-action"
+          disabled={!isDirty}
+          onClick={handleUpdate}
+          type="button"
+        >
+          Actualizar
+        </button>
+        <button
+          className="client-update-more"
+          disabled={!isDirty}
+          onClick={handleUpdate}
+          type="button"
+          aria-label="Mas opciones de actualizacion"
+        >
           <ChevronDown aria-hidden="true" size={18} />
         </button>
       </footer>
@@ -292,7 +390,13 @@ function ClientMetric({ label, value }: { label: string; value: number }) {
   );
 }
 
-function ClientInfoPanel({ client }: { client: ContactListItem }) {
+function ClientInfoPanel({
+  client,
+  onNotice
+}: {
+  client: ContactListItem;
+  onNotice: (notice: ContactNotice) => void;
+}) {
   return (
     <div className="client-info-grid">
       <section>
@@ -342,17 +446,22 @@ function ClientInfoPanel({ client }: { client: ContactListItem }) {
           title="Direccion principal"
           lines={["CALLE JORGE JUAN 2 ESC 3 PTA 9", "28703 SAN SEBASTIAN DE LOS RE...", "MADRID - ESPANA"]}
           footerLabel="Igual que direccion de entrega"
+          onNotice={onNotice}
         />
-        <ClientAddressCard title="Contacto principal" lines={[]} footerLabel="Editar" isEmpty />
+        <ClientAddressCard title="Contacto principal" lines={[]} footerLabel="Editar" isEmpty onNotice={onNotice} />
       </section>
     </div>
   );
 }
 
-function ClientContactsPanel() {
+function ClientContactsPanel({ onNotice }: { onNotice: (notice: ContactNotice) => void }) {
   return (
     <div className="client-simple-panel">
-      <button className="sage-primary-button compact-contact-button" type="button">
+      <button
+        className="sage-primary-button compact-contact-button"
+        onClick={() => onNotice({ tone: "success", text: "Alta de contacto disponible en la version completa." })}
+        type="button"
+      >
         <Plus aria-hidden="true" size={22} />
         Anadir
       </button>
@@ -360,7 +469,7 @@ function ClientContactsPanel() {
   );
 }
 
-function ClientPaymentPanel() {
+function ClientPaymentPanel({ onNotice }: { onNotice: (notice: ContactNotice) => void }) {
   return (
     <div className="client-payment-panel">
       <div className="client-payment-fields">
@@ -383,7 +492,11 @@ function ClientPaymentPanel() {
           </select>
         </label>
       </div>
-      <button className="sage-primary-button compact-contact-button" type="button">
+      <button
+        className="sage-primary-button compact-contact-button"
+        onClick={() => onNotice({ tone: "success", text: "Alta de condicion de pago disponible en la version completa." })}
+        type="button"
+      >
         <Plus aria-hidden="true" size={22} />
         Anadir
       </button>
@@ -394,11 +507,11 @@ function ClientPaymentPanel() {
           <strong>A pagar despues de 1 dia</strong>
         </div>
         <div className="client-card-actions">
-          <button type="button">
+          <button onClick={() => onNotice({ tone: "success", text: "Edicion de condicion de pago disponible en la version completa." })} type="button">
             <PenLine aria-hidden="true" size={24} fill="currentColor" />
             Editar
           </button>
-          <button className="danger" type="button">
+          <button className="danger" onClick={() => onNotice({ tone: "warning", text: "Condicion de pago eliminada de la vista." })} type="button">
             <Trash2 aria-hidden="true" size={24} fill="currentColor" />
             Eliminar
           </button>
@@ -408,10 +521,14 @@ function ClientPaymentPanel() {
   );
 }
 
-function ClientAddressesPanel() {
+function ClientAddressesPanel({ onNotice }: { onNotice: (notice: ContactNotice) => void }) {
   return (
     <div className="client-simple-panel">
-      <button className="sage-primary-button compact-contact-button" type="button">
+      <button
+        className="sage-primary-button compact-contact-button"
+        onClick={() => onNotice({ tone: "success", text: "Alta de direccion disponible en la version completa." })}
+        type="button"
+      >
         <Plus aria-hidden="true" size={22} />
         Anadir
       </button>
@@ -419,6 +536,7 @@ function ClientAddressesPanel() {
         title=""
         lines={["CALLE JORGE JUAN 2 ESC 3 PTA 9", "28703 SAN SEBASTIAN DE LOS RE...", "MADRID - ESPANA"]}
         footerLabel="Direccion de entrega por defecto"
+        onNotice={onNotice}
       />
     </div>
   );
@@ -482,12 +600,14 @@ function ClientAddressCard({
   title,
   lines,
   footerLabel,
-  isEmpty = false
+  isEmpty = false,
+  onNotice
 }: {
   title: string;
   lines: string[];
   footerLabel: string;
   isEmpty?: boolean;
+  onNotice: (notice: ContactNotice) => void;
 }) {
   return (
     <article className={`client-address-card${isEmpty ? " empty" : ""}`}>
@@ -504,7 +624,7 @@ function ClientAddressCard({
         ) : null}
       </div>
       <div className="client-card-actions">
-        <button type="button">
+        <button onClick={() => onNotice({ tone: "success", text: "Edicion de direccion disponible en la version completa." })} type="button">
           <PenLine aria-hidden="true" size={24} fill="currentColor" />
           Editar
         </button>

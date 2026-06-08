@@ -106,7 +106,7 @@ export type ArtificialPurchaseInvoiceRow = {
 export const artificialPurchaseTabs: Array<{ id: ArtificialPurchaseTabId; label: string; count?: number }> = [
   { id: "all", label: "Todas" },
   { id: "review", label: "Por revisar", count: 1 },
-  { id: "pay", label: "Por pagar", count: 57 },
+  { id: "pay", label: "Por pagar", count: 4 },
   { id: "paid", label: "Pagadas" }
 ];
 
@@ -245,7 +245,9 @@ export const artificialSalesDashboardRows: SalesInvoiceRow[] = [
 export const artificialSalesDashboardTotals = {
   pendingCollection: 46004.88,
   pendingPayment: 6455.46,
-  purchaseInvoicesTotal: 6134.97
+  purchaseInvoicesTotal: 6134.97,
+  overdueCollection: 18698.81,
+  overduePayment: 80
 };
 
 export const artificialAccountingValues = {

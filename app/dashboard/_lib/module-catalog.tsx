@@ -1,6 +1,7 @@
 import {
   BadgeEuro,
   BarChart3,
+  FileSignature,
   FileText,
   Landmark,
   LayoutDashboard,
@@ -11,6 +12,7 @@ import {
   Users
 } from "lucide-react";
 import { getSageReferenceModule } from "@/src/lib/product/sage-active-reference";
+import type { SageReferenceModuleId } from "@/src/lib/product/sage-active-reference";
 import type { AppModule } from "./types";
 
 export type ModuleDefinition = {
@@ -29,6 +31,7 @@ export type ModuleDefinition = {
 export const navigationItems = [
   { label: "Cuadros de mando", icon: LayoutDashboard, module: "dashboard" },
   { label: "Ventas", icon: BarChart3, module: "sales" },
+  { label: "Presupuestos", icon: FileSignature, module: "quotes" },
   { label: "Compras", icon: ShoppingCart, module: "purchases" },
   { label: "Contactos", icon: Users, module: "contacts" },
   { label: "Productos y servicios", icon: PackageSearch, module: "products" },
@@ -40,7 +43,7 @@ export const navigationItems = [
 ] satisfies Array<{ label: string; icon: typeof LayoutDashboard; module: AppModule }>;
 
 function referenceQuickActions(module: AppModule, fallback: string[]): string[] {
-  return getSageReferenceModule(module)?.quickActions ?? fallback;
+  return getSageReferenceModule(module as SageReferenceModuleId)?.quickActions ?? fallback;
 }
 
 export const moduleCatalog: Record<AppModule, ModuleDefinition> = {
@@ -71,6 +74,22 @@ export const moduleCatalog: Record<AppModule, ModuleDefinition> = {
     tableHeaders: ["Estado", "Fecha", "Numero", "Cliente", "Total", "Acciones"],
     emptyTitle: "No hay facturas de venta.",
     emptyDescription: "Crea una factura o importa ventas para empezar a controlar cobros."
+  },
+  quotes: {
+    title: "Presupuestos",
+    eyebrow: "Active_Quotes",
+    description: "Generador de presupuestos y facturas imprimibles con plantilla propia.",
+    quickActions: ["Crear presupuesto", "Crear factura", "Imprimir o exportar PDF"],
+    stats: [
+      { label: "Documentos", value: "0", description: "Presupuestos y facturas guardados en este dispositivo." },
+      { label: "Plantillas", value: "2", description: "Formato de presupuesto y factura disponibles." },
+      { label: "Exportaciones", value: "0", description: "PDF generados desde el generador." }
+    ],
+    tableTitle: "Documentos guardados",
+    tableDescription: "Historial local de presupuestos y facturas generados.",
+    tableHeaders: ["Tipo", "Cliente", "Fecha", "Total", "Acciones"],
+    emptyTitle: "No hay documentos guardados.",
+    emptyDescription: "Crea un presupuesto o factura para empezar."
   },
   purchases: {
     title: "Compras",
