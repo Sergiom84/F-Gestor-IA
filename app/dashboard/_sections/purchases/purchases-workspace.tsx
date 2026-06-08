@@ -22,6 +22,7 @@ import type { ReactNode } from "react";
 import { useTransition, useMemo, useRef, useState } from "react";
 import { markPurchaseInvoicePaid, softDeletePurchaseInvoice } from "../../commercial-actions";
 import {
+  artificialPurchaseRows,
   artificialPurchaseTabs
 } from "../../_data/artificial-business-data";
 import type {
@@ -207,7 +208,7 @@ export function PurchasesWorkspace({ organizationName, initialInvoices }: Purcha
       ) : null}
 
       <section className="purchase-intake-row" aria-label="Entrada de facturas">
-        <button className="sage-primary-button purchase-create-button" onClick={() => setIsCreating(true)} type="button">
+        <button className="sage-primary-button purchase-create-button" type="button">
           <Plus aria-hidden="true" size={22} />
           Crear
         </button>

@@ -5,7 +5,14 @@
 import "./quotes.css";
 
 import { Image as ImageIcon, Search, Settings, Trash2, X } from "lucide-react";
-import { type CSSProperties, type PointerEvent as ReactPointerEvent, useEffect, useId, useMemo, useRef, useState } from "react";
+import { type CSSProperties, type PointerEvent as ReactPointerEvent, useEffect, useId, useMemo, useRef, useState, useTransition } from "react";
+import {
+  bulkUpsertQuoteDocuments,
+  deleteQuoteDocument,
+  upsertQuoteDocument,
+  upsertQuotesConfig,
+  type QuotesInitialData
+} from "./quotes-actions";
 
 function OrbLogo({ size = 48 }: { size?: number }) {
   const logoId = useId().replace(/:/g, "");
@@ -204,6 +211,17 @@ const parseJsonIfString = <T,>(value: unknown): T | null => {
     return null;
   }
 };
+
+const quoteToDbRow = (quote: Quote) => ({
+  id: quote.id,
+  document_type: quote.documentType,
+  quote_number: quote.quoteNumber || null,
+  client_name: quote.clientName || null,
+  date: quote.date || null,
+  due_date: quote.dueDate || null,
+  total_amount: 0,
+  payload: quote as unknown as Record<string, unknown>
+});
 
 const STORAGE_KEY = "documents-quotes";
 const CONFIG_STORAGE_KEY = "documents-config";
@@ -737,19 +755,40 @@ const readStoredLayout = (): AppLayout => {
   }
 };
 
-export function QuotesWorkspace() {
-  const initialQuoteState = useMemo(createInitialQuoteState, []);
-  const [appConfig, setAppConfig] = useState<AppConfig>(readStoredAppConfig);
+export function QuotesWorkspace({ initialData }: { initialData: QuotesInitialData }) {
+  const { organizationId } = initialData;
+  const [, startTransition] = useTransition();
+
+  const initialQuoteState = useMemo(() => {
+    if (initialData.documents.length > 0) {
+      const quotes = initialData.documents.map((row) => normalizeQuote(row.payload as Partial<Quote>));
+      return { hadStoredQuotes: true, quotes };
+    }
+    return createInitialQuoteState();
+  }, []);
+
+  const initialConfig = useMemo(() => {
+    if (initialData.config !== null) {
+      return normalizeAppConfig(initialData.config as Partial<AppConfig>);
+    }
+    return readStoredAppConfig();
+  }, []);
+
+  const [appConfig, setAppConfig] = useState<AppConfig>(initialConfig);
   const [quotes, setQuotes] = useState<Quote[]>(initialQuoteState.quotes);
   const [layout, setLayout] = useState<AppLayout>(readStoredLayout);
   const [activeQuoteId, setActiveQuoteId] = useState(() => quotes[0]?.id ?? "");
   const [historyDialogType, setHistoryDialogType] = useState<DocumentType | null>(null);
   const [historyNameFilter, setHistoryNameFilter] = useState("");
   const [historyDateFilter, setHistoryDateFilter] = useState("");
-  const [hasCompletedConfig, setHasCompletedConfig] = useState(hasStoredAppConfig);
+  const [hasCompletedConfig, setHasCompletedConfig] = useState(
+    () => initialData.config !== null || hasStoredAppConfig()
+  );
   const [hasDetectedData, setHasDetectedData] = useState(initialQuoteState.hadStoredQuotes);
-  const [configDialogOpen, setConfigDialogOpen] = useState(() => !hasStoredAppConfig() || !initialQuoteState.hadStoredQuotes);
-  const [configDraft, setConfigDraft] = useState<AppConfig>(() => readStoredAppConfig());
+  const [configDialogOpen, setConfigDialogOpen] = useState(
+    () => (initialData.config === null && !hasStoredAppConfig()) || !initialQuoteState.hadStoredQuotes
+  );
+  const [configDraft, setConfigDraft] = useState<AppConfig>(initialConfig);
   const importFileRef = useRef<HTMLInputElement>(null);
   const logoFileRef = useRef<HTMLInputElement>(null);
   // quotes is seeded with a default document, so index 0 always exists.
@@ -790,6 +829,22 @@ export function QuotesWorkspace() {
   useEffect(() => {
     localStorage.setItem(LAYOUT_STORAGE_KEY, JSON.stringify(layout));
   }, [layout]);
+
+  // Migrate localStorage data to Supabase on first load if Supabase was empty.
+  useEffect(() => {
+    if (initialData.documents.length === 0 && initialQuoteState.quotes.length > 0) {
+      startTransition(() => {
+        void bulkUpsertQuoteDocuments(organizationId, initialQuoteState.quotes.map(quoteToDbRow));
+      });
+    }
+    if (initialData.config === null) {
+      const localConfig = readStoredAppConfig();
+      startTransition(() => {
+        void upsertQuotesConfig(organizationId, localConfig as Record<string, unknown>);
+      });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const nextSequence = (documentType: DocumentType) =>
     quotes.filter((quote) => quote.documentType === documentType).length + 1;
@@ -918,10 +973,14 @@ export function QuotesWorkspace() {
   };
 
   const deleteQuote = () => {
+    const deletedId = activeQuote.id;
+    startTransition(() => { void deleteQuoteDocument(organizationId, deletedId); });
+
     if (quotes.length === 1) {
       const quote = createQuote(1, "quote", appConfig);
       setQuotes([quote]);
       setActiveQuoteId(quote.id);
+      startTransition(() => { void upsertQuoteDocument(organizationId, quoteToDbRow(quote)); });
       return;
     }
 
@@ -932,6 +991,9 @@ export function QuotesWorkspace() {
 
   const saveQuote = () => {
     updateQuote({});
+    startTransition(() => {
+      void upsertQuoteDocument(organizationId, quoteToDbRow(activeQuote));
+    });
   };
 
   const exportHistory = () => {
@@ -996,6 +1058,9 @@ export function QuotesWorkspace() {
       setQuotes(mergedQuotes);
       setHasDetectedData(true);
       setActiveQuoteId((currentId) => (mergedMap.has(currentId) ? currentId : mergedQuotes[0]!.id));
+      startTransition(() => {
+        void bulkUpsertQuoteDocuments(organizationId, mergedQuotes.map(quoteToDbRow));
+      });
       let importedConfig = false;
       if (!Array.isArray(parsed) && parsed.config && typeof parsed.config === "object") {
         const nextConfig = normalizeAppConfig(parsed.config);
@@ -1004,6 +1069,9 @@ export function QuotesWorkspace() {
         setHasCompletedConfig(true);
         setConfigDialogOpen(false);
         importedConfig = true;
+        startTransition(() => {
+          void upsertQuotesConfig(organizationId, nextConfig as unknown as Record<string, unknown>);
+        });
       }
 
       if (!Array.isArray(parsed) && parsed.layout && typeof parsed.layout === "object") {
@@ -1078,6 +1146,9 @@ export function QuotesWorkspace() {
     );
     setConfigDialogOpen(false);
     setHasCompletedConfig(true);
+    startTransition(() => {
+      void upsertQuotesConfig(organizationId, nextConfig as unknown as Record<string, unknown>);
+    });
   };
 
   const openHistoryDialog = (documentType: DocumentType) => {
@@ -1099,6 +1170,8 @@ export function QuotesWorkspace() {
 
     if (!window.confirm(`¿Eliminar ${documentLabel} de ${clientLabel}?`)) return;
 
+    startTransition(() => { void deleteQuoteDocument(organizationId, quoteId); });
+
     const remaining = quotes.filter((quote) => quote.id !== quoteId);
     if (remaining.length === 0) {
       const fallback = createQuote(1, "quote", appConfig);
@@ -1106,6 +1179,7 @@ export function QuotesWorkspace() {
       setActiveQuoteId(fallback.id);
       setHistoryDialogType(null);
       setHasDetectedData(false);
+      startTransition(() => { void upsertQuoteDocument(organizationId, quoteToDbRow(fallback)); });
       return;
     }
 

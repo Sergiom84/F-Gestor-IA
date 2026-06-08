@@ -17,7 +17,9 @@ import {
 } from "lucide-react";
 import { useMemo, useState } from "react";
 import {
-  artificialEmployeeRows
+  artificialClientRows,
+  artificialEmployeeRows,
+  artificialSupplierRows
 } from "../../_data/artificial-business-data";
 import type { ArtificialContactListItem } from "../../_data/artificial-business-data";
 

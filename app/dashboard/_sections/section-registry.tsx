@@ -33,7 +33,7 @@ const sectionRegistry = {
       organizationName={data.activeOrganization.name}
     />
   ),
-  quotes: () => <QuotesSection />,
+  quotes: (data) => <QuotesSection organizationId={data.activeOrganization.id} />,
   products: (data) => (
     <ProductsWorkspace organizationName={data.activeOrganization.name} />
   ),
@@ -86,8 +86,6 @@ function DashboardHomeSection({ data }: { data: DashboardData }) {
         clientCount={data.clientCount}
         documentCount={data.documentCount}
         fiscalEntityCount={data.fiscalEntityCount}
-        totals={data.salesDashboardTotals}
-        overdueInvoices={data.overdueInvoices}
       />
     );
   }

@@ -25,7 +25,7 @@ import {
 } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { artificialSalesDefaults } from "../../_data/artificial-business-data";
+import { artificialSalesDefaults, artificialSalesDocuments } from "../../_data/artificial-business-data";
 import type { SalesSectionId } from "../../_data/artificial-business-data";
 import type { SalesDocRow } from "../../_lib/types";
 import { formatMoney } from "../../_lib/formatters";
