@@ -287,11 +287,11 @@ function ClientDetail({
           <h1>{client.name}</h1>
           <button
             className="insights-pill sales-insights-pill"
-            onClick={() => onNotice({ tone: "success", text: "Copilot Insights disponible en la version completa." })}
+            onClick={() => onNotice({ tone: "success", text: "Asistente disponible en la version completa." })}
             type="button"
           >
             <Sparkles aria-hidden="true" size={18} fill="currentColor" />
-            Copilot Insights
+            Asistente
           </button>
         </div>
         <div className="client-header-actions">

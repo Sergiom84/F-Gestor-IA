@@ -7,10 +7,12 @@ import {
   ChevronDown,
   Copy,
   CreditCard,
+  ExternalLink,
   Eye,
   FileText,
   Filter,
   FileCog,
+  BarChart3,
   ListChecks,
   Mail,
   MoreVertical,
@@ -41,9 +43,38 @@ type SalesSection = {
   id: SalesSectionId;
   label: string;
   title: string;
+  createLabel: string;
+  emptyTitle: string;
+  emptyDescription: string;
+  searchLabel: string;
   singularTitle: string;
   dateLabel: string;
   numberLabel: string;
+  tableHeaders: {
+    date: string;
+    number: string;
+    client: string;
+    clientCode: string;
+    total: string;
+  };
+  hero: {
+    eyebrow: string;
+    title: string;
+    description: string;
+    actions: Array<{
+      kind: "create" | "contacts" | "quotes" | "orders" | "delivery-notes" | "invoices" | "recurring-invoices";
+      label: string;
+    }>;
+  };
+  metrics: Array<{
+    label: string;
+    description: string;
+    tone: "teal" | "indigo" | "green";
+    type: "count" | "amount";
+    fallbackValue?: number;
+  }>;
+  tableDescription: string;
+  fallbackItemCount?: number;
 };
 
 type SalesDocumentRow = {
@@ -70,44 +101,215 @@ const salesSections: SalesSection[] = [
   {
     id: "quotes",
     label: "Presupuestos",
-    title: "Presupuestos de venta",
+    title: "Presupuestos",
+    createLabel: "Crear presupuesto",
+    emptyTitle: "No hay presupuestos.",
+    emptyDescription: "Crea un presupuesto o ajusta los filtros para ver resultados.",
+    searchLabel: "Buscar presupuestos",
     singularTitle: "Presupuesto de venta",
     dateLabel: "Fecha de presup...",
-    numberLabel: "Numero de presupuesto"
+    numberLabel: "Numero de presupuesto",
+    tableHeaders: {
+      date: "Fecha de presupuesto",
+      number: "Numero de presupuesto",
+      client: "Cliente",
+      clientCode: "Codigo",
+      total: "Total"
+    },
+    hero: {
+      eyebrow: "",
+      title: "Presupuestos",
+      description: "",
+      actions: [
+        { kind: "create", label: "Crear presupuesto" },
+        { kind: "contacts", label: "Crear cliente" },
+        { kind: "orders", label: "Convertir a pedido" }
+      ]
+    },
+    metrics: [
+      { label: "Presupuestos", description: "", tone: "indigo", type: "count" },
+      { label: "Pendientes", description: "", tone: "teal", type: "count" },
+      { label: "Importe ofertado", description: "", tone: "green", type: "amount" }
+    ],
+    tableDescription: ""
   },
   {
     id: "orders",
     label: "Pedidos",
-    title: "Pedidos de venta",
+    title: "Pedidos",
+    createLabel: "Crear pedido",
+    emptyTitle: "No hay pedidos.",
+    emptyDescription: "Crea un pedido o revisa los filtros aplicados.",
+    searchLabel: "Buscar pedidos",
     singularTitle: "Pedido de venta",
     dateLabel: "Fecha de pedido",
-    numberLabel: "Numero de pedido"
+    numberLabel: "Numero de pedido",
+    tableHeaders: {
+      date: "Fecha de pedido",
+      number: "Numero de pedido",
+      client: "Cliente",
+      clientCode: "Codigo",
+      total: "Total"
+    },
+    hero: {
+      eyebrow: "",
+      title: "Pedidos",
+      description: "",
+      actions: [
+        { kind: "create", label: "Crear pedido" },
+        { kind: "contacts", label: "Crear cliente" },
+        { kind: "delivery-notes", label: "Preparar albaran" }
+      ]
+    },
+    metrics: [
+      { label: "Pedidos", description: "", tone: "teal", type: "count" },
+      { label: "Pendientes", description: "", tone: "indigo", type: "count" },
+      { label: "Importe pedido", description: "", tone: "green", type: "amount" }
+    ],
+    tableDescription: ""
   },
   {
     id: "delivery-notes",
     label: "Albaranes",
-    title: "Albaranes de venta",
+    title: "Albaranes",
+    createLabel: "Crear albaran",
+    emptyTitle: "No hay albaranes.",
+    emptyDescription: "Crea un albaran o cambia los filtros para consultar entregas.",
+    searchLabel: "Buscar albaranes",
     singularTitle: "Albaran de venta",
     dateLabel: "Fecha de albaran",
-    numberLabel: "Numero de albaran"
+    numberLabel: "Numero de albaran",
+    tableHeaders: {
+      date: "Fecha de albaran",
+      number: "Numero de albaran",
+      client: "Cliente",
+      clientCode: "Codigo",
+      total: "Total"
+    },
+    hero: {
+      eyebrow: "",
+      title: "Albaranes",
+      description: "",
+      actions: [
+        { kind: "create", label: "Crear albaran" },
+        { kind: "contacts", label: "Crear cliente" },
+        { kind: "invoices", label: "Facturar entregas" }
+      ]
+    },
+    metrics: [
+      { label: "Albaranes", description: "", tone: "teal", type: "count" },
+      { label: "Sin facturar", description: "", tone: "indigo", type: "count" },
+      { label: "Importe entregado", description: "", tone: "green", type: "amount" }
+    ],
+    tableDescription: ""
   },
   {
     id: "invoices",
     label: "Facturas",
-    title: "Facturas de venta",
+    title: "Facturas",
+    createLabel: "Crear factura",
+    emptyTitle: "No hay facturas.",
+    emptyDescription: "Crea una factura o ajusta los filtros para revisar ventas.",
+    searchLabel: "Buscar facturas",
     singularTitle: "Factura de venta",
     dateLabel: "Fecha de factura",
-    numberLabel: "Numero de factura"
+    numberLabel: "Numero de factura",
+    tableHeaders: {
+      date: "Fecha de factura",
+      number: "Numero de factura",
+      client: "Cliente",
+      clientCode: "Codigo",
+      total: "Total"
+    },
+    hero: {
+      eyebrow: "",
+      title: "Ventas",
+      description: "",
+      actions: [
+        { kind: "create", label: "Crear factura de venta" },
+        { kind: "contacts", label: "Crear cliente" },
+        { kind: "recurring-invoices", label: "Preparar recordatorio" }
+      ]
+    },
+    metrics: [
+      { label: "Facturas de venta", description: "", tone: "teal", type: "count", fallbackValue: 13 },
+      { label: "Presupuestos", description: "", tone: "indigo", type: "count", fallbackValue: 4 },
+      { label: "Cobros", description: "", tone: "green", type: "amount", fallbackValue: 46004.88 }
+    ],
+    tableDescription: "",
+    fallbackItemCount: 13
   },
   {
     id: "recurring-invoices",
     label: "Facturas recurrentes",
     title: "Facturas recurrentes",
+    createLabel: "Crear recurrente",
+    emptyTitle: "No hay facturas recurrentes.",
+    emptyDescription: "Crea una factura recurrente o revisa los filtros actuales.",
+    searchLabel: "Buscar facturas recurrentes",
     singularTitle: "Factura recurrente",
     dateLabel: "Fecha de factura",
-    numberLabel: "Numero de factura"
+    numberLabel: "Numero de factura",
+    tableHeaders: {
+      date: "Proxima emision",
+      number: "Numero de plantilla",
+      client: "Cliente",
+      clientCode: "Codigo",
+      total: "Importe recurrente"
+    },
+    hero: {
+      eyebrow: "",
+      title: "Facturas recurrentes",
+      description: "",
+      actions: [
+        { kind: "create", label: "Crear recurrente" },
+        { kind: "contacts", label: "Crear cliente" },
+        { kind: "invoices", label: "Planificar emision" }
+      ]
+    },
+    metrics: [
+      { label: "Recurrentes", description: "", tone: "teal", type: "count" },
+      { label: "Proximas", description: "", tone: "indigo", type: "count" },
+      { label: "Importe recurrente", description: "", tone: "green", type: "amount" }
+    ],
+    tableDescription: ""
   }
 ];
+
+const fallbackSalesDocuments: Record<SalesSectionId, SalesDocumentRow[]> = {
+  quotes: [
+    { id: "quote-0013", status: "Pendiente", date: "30/05/2026", number: "0013", reference: "REF-013", clientCode: "47", client: "INTERVENCIONES ORIENTADAS SL", total: 18856.11 },
+    { id: "quote-0012", status: "Pendiente", date: "25/05/2026", number: "0012", reference: "REF-012", clientCode: "24", client: "SANSANO OIL SERVICE SL", total: 1294.70 },
+    { id: "quote-0011", status: "Borrador", date: "25/05/2026", number: "0011", reference: "REF-011", clientCode: "26", client: "FENIX DISTRIBUCIONES SL", total: -1452.00 }
+  ],
+  orders: [
+    { id: "order-0021", status: "Confirmado", date: "31/05/2026", number: "0021", reference: "PED-021", clientCode: "47", client: "INTERVENCIONES ORIENTADAS SL", total: 7450.00 },
+    { id: "order-0020", status: "Preparacion", date: "28/05/2026", number: "0020", reference: "PED-020", clientCode: "18", client: "TALLERES NORTE SL", total: 2380.40 },
+    { id: "order-0019", status: "Pendiente", date: "24/05/2026", number: "0019", reference: "PED-019", clientCode: "33", client: "GRUPO ALMAZARA SL", total: 980.00 }
+  ],
+  "delivery-notes": [
+    { id: "delivery-009", status: "Entregado", date: "30/05/2026", number: "0009", reference: "ALB-009", clientCode: "47", client: "INTERVENCIONES ORIENTADAS SL", total: 4210.25 },
+    { id: "delivery-008", status: "Pendiente", date: "27/05/2026", number: "0008", reference: "ALB-008", clientCode: "24", client: "SANSANO OIL SERVICE SL", total: 1680.90 },
+    { id: "delivery-007", status: "Facturable", date: "21/05/2026", number: "0007", reference: "ALB-007", clientCode: "26", client: "FENIX DISTRIBUCIONES SL", total: 950.00 }
+  ],
+  invoices: [
+    { id: "invoice-0013", status: "Vencida", date: "30/05/2026", number: "0013", reference: "FAC-013", clientCode: "47", client: "INTERVENCIONES ORIENTADAS SL", total: 18856.11 },
+    { id: "invoice-0012", status: "Vencida", date: "25/05/2026", number: "0012", reference: "FAC-012", clientCode: "24", client: "SANSANO OIL SERVICE SL", total: 1294.70 },
+    { id: "invoice-0011", status: "Vencida", date: "25/05/2026", number: "0011", reference: "FAC-011", clientCode: "26", client: "FENIX DISTRIBUCIONES SL", total: -1452.00 }
+  ],
+  "recurring-invoices": [
+    { id: "recurring-006", status: "Activa", date: "01/06/2026", number: "R-0006", reference: "REC-006", clientCode: "47", client: "INTERVENCIONES ORIENTADAS SL", total: 1200.00 },
+    { id: "recurring-005", status: "Activa", date: "05/06/2026", number: "R-0005", reference: "REC-005", clientCode: "24", client: "SANSANO OIL SERVICE SL", total: 850.00 },
+    { id: "recurring-004", status: "Pausada", date: "10/06/2026", number: "R-0004", reference: "REC-004", clientCode: "26", client: "FENIX DISTRIBUCIONES SL", total: 640.00 }
+  ]
+};
+
+function normalizeSalesDocuments(initialDocuments?: Record<SalesSectionId, SalesDocumentRow[]>): Record<SalesSectionId, SalesDocumentRow[]> {
+  const source = initialDocuments ?? artificialSalesDocuments;
+  const hasRows = Object.values(source).some((rows) => rows.length > 0);
+
+  return hasRows ? source : fallbackSalesDocuments;
+}
 
 const salesSectionIds = new Set<SalesSectionId>(salesSections.map((section) => section.id));
 
@@ -123,9 +325,9 @@ type SalesWorkspaceProps = {
 export function SalesWorkspace({ organizationName, initialDocuments }: SalesWorkspaceProps) {
   const searchParams = useSearchParams();
   const sectionFromUrl = resolveSalesSectionId(searchParams.get("salesSection"));
-  const [activeSectionId, setActiveSectionId] = useState<SalesSectionId>(sectionFromUrl ?? "quotes");
-  const [documentsBySection, setDocumentsBySection] = useState<Record<SalesSectionId, SalesDocumentRow[]>>(initialDocuments ?? artificialSalesDocuments);
-  const [showSectionNav, setShowSectionNav] = useState(sectionFromUrl === null);
+  const [activeSectionId, setActiveSectionId] = useState<SalesSectionId>(sectionFromUrl ?? "invoices");
+  const isFallbackData = !Object.values(initialDocuments ?? artificialSalesDocuments).some((rows) => rows.length > 0);
+  const [documentsBySection, setDocumentsBySection] = useState<Record<SalesSectionId, SalesDocumentRow[]>>(() => normalizeSalesDocuments(initialDocuments));
   const [isCreating, setIsCreating] = useState(false);
   const [query, setQuery] = useState("");
   const [showFilters, setShowFilters] = useState(false);
@@ -138,9 +340,6 @@ export function SalesWorkspace({ organizationName, initialDocuments }: SalesWork
   useEffect(() => {
     if (sectionFromUrl) {
       setActiveSectionId(sectionFromUrl);
-      setShowSectionNav(false);
-    } else {
-      setShowSectionNav(true);
     }
   }, [sectionFromUrl]);
 
@@ -172,8 +371,16 @@ export function SalesWorkspace({ organizationName, initialDocuments }: SalesWork
     setShowFilters(false);
     setShowColumns(false);
     setActiveSettingsPanel(null);
-    setShowSectionNav(false);
     window.history.pushState(null, "", `/dashboard?${nextParams.toString()}`);
+  };
+
+  const openContacts = () => {
+    const nextParams = new URLSearchParams(searchParams.toString());
+
+    nextParams.set("module", "contacts");
+    nextParams.delete("salesSection");
+    window.history.pushState(null, "", `/dashboard?${nextParams.toString()}`);
+    window.location.assign(`/dashboard?${nextParams.toString()}`);
   };
 
   const deleteDocument = (rowId: string) => {
@@ -212,40 +419,41 @@ export function SalesWorkspace({ organizationName, initialDocuments }: SalesWork
   };
 
   return (
-    <section className={`sales-module-shell${showSectionNav ? "" : " sections-collapsed"}`} aria-label="Modulo de ventas">
-      {showSectionNav ? (
-        <aside className="sales-secondary-nav" aria-label="Documentos de ventas">
-          {salesSections.map((section) => (
-            <button
-              className={`sales-secondary-link${section.id === activeSectionId ? " active" : ""}`}
-              key={section.id}
-              onClick={() => openSection(section.id)}
-              type="button"
-            >
-              <span>{section.label}</span>
-            </button>
-          ))}
-        </aside>
-      ) : null}
-
+    <section className="sales-module-shell sections-collapsed" aria-label="Modulo de ventas">
       <div className="sales-operation-surface">
         {isCreating ? (
           <QuoteForm section={activeSection} onCancel={() => setIsCreating(false)} />
         ) : (
           <DocumentList
             activeSection={activeSection}
+            activeSectionId={activeSectionId}
+            isFallbackData={isFallbackData}
             organizationName={organizationName}
             rows={rows}
+            sections={salesSections}
             query={query}
             showColumns={showColumns}
             showFilters={showFilters}
             showSettings={showSettings}
             activeSettingsPanel={activeSettingsPanel}
             notice={notice}
-            onCreate={() => setIsCreating(true)}
+            onHeroAction={(kind) => {
+              if (kind === "create") {
+                setIsCreating(true);
+                return;
+              }
+
+              if (kind === "contacts") {
+                openContacts();
+                return;
+              }
+
+              openSection(kind);
+            }}
             onDeleteDocument={deleteDocument}
             onDuplicateDocument={duplicateDocument}
             onQueryChange={setQuery}
+            onSectionChange={openSection}
             onShowNotice={setNotice}
             onSettingsPanelChange={setActiveSettingsPanel}
             onToggleColumns={() => setShowColumns((current) => !current)}
@@ -261,18 +469,22 @@ export function SalesWorkspace({ organizationName, initialDocuments }: SalesWork
 
 function DocumentList({
   activeSection,
+  activeSectionId,
+  isFallbackData,
   activeSettingsPanel,
   notice,
   organizationName,
   rows,
+  sections,
   query,
   showColumns,
   showFilters,
   showSettings,
-  onCreate,
+  onHeroAction,
   onDeleteDocument,
   onDuplicateDocument,
   onQueryChange,
+  onSectionChange,
   onSettingsPanelChange,
   onShowNotice,
   onToggleColumns,
@@ -281,18 +493,22 @@ function DocumentList({
   onUpdateDocumentStatus
 }: {
   activeSection: SalesSection;
+  activeSectionId: SalesSectionId;
+  isFallbackData: boolean;
   activeSettingsPanel: SalesSettingsPanelId | null;
   notice: SalesNotice | null;
   organizationName: string;
   rows: SalesDocumentRow[];
+  sections: SalesSection[];
   query: string;
   showColumns: boolean;
   showFilters: boolean;
   showSettings: boolean;
-  onCreate: () => void;
+  onHeroAction: (kind: SalesSection["hero"]["actions"][number]["kind"]) => void;
   onDeleteDocument: (rowId: string) => void;
   onDuplicateDocument: (row: SalesDocumentRow) => void;
   onQueryChange: (value: string) => void;
+  onSectionChange: (sectionId: SalesSectionId) => void;
   onSettingsPanelChange: (panel: SalesSettingsPanelId | null) => void;
   onShowNotice: (notice: SalesNotice | null) => void;
   onToggleColumns: () => void;
@@ -302,7 +518,8 @@ function DocumentList({
 }) {
   const [selectedRow, setSelectedRow] = useState<SalesDocumentRow | null>(null);
   const [rowPendingDelete, setRowPendingDelete] = useState<SalesDocumentRow | null>(null);
-  const [showInsights, setShowInsights] = useState(false);
+  const [showAssistant, setShowAssistant] = useState(false);
+  const totalAmount = rows.reduce((sum, row) => sum + row.total, 0);
   const openSettingsPanel = (panel: SalesSettingsPanelId) => {
     onSettingsPanelChange(panel);
     setSelectedRow(null);
@@ -314,7 +531,11 @@ function DocumentList({
     <>
       <header className="sales-operation-header">
         <div className="sales-operation-title">
-          <h1>{activeSection.title}</h1>
+          <SalesSectionTabs
+            activeSectionId={activeSectionId}
+            onSectionChange={onSectionChange}
+            sections={sections}
+          />
         </div>
         <div className="sales-settings-menu">
           <button className="sales-settings-button" onClick={onToggleSettings} type="button">
@@ -351,8 +572,8 @@ function DocumentList({
         </div>
       ) : null}
 
-      {showInsights ? (
-        <SalesInsightsPanel activeSection={activeSection} rows={rows} />
+      {showAssistant ? (
+        <SalesAssistantPanel activeSection={activeSection} rows={rows} />
       ) : null}
 
       {activeSettingsPanel ? (
@@ -368,16 +589,16 @@ function DocumentList({
         />
       ) : null}
 
+      <SalesHero activeSection={activeSection} onAction={onHeroAction} />
+      <SalesMetricGrid activeSection={activeSection} isFallbackData={isFallbackData} rows={rows} totalAmount={totalAmount} />
+
       <div className="sales-list-toolbar">
-        <button className="sage-primary-button" onClick={onCreate} type="button">
-          <Plus aria-hidden="true" size={22} />
-          Crear
-        </button>
+        <span aria-hidden="true" />
         <div className="sales-toolbar-actions">
           <label className="sales-search-control">
             <Search aria-hidden="true" size={25} />
             <input
-              aria-label={`Buscar en ${activeSection.title}`}
+              aria-label={activeSection.searchLabel}
               onChange={(event) => onQueryChange(event.target.value)}
               placeholder="Buscar..."
               type="search"
@@ -407,7 +628,14 @@ function DocumentList({
       {showColumns ? (
         <div className="sales-filter-strip columns-strip">
           <span>Columnas visibles</span>
-          {["Estado", "Fecha", activeSection.numberLabel, "Referencia", "Cliente", "Total"].map((column) => (
+          {[
+            "Estado",
+            activeSection.tableHeaders.date,
+            activeSection.tableHeaders.number,
+            activeSection.tableHeaders.client,
+            activeSection.tableHeaders.clientCode,
+            activeSection.tableHeaders.total
+          ].map((column) => (
             <label key={column}>
               <input defaultChecked type="checkbox" />
               {column}
@@ -416,20 +644,24 @@ function DocumentList({
         </div>
       ) : null}
 
-      <section className="sage-list-panel" aria-label={activeSection.title}>
+      <section className="sage-list-panel sales-template-table-panel" aria-label={activeSection.title}>
+        <div className="sales-template-table-head">
+          <div>
+            <h2>{activeSection.title}</h2>
+            {activeSection.tableDescription ? <p>{activeSection.tableDescription}</p> : null}
+          </div>
+        </div>
         <div className="sales-document-table-wrap">
           <table className="sales-document-table">
             <thead>
               <tr>
                 <th>Estado</th>
-                <th>{activeSection.dateLabel}</th>
-                <th>{activeSection.numberLabel}</th>
-                <th>Referencia</th>
-                <th>Codigo de cliente</th>
-                <th>Cliente</th>
-                <th>Total</th>
-                <th>Editar</th>
-                <th>Eliminar</th>
+                <th>{activeSection.tableHeaders.date}</th>
+                <th>{activeSection.tableHeaders.number}</th>
+                <th>{activeSection.tableHeaders.client}</th>
+                <th>{activeSection.tableHeaders.clientCode}</th>
+                <th>{activeSection.tableHeaders.total}</th>
+                <th>Acciones</th>
               </tr>
             </thead>
             <tbody>
@@ -438,11 +670,10 @@ function DocumentList({
                   <td><span className="closed-badge">{row.status}</span></td>
                   <td>{row.date}</td>
                   <td>{row.number}</td>
-                  <td>{row.reference || "-"}</td>
-                  <td>{row.clientCode}</td>
                   <td>{row.client}</td>
+                  <td>{row.clientCode}</td>
                   <td>{formatMoney(row.total)}</td>
-                  <td>
+                  <td className="sales-row-actions-cell">
                     <button
                       className="sage-table-button"
                       onClick={() => {
@@ -451,38 +682,29 @@ function DocumentList({
                         onSettingsPanelChange(null);
                       }}
                       type="button"
-                      aria-label={`Editar ${row.number}`}
+                      aria-label={`Abrir acciones de ${row.number}`}
                     >
-                      <PenLine aria-hidden="true" size={25} fill="currentColor" />
-                    </button>
-                  </td>
-                  <td>
-                    <button
-                      className="sage-table-button danger"
-                      onClick={() => {
-                        setRowPendingDelete(row);
-                        setSelectedRow(null);
-                        onSettingsPanelChange(null);
-                      }}
-                      type="button"
-                      aria-label={`Eliminar ${row.number}`}
-                    >
-                      <Trash2 aria-hidden="true" size={25} fill="currentColor" />
+                      <MoreVertical aria-hidden="true" size={22} />
                     </button>
                   </td>
                 </tr>
               )) : (
                 <tr>
-                  <td colSpan={9}>
+                  <td colSpan={7}>
                     <div className="sales-empty-list">
                       <FileText aria-hidden="true" size={64} />
-                      <strong>Esta lista esta en blanco.</strong>
-                      <p>No hay documentos para los filtros actuales.</p>
+                      <strong>{activeSection.emptyTitle}</strong>
+                      <p>{activeSection.emptyDescription}</p>
                     </div>
                   </td>
                 </tr>
               )}
             </tbody>
+            <tfoot>
+              <tr>
+                <td colSpan={7}>Elementos: {isFallbackData && activeSection.fallbackItemCount ? activeSection.fallbackItemCount : rows.length}</td>
+              </tr>
+            </tfoot>
           </table>
         </div>
       </section>
@@ -518,7 +740,92 @@ function DocumentList({
   );
 }
 
-function SalesInsightsPanel({
+function SalesHero({
+  activeSection,
+  onAction
+}: {
+  activeSection: SalesSection;
+  onAction: (kind: SalesSection["hero"]["actions"][number]["kind"]) => void;
+}) {
+  return (
+    <section className="sales-template-hero" aria-label={activeSection.title}>
+      <div>
+        {activeSection.hero.eyebrow ? <span>{activeSection.hero.eyebrow}</span> : null}
+        <h1>{activeSection.hero.title}</h1>
+        {activeSection.hero.description ? <p>{activeSection.hero.description}</p> : null}
+      </div>
+      <div className="sales-template-hero-actions">
+        {activeSection.hero.actions.map((action) => (
+          <button key={action.label} onClick={() => onAction(action.kind)} type="button">{action.label}</button>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function SalesMetricGrid({
+  activeSection,
+  isFallbackData,
+  rows,
+  totalAmount
+}: {
+  activeSection: SalesSection;
+  isFallbackData: boolean;
+  rows: SalesDocumentRow[];
+  totalAmount: number;
+}) {
+  const count = rows.length;
+  const pendingCount = rows.filter((row) => /pendiente|vencida|preparacion|borrador|facturable/i.test(row.status)).length;
+  const values = activeSection.metrics.map((metric, index) => ({
+    ...metric,
+    value: metric.type === "amount"
+      ? formatMoney(isFallbackData && metric.fallbackValue !== undefined ? metric.fallbackValue : totalAmount)
+      : String(isFallbackData && metric.fallbackValue !== undefined ? metric.fallbackValue : index === 1 ? pendingCount : count)
+  }));
+
+  return (
+    <section className="sales-template-metrics" aria-label={`Resumen de ${activeSection.label.toLowerCase()}`}>
+      {values.map((metric) => (
+        <article className="sales-template-metric" key={metric.label}>
+          <span className={`sales-template-metric-icon ${metric.tone}`}>
+            <BarChart3 aria-hidden="true" size={20} strokeWidth={2.3} />
+          </span>
+          <strong>{metric.value}</strong>
+          <h2>{metric.label}</h2>
+          {metric.description ? <p>{metric.description}</p> : null}
+        </article>
+      ))}
+    </section>
+  );
+}
+
+function SalesSectionTabs({
+  activeSectionId,
+  onSectionChange,
+  sections
+}: {
+  activeSectionId: SalesSectionId;
+  onSectionChange: (sectionId: SalesSectionId) => void;
+  sections: SalesSection[];
+}) {
+  return (
+    <div className="fiscal-tabs sales-section-tabs" role="tablist" aria-label="Subsecciones de ventas">
+      {sections.map((section) => (
+        <button
+          className={`tab${section.id === activeSectionId ? " active" : ""}`}
+          key={section.id}
+          onClick={() => onSectionChange(section.id)}
+          role="tab"
+          type="button"
+        >
+          {section.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function SalesAssistantPanel({
   activeSection,
   rows
 }: {
@@ -529,7 +836,7 @@ function SalesInsightsPanel({
   const topClient = rows[0]?.client ?? "Sin cliente destacado";
 
   return (
-    <section className="sales-action-panel insights-panel" aria-label="Insights de ventas">
+    <section className="sales-action-panel insights-panel" aria-label="Asistente de ventas">
       <div>
         <Sparkles aria-hidden="true" size={22} fill="currentColor" />
         <h2>Resumen inteligente de {activeSection.label.toLowerCase()}</h2>
@@ -804,6 +1111,16 @@ function QuoteForm({ section, onCancel }: { section: SalesSection; onCancel: () 
     ]);
   };
 
+  const duplicateLine = (line: QuoteLine) => {
+    setLines((current) => [
+      ...current,
+      {
+        ...line,
+        id: Date.now()
+      }
+    ]);
+  };
+
   const updateLine = (id: number, patch: Partial<QuoteLine>) => {
     setLines((current) => current.map((line) => (
       line.id === id ? { ...line, ...patch } : line
@@ -889,7 +1206,13 @@ function QuoteForm({ section, onCancel }: { section: SalesSection; onCancel: () 
 
       <section className="quote-tab-panel">
         {activeTab === "products" ? (
-          <ProductsTab lines={lines} onAddLine={addLine} onRemoveLine={removeLine} onUpdateLine={updateLine} />
+          <ProductsTab
+            lines={lines}
+            onAddLine={addLine}
+            onDuplicateLine={duplicateLine}
+            onRemoveLine={removeLine}
+            onUpdateLine={updateLine}
+          />
         ) : null}
         {activeTab === "totals" ? (
           <TotalsTab
@@ -944,14 +1267,23 @@ function QuoteTab({
 function ProductsTab({
   lines,
   onAddLine,
+  onDuplicateLine,
   onRemoveLine,
   onUpdateLine
 }: {
   lines: QuoteLine[];
   onAddLine: () => void;
+  onDuplicateLine: (line: QuoteLine) => void;
   onRemoveLine: (id: number) => void;
   onUpdateLine: (id: number, patch: Partial<QuoteLine>) => void;
 }) {
+  const [lineMenuId, setLineMenuId] = useState<number | null>(null);
+
+  const runLineAction = (action: () => void) => {
+    action();
+    setLineMenuId(null);
+  };
+
   return (
     <div className="quote-products-panel">
       <button className="sage-primary-button" onClick={onAddLine} type="button">
@@ -1025,9 +1357,24 @@ function ProductsTab({
                   </button>
                 </td>
                 <td>
-                  <button className="sage-table-button" type="button" aria-label="Mas acciones">
-                    <MoreVertical aria-hidden="true" size={22} />
-                  </button>
+                  <div className="quote-line-actions">
+                    <button
+                      aria-expanded={lineMenuId === line.id}
+                      className="sage-table-button"
+                      onClick={() => setLineMenuId((current) => current === line.id ? null : line.id)}
+                      type="button"
+                      aria-label="Mas acciones"
+                    >
+                      <MoreVertical aria-hidden="true" size={22} />
+                    </button>
+                    {lineMenuId === line.id ? (
+                      <div className="sales-popover quote-line-popover" role="menu">
+                        <button onClick={() => runLineAction(() => onDuplicateLine(line))} type="button">Duplicar linea</button>
+                        <button onClick={() => runLineAction(() => onUpdateLine(line.id, { discount: 0 }))} type="button">Quitar descuento</button>
+                        <button onClick={() => runLineAction(() => onRemoveLine(line.id))} type="button">Eliminar linea</button>
+                      </div>
+                    ) : null}
+                  </div>
                 </td>
               </tr>
             )) : (
@@ -1240,3 +1587,4 @@ function QuoteStickyBar({
     </footer>
   );
 }
+

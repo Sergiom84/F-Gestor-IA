@@ -87,5 +87,6 @@ export function getDisplayName(email: string | undefined): string {
     return "USUARIO";
   }
 
-  return (email.split("@").at(0) ?? "USUARIO").replace(/[._-]+/g, " ").toUpperCase();
+  const localName = email.split("@").at(0) ?? "USUARIO";
+  return localName.replace(/[._-]+/g, " ").trim().split(/\s+/).at(0)?.toUpperCase() ?? "USUARIO";
 }

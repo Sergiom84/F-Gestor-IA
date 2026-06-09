@@ -115,7 +115,7 @@ export function KpiHero({ metrics }: { metrics: DashboardMetrics }) {
   );
 }
 
-export function CopilotPanel({
+export function AssistantPanel({
   needsReviewCount,
   ocrRequiredCount
 }: {
@@ -158,7 +158,7 @@ export function CopilotPanel({
       <div className="copilot-head">
         <span className="copilot-badge"><Sparkles aria-hidden="true" size={20} fill="currentColor" /></span>
         <div>
-          <h3>Copilot · Qué mirar hoy</h3>
+          <h3>Asistente · Qué mirar hoy</h3>
           <p>Sugerencias y alertas generadas sobre tus documentos y obligaciones.</p>
         </div>
       </div>

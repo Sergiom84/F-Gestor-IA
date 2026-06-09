@@ -1,8 +1,9 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import {
-  ChevronRight,
+  BarChart3,
   LogOut,
+  SlidersHorizontal,
   Sparkles
 } from "lucide-react";
 import { signOut } from "../../login/actions";
@@ -35,54 +36,62 @@ export function DashboardShell({
   uploaded,
   userEmail
 }: DashboardShellProps) {
-  const isOperationalModule = activeModule === "sales"
-    || activeModule === "quotes"
-    || activeModule === "purchases"
-    || activeModule === "contacts"
-    || activeModule === "products"
-    || activeModule === "accounting";
   const moduleHref = (module: AppModule) => `/dashboard?org=${activeOrganization.id}&module=${module}`;
   const tabHref = (tab: DashboardTab) => `/dashboard?org=${activeOrganization.id}&module=dashboard&tab=${tab}`;
 
   return (
     <main className="fiscal-shell">
-      <aside className="fiscal-sidebar" aria-label="Navegacion principal">
-        <div className="sidebar-brand" aria-label="GFiscal">
-          <span className="sidebar-brand-mark">GF</span>
-          <span>GFiscal</span>
+      <header className="gfiscal-topbar">
+        <div className="gfiscal-topbar-inner">
+          <div className="gfiscal-topbar-util">
+            <Link className="gfiscal-brand" href={moduleHref("dashboard")} aria-label="GFiscal">
+              <img className="gfiscal-brand-mark" src="/icon.svg" alt="" />
+              <span>GFiscal</span>
+            </Link>
+
+            <span className="gfiscal-util-spacer" />
+
+            <span className="insights-pill">
+              <Sparkles aria-hidden="true" size={16} fill="currentColor" />
+              Asistente
+            </span>
+
+            <DashboardHeader
+              activeModule={activeModule}
+              activeOrganization={activeOrganization}
+              activeTab={activeTab}
+              organizations={organizations}
+              userEmail={userEmail}
+            />
+          </div>
+
+          <nav className="gfiscal-topnav" aria-label="Modulos">
+            {navigationItems.map((item) => {
+              const Icon = item.icon;
+              const isActive = activeModule === item.module;
+
+              return (
+                <Link className={`gfiscal-nav-item${isActive ? " active" : ""}`} href={moduleHref(item.module)} key={item.label}>
+                  <Icon aria-hidden="true" size={17} strokeWidth={2.35} />
+                  <span>{item.label}</span>
+                </Link>
+              );
+            })}
+          </nav>
         </div>
-        <nav className="sidebar-nav">
-          {navigationItems.map((item) => {
-            const Icon = item.icon;
-            const isActive = activeModule === item.module;
+      </header>
 
-            return (
-              <Link className={`sidebar-link${isActive ? " active" : ""}`} href={moduleHref(item.module)} key={item.label}>
-                <Icon aria-hidden="true" size={23} strokeWidth={2.7} />
-                <span>{item.label}</span>
-                {!isActive ? <ChevronRight aria-hidden="true" className="sidebar-chevron" size={15} /> : null}
-              </Link>
-            );
-          })}
-        </nav>
-      </aside>
-
-      <section className={`fiscal-workbench${isOperationalModule ? " sales-workbench" : ""}`}>
-        {isOperationalModule ? null : (
-          <DashboardHeader
-            activeModule={activeModule}
-            activeOrganization={activeOrganization}
-            activeTab={activeTab}
-            displayName={displayName}
-            organizations={organizations}
-            userEmail={userEmail}
-          />
-        )}
-
+      <section className="fiscal-workbench">
         {activeModule === "dashboard" ? (
-          <DashboardTabs activeTab={activeTab} tabHref={tabHref} />
+          <div className="gfiscal-page-head">
+            <div>
+              <h1>
+                <b>{displayName}</b>
+              </h1>
+            </div>
+            <DashboardTabs activeTab={activeTab} tabHref={tabHref} />
+          </div>
         ) : null}
-
         <DashboardNotices error={error} onboarded={onboarded} uploaded={uploaded} />
         {children}
       </section>
@@ -94,47 +103,38 @@ function DashboardHeader({
   activeModule,
   activeOrganization,
   activeTab,
-  displayName,
   organizations,
   userEmail
 }: {
   activeModule: AppModule;
   activeOrganization: Organization;
   activeTab: DashboardTab;
-  displayName: string;
   organizations: Organization[];
   userEmail: string | null;
 }) {
   return (
-    <header className="fiscal-header">
-      <div className="fiscal-title-block">
-        <div className="fiscal-title-row">
-          <h1>Hola, {displayName}</h1>
-        </div>
-      </div>
-      <div className="fiscal-header-actions">
-        <form className="org-switcher" action="/dashboard">
-          <label htmlFor="org">Organizacion</label>
-          <input type="hidden" name="module" value={activeModule} />
-          {activeModule === "dashboard" ? <input type="hidden" name="tab" value={activeTab} /> : null}
-          <select id="org" name="org" defaultValue={activeOrganization.id}>
-            {organizations.map((organization) => (
-              <option key={organization.id} value={organization.id}>
-                {organization.name}
-              </option>
-            ))}
-          </select>
-          <button className="button compact secondary" type="submit">
-            Cambiar
-          </button>
-        </form>
-        <form action={signOut}>
-          <button className="icon-action" aria-label="Salir" type="submit" title={userEmail ?? "Salir"}>
-            <LogOut aria-hidden="true" size={19} />
-          </button>
-        </form>
-      </div>
-    </header>
+    <div className="fiscal-header-actions">
+      <form className="org-switcher" action="/dashboard">
+        <label htmlFor="org">Organizacion</label>
+        <input type="hidden" name="module" value={activeModule} />
+        {activeModule === "dashboard" ? <input type="hidden" name="tab" value={activeTab} /> : null}
+        <select id="org" name="org" defaultValue={activeOrganization.id}>
+          {organizations.map((organization) => (
+            <option key={organization.id} value={organization.id}>
+              {organization.name}
+            </option>
+          ))}
+        </select>
+        <button className="button compact secondary" type="submit">
+          Cambiar
+        </button>
+      </form>
+      <form action={signOut}>
+        <button className="icon-action" aria-label="Salir" type="submit" title={userEmail ?? "Salir"}>
+          <LogOut aria-hidden="true" size={19} />
+        </button>
+      </form>
+    </div>
   );
 }
 
@@ -148,12 +148,15 @@ function DashboardTabs({
   return (
     <div className="fiscal-tabs" role="tablist" aria-label="Secciones del cuadro de mando">
       <Link className={`tab${activeTab === "accounting" ? " active" : ""}`} href={tabHref("accounting")} role="tab">
+        <SlidersHorizontal aria-hidden="true" size={15} strokeWidth={2.4} />
         Contabilidad
       </Link>
       <Link className={`tab${activeTab === "management" ? " active" : ""}`} href={tabHref("management")} role="tab">
+        <Sparkles aria-hidden="true" size={15} strokeWidth={2.4} />
         Gestoría
       </Link>
       <Link className={`tab${activeTab === "sales" ? " active" : ""}`} href={tabHref("sales")} role="tab">
+        <BarChart3 aria-hidden="true" size={15} strokeWidth={2.4} />
         Ventas y compras
       </Link>
     </div>

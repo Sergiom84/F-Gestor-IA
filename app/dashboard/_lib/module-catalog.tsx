@@ -29,7 +29,7 @@ export type ModuleDefinition = {
 };
 
 export const navigationItems = [
-  { label: "Cuadros de mando", icon: LayoutDashboard, module: "dashboard" },
+  { label: "Dashboard", icon: LayoutDashboard, module: "dashboard" },
   { label: "Ventas", icon: BarChart3, module: "sales" },
   { label: "Presupuestos", icon: FileSignature, module: "quotes" },
   { label: "Compras", icon: ShoppingCart, module: "purchases" },
@@ -48,7 +48,7 @@ function referenceQuickActions(module: AppModule, fallback: string[]): string[] 
 
 export const moduleCatalog: Record<AppModule, ModuleDefinition> = {
   dashboard: {
-    title: "Cuadros de mando",
+    title: "Dashboard",
     eyebrow: "Inicio",
     description: "Indicadores, importes pendientes, actividad documental y accesos rapidos.",
     quickActions: referenceQuickActions("dashboard", ["Ver contabilidad", "Ver ventas y compras", "Revisar novedades"]),
@@ -61,16 +61,12 @@ export const moduleCatalog: Record<AppModule, ModuleDefinition> = {
   },
   sales: {
     title: "Ventas",
-    eyebrow: "Active_Sales",
-    description: "Facturas de venta, presupuestos, cobros, clientes y recordatorios.",
-    quickActions: referenceQuickActions("sales", ["Crear facturas de venta", "Crear clientes", "Preparar recordatorios"]),
-    stats: [
-      { label: "Facturas de venta", value: "0", description: "Documentos de venta listos para emitir o consultar." },
-      { label: "Presupuestos", value: "0", description: "Ofertas pendientes de aprobacion o conversion." },
-      { label: "Cobros", value: "0,00 €", description: "Pagos registrados contra vencimientos abiertos." }
-    ],
-    tableTitle: "Facturas de venta",
-    tableDescription: "Lista operativa para consultar, emitir y hacer seguimiento de facturas.",
+    eyebrow: "",
+    description: "",
+    quickActions: referenceQuickActions("sales", ["Crear factura", "Crear cliente", "Preparar recordatorio"]),
+    stats: [],
+    tableTitle: "Ventas",
+    tableDescription: "",
     tableHeaders: ["Estado", "Fecha", "Numero", "Cliente", "Total", "Acciones"],
     emptyTitle: "No hay facturas de venta.",
     emptyDescription: "Crea una factura o importa ventas para empezar a controlar cobros."

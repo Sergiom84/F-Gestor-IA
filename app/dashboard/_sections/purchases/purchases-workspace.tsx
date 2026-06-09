@@ -51,7 +51,7 @@ export function PurchasesWorkspace({ organizationName, initialInvoices }: Purcha
   const [showEmailPanel, setShowEmailPanel] = useState(true);
   const [uploadedFiles, setUploadedFiles] = useState<string[]>([]);
   const [invoices, setInvoices] = useState<PurchaseInvoiceRow[]>(initialInvoices ?? artificialPurchaseRows);
-  const [showInsights, setShowInsights] = useState(false);
+  const [showAssistant, setShowAssistant] = useState(false);
   const [showEmailAddress, setShowEmailAddress] = useState(false);
   const [selectedRow, setSelectedRow] = useState<PurchaseInvoiceRow | null>(null);
   const [rowMenuId, setRowMenuId] = useState<string | null>(null);
@@ -135,13 +135,13 @@ export function PurchasesWorkspace({ organizationName, initialInvoices }: Purcha
             <button
               className="insights-pill sales-insights-pill"
               onClick={() => {
-                setShowInsights((current) => !current);
+                setShowAssistant((current) => !current);
                 setShowEmailAddress(false);
               }}
               type="button"
             >
               <Sparkles aria-hidden="true" size={18} fill="currentColor" />
-              Copilot Insights
+              Asistente
             </button>
           </div>
           <p>
@@ -152,7 +152,7 @@ export function PurchasesWorkspace({ organizationName, initialInvoices }: Purcha
           className="purchase-email-link"
           onClick={() => {
             setShowEmailAddress((current) => !current);
-            setShowInsights(false);
+            setShowAssistant(false);
           }}
           title={organizationName}
           type="button"
@@ -171,7 +171,7 @@ export function PurchasesWorkspace({ organizationName, initialInvoices }: Purcha
         </div>
       ) : null}
 
-      {showInsights ? <PurchaseInsightsPanel rows={rows} /> : null}
+      {showAssistant ? <PurchaseAssistantPanel rows={rows} /> : null}
 
       {showEmailAddress ? (
         <PurchaseEmailPanel
@@ -393,12 +393,12 @@ export function PurchasesWorkspace({ organizationName, initialInvoices }: Purcha
   );
 }
 
-function PurchaseInsightsPanel({ rows }: { rows: PurchaseInvoiceRow[] }) {
+function PurchaseAssistantPanel({ rows }: { rows: PurchaseInvoiceRow[] }) {
   const total = rows.reduce((sum, row) => sum + row.total, 0);
   const topSupplier = rows[0]?.supplier ?? "Sin proveedor destacado";
 
   return (
-    <section className="sales-action-panel insights-panel" aria-label="Insights de compras">
+    <section className="sales-action-panel insights-panel" aria-label="Asistente de compras">
       <div>
         <Sparkles aria-hidden="true" size={22} fill="currentColor" />
         <h2>Resumen inteligente de facturas de compra</h2>

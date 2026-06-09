@@ -35,7 +35,7 @@
 .kpi-delta svg { width: 13px; height: 13px; }
 .kpi-spark { width: 84px; height: 30px; display: block; }
 
-/* ---- Copilot panel ------------------------------------------------------- */
+/* ---- Assistant panel ----------------------------------------------------- */
 .copilot-card {
   border-radius: var(--ft-radius); box-shadow: var(--ft-shadow);
   border: 1px solid color-mix(in oklab, var(--ft-accent) 22%, var(--ft-card-border));

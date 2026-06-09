@@ -61,14 +61,14 @@ export const sageActiveFeatureSignals = [
   "Core",
   "Accounting",
   "Sales",
-  "Copilot",
+  "Asistente",
   "ui_paymentsIn",
   "ui_simplifiedInvoices_51920",
   "ui_simplified_purchase_invoice_by_email",
   "ui_onlinePaymentShowInfo_54101",
   "ui_eInvoicingAccounting_51346",
   "ui_salesWithholdings",
-  "ui_showCopilotFinanceAgent=false"
+  "ui_showAssistantFinanceAgent=false"
 ] as const;
 
 export const sageActiveDesignSignals = {
@@ -95,7 +95,7 @@ export const sageActiveDesignSignals = {
 export const sageActiveModules: SageReferenceModule[] = [
   {
     id: "dashboard",
-    label: "Cuadros de mando",
+    label: "Dashboard",
     sageKeys: [
       "home",
       "dashboard",
@@ -142,7 +142,7 @@ export const sageActiveModules: SageReferenceModule[] = [
     id: "sales",
     label: "Ventas",
     sageKeys: [
-      "Active_Sales",
+      "sales",
       "salesinvoices",
       "salesoffers",
       "salesorders",
@@ -612,13 +612,13 @@ export const sageActiveModules: SageReferenceModule[] = [
   },
   {
     id: "copilot",
-    label: "Copilot Insights",
+    label: "Asistente",
     sageKeys: [
-      "Copilot",
-      "Copilot Insights",
+      "Asistente",
+      "Asistente",
       "home.cards.insights",
       "creditControlTile",
-      "ui_showCopilotFinanceAgent"
+      "ui_showAssistantFinanceAgent"
     ],
     purpose:
       "Mostrar recomendaciones, explicaciones y alertas contextuales generadas por IA con auditoria.",
@@ -630,13 +630,13 @@ export const sageActiveModules: SageReferenceModule[] = [
       "recommendations"
     ],
     quickActions: [
-      "Ver insights",
+      "Ver asistente",
       "Explicar indicador",
       "Preparar recordatorio",
       "Revisar riesgo"
     ],
     lists: [
-      "Insights activos",
+      "Asistente activo",
       "Recomendaciones",
       "Alertas de cobro",
       "Coste IA"

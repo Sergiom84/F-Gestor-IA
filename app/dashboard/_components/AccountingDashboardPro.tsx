@@ -7,11 +7,11 @@ import type {
 } from "../_lib/types";
 import {
   ChartRow,
-  CopilotPanel,
   DocsPanel,
   KpiHero,
   QuickUpload,
-  ReviewPanel
+  ReviewPanel,
+  AssistantPanel
 } from "./DashboardWidgets";
 import "./dashboard-pro.css";
 
@@ -46,7 +46,7 @@ export function AccountingDashboardPro({
     return (
       <div className="dash-pro">
         <section className="chart-row" style={{ gridTemplateColumns: "minmax(0,1fr) minmax(320px,0.9fr)" }}>
-          <CopilotPanel needsReviewCount={metrics.needsReviewCount} ocrRequiredCount={metrics.ocrRequiredCount} />
+          <AssistantPanel needsReviewCount={metrics.needsReviewCount} ocrRequiredCount={metrics.ocrRequiredCount} />
           <ReviewPanel tasks={tasks} />
         </section>
         <KpiHero metrics={metrics} />
@@ -63,7 +63,7 @@ export function AccountingDashboardPro({
     <div className="dash-pro">
       <KpiHero metrics={metrics} />
       <ChartRow metrics={metrics} />
-      <CopilotPanel needsReviewCount={metrics.needsReviewCount} ocrRequiredCount={metrics.ocrRequiredCount} />
+      <AssistantPanel needsReviewCount={metrics.needsReviewCount} ocrRequiredCount={metrics.ocrRequiredCount} />
       <section className="ops-grid">
         <DocsPanel docs={docs} />
         <div style={{ display: "grid", gap: "var(--ft-gap, 24px)" }}>

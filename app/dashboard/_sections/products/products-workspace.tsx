@@ -1,9 +1,9 @@
 "use client";
 
 import {
+  BarChart3,
   CalendarDays,
   ChevronDown,
-  ChevronUp,
   Filter,
   PenLine,
   Plus,
@@ -12,10 +12,12 @@ import {
   Trash2,
   X
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { formatMoney } from "../../_lib/formatters";
 
 type ProductsView = "product-list" | "product" | "tariffs" | "tariff-form" | "discount-groups" | "discount-form";
+type ProductsSectionId = "products" | "tariffs" | "discount-groups";
+type ProductsHeroAction = ProductsSectionId | "create" | "create-tariff" | "create-discount-group";
 type ProductFormTab = "basic" | "pricing";
 type ProductCategory = "product" | "service";
 
@@ -29,45 +31,141 @@ const discountGroupColumns = ["Codigo", "Nombre", "Fecha de inicio", "Fecha de f
 const tariffItemColumns = ["Codigo de producto o servicio", "Nombre", "Unidad de medida", "Activa", "Tramos", "Editar", "Eliminar"];
 const discountItemColumns = ["Codigo de producto o servicio", "Nombre", "Unidad de medida", "Activo", "Descuento", "Tramos", "Editar", "Eliminar"];
 
+type ProductsSection = {
+  id: ProductsSectionId;
+  label: string;
+  title: string;
+  createLabel: string;
+  searchLabel: string;
+  tableTitle: string;
+  emptyTitle: string;
+  emptyDescription: string;
+  columns: string[];
+  metrics: Array<{
+    label: string;
+    tone: "teal" | "indigo" | "green";
+    value: string;
+  }>;
+  actions: Array<{
+    kind: ProductsHeroAction;
+    label: string;
+  }>;
+};
+
+const productsSections: ProductsSection[] = [
+  {
+    id: "products",
+    label: "Productos y servicios",
+    title: "Productos y servicios",
+    createLabel: "Crear producto",
+    searchLabel: "Buscar productos",
+    tableTitle: "Productos y servicios",
+    emptyTitle: "No hay productos ni servicios.",
+    emptyDescription: "Crea el primer producto o servicio.",
+    columns: ["Codigo", "Nombre", "Categoria", "Grupo de impuestos", "Precio", "Estado", "Acciones"],
+    metrics: [
+      { label: "Productos", tone: "teal", value: "0" },
+      { label: "Servicios", tone: "indigo", value: "0" },
+      { label: "Valor catalogo", tone: "green", value: "0,00 €" }
+    ],
+    actions: [
+      { kind: "create", label: "Crear producto" },
+      { kind: "create-tariff", label: "Crear tarifa" },
+      { kind: "create-discount-group", label: "Crear descuento" }
+    ]
+  },
+  {
+    id: "tariffs",
+    label: "Tarifas",
+    title: "Tarifas",
+    createLabel: "Crear tarifa",
+    searchLabel: "Buscar tarifas",
+    tableTitle: "Tarifas",
+    emptyTitle: "No hay tarifas.",
+    emptyDescription: "Crea una tarifa para empezar.",
+    columns: tariffColumns.filter((column) => column !== "Editar" && column !== "Eliminar").concat("Acciones"),
+    metrics: [
+      { label: "Tarifas", tone: "teal", value: "0" },
+      { label: "Activas", tone: "indigo", value: "0" },
+      { label: "Vigentes", tone: "green", value: "0" }
+    ],
+    actions: [
+      { kind: "create", label: "Crear tarifa" },
+      { kind: "products", label: "Ver productos" },
+      { kind: "discount-groups", label: "Ver descuentos" }
+    ]
+  },
+  {
+    id: "discount-groups",
+    label: "Grupos de descuentos",
+    title: "Grupos de descuentos",
+    createLabel: "Crear descuento",
+    searchLabel: "Buscar grupos de descuentos",
+    tableTitle: "Grupos de descuentos",
+    emptyTitle: "No hay grupos de descuentos.",
+    emptyDescription: "Crea un grupo de descuentos para empezar.",
+    columns: discountGroupColumns.filter((column) => column !== "Editar" && column !== "Eliminar").concat("Acciones"),
+    metrics: [
+      { label: "Grupos", tone: "teal", value: "0" },
+      { label: "Activos", tone: "indigo", value: "0" },
+      { label: "Vigentes", tone: "green", value: "0" }
+    ],
+    actions: [
+      { kind: "create", label: "Crear descuento" },
+      { kind: "products", label: "Ver productos" },
+      { kind: "tariffs", label: "Ver tarifas" }
+    ]
+  }
+];
+
 export function ProductsWorkspace({ organizationName }: { organizationName: string }) {
   const [view, setView] = useState<ProductsView>("product-list");
-  const [showNav, setShowNav] = useState(true);
   const [notice, setNotice] = useState<string | null>(null);
 
-  const openProduct = () => { setView("product-list"); setShowNav(false); };
-  const openTariffs = () => { setView("tariffs"); setShowNav(false); };
-  const openDiscountGroups = () => { setView("discount-groups"); setShowNav(false); };
+  const activeSectionId = resolveProductsSectionId(view);
+  const activeSection = productsSections.find((section) => section.id === activeSectionId) ?? productsSections[0]!;
+  const openProduct = () => setView("product-list");
+  const openTariffs = () => setView("tariffs");
+  const openDiscountGroups = () => setView("discount-groups");
+  const openSection = (sectionId: ProductsSectionId) => {
+    if (sectionId === "products") {
+      openProduct();
+    } else if (sectionId === "tariffs") {
+      openTariffs();
+    } else {
+      openDiscountGroups();
+    }
+  };
+  const openCreate = (sectionId: ProductsSectionId) => {
+    if (sectionId === "products") {
+      setView("product");
+    } else if (sectionId === "tariffs") {
+      setView("tariff-form");
+    } else {
+      setView("discount-form");
+    }
+  };
+  const handleHeroAction = (kind: ProductsHeroAction) => {
+    if (kind === "create") {
+      openCreate(activeSectionId);
+      return;
+    }
+
+    if (kind === "create-tariff") {
+      setView("tariff-form");
+      return;
+    }
+
+    if (kind === "create-discount-group") {
+      setView("discount-form");
+      return;
+    }
+
+    openSection(kind);
+  };
 
   return (
-    <section className={`products-module-shell${showNav ? "" : " nav-collapsed"}`} aria-label={`Productos y servicios de ${organizationName}`}>
-      {showNav ? (
-        <aside className="products-secondary-nav" aria-label="Navegacion de productos y servicios">
-          <strong>Productos y servicios</strong>
-          <button
-            className={`products-secondary-main${view === "product-list" || view === "product" ? " active" : ""}`}
-            onClick={openProduct}
-            type="button"
-          >
-            <ChevronUp aria-hidden="true" size={19} />
-            <span>Precios y descuentos</span>
-          </button>
-          <button
-            className={`products-secondary-sub${view === "tariffs" || view === "tariff-form" ? " active" : ""}`}
-            onClick={openTariffs}
-            type="button"
-          >
-            Tarifas
-          </button>
-          <button
-            className={`products-secondary-sub${view === "discount-groups" || view === "discount-form" ? " active" : ""}`}
-            onClick={openDiscountGroups}
-            type="button"
-          >
-            Grupos de descuentos
-          </button>
-        </aside>
-      ) : null}
-
+    <section className="products-module-shell" aria-label={`Productos y servicios de ${organizationName}`}>
       <div className="products-operation-surface">
         {notice ? (
           <div className="sales-live-notice success" role="status" style={{ marginBottom: "16px" }}>
@@ -78,9 +176,11 @@ export function ProductsWorkspace({ organizationName }: { organizationName: stri
           </div>
         ) : null}
         {view === "product-list" ? (
-          <ProductsList
-            onBack={() => setShowNav(true)}
-            onCreate={() => setView("product")}
+          <ProductsTemplateView
+            activeSection={activeSection}
+            activeSectionId={activeSectionId}
+            onHeroAction={handleHeroAction}
+            onSectionChange={openSection}
           />
         ) : view === "product" ? (
           <ProductServiceForm
@@ -88,12 +188,11 @@ export function ProductsWorkspace({ organizationName }: { organizationName: stri
             onCreate={() => { setView("product-list"); setNotice("Producto guardado en la lista local."); }}
           />
         ) : view === "tariffs" ? (
-          <ReferenceList
-            columns={tariffColumns}
-            onBack={() => setShowNav(true)}
-            onCreate={() => setView("tariff-form")}
-            searchLabel="Buscar tarifas"
-            title="Tarifas"
+          <ProductsTemplateView
+            activeSection={activeSection}
+            activeSectionId={activeSectionId}
+            onHeroAction={handleHeroAction}
+            onSectionChange={openSection}
           />
         ) : view === "tariff-form" ? (
           <TariffForm
@@ -101,13 +200,11 @@ export function ProductsWorkspace({ organizationName }: { organizationName: stri
             onCreate={() => { openTariffs(); setNotice("Tarifa guardada en la lista local."); }}
           />
         ) : view === "discount-groups" ? (
-          <ReferenceList
-            columns={discountGroupColumns}
-            focusCreate
-            onBack={() => setShowNav(true)}
-            onCreate={() => setView("discount-form")}
-            searchLabel="Buscar grupos de descuentos"
-            title="Grupos de descuentos"
+          <ProductsTemplateView
+            activeSection={activeSection}
+            activeSectionId={activeSectionId}
+            onHeroAction={handleHeroAction}
+            onSectionChange={openSection}
           />
         ) : (
           <DiscountGroupForm
@@ -120,54 +217,167 @@ export function ProductsWorkspace({ organizationName }: { organizationName: stri
   );
 }
 
-function ProductsList({ onBack, onCreate }: { onBack: () => void; onCreate: () => void }) {
+function ProductsTemplateView({
+  activeSection,
+  activeSectionId,
+  onHeroAction,
+  onSectionChange
+}: {
+  activeSection: ProductsSection;
+  activeSectionId: ProductsSectionId;
+  onHeroAction: (kind: ProductsHeroAction) => void;
+  onSectionChange: (sectionId: ProductsSectionId) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const [showFilters, setShowFilters] = useState(false);
+  const [showColumns, setShowColumns] = useState(false);
+
   return (
-    <section className="products-list-view" aria-label="Productos y servicios">
-      <div className="products-list-breadcrumb">
-        <button className="products-back-button" onClick={onBack} type="button">
-          ← Productos y servicios
-        </button>
-        <h1>Precios y descuentos</h1>
-      </div>
+    <section className="products-list-view product-template-view" aria-label={activeSection.title}>
+      <ProductSectionTabs
+        activeSectionId={activeSectionId}
+        onSectionChange={onSectionChange}
+        sections={productsSections}
+      />
+      <ProductTemplateHero activeSection={activeSection} onAction={onHeroAction} />
+      <ProductMetricGrid activeSection={activeSection} />
       <div className="products-list-toolbar">
-        <button className="sage-primary-button" onClick={onCreate} type="button">
-          <Plus aria-hidden="true" size={22} />
-          Crear
-        </button>
+        <span aria-hidden="true" />
         <div className="products-toolbar-actions">
           <label className="sales-search-control">
             <Search aria-hidden="true" size={24} />
-            <input aria-label="Buscar productos" placeholder="Buscar..." type="search" />
+            <input
+              aria-label={activeSection.searchLabel}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Buscar..."
+              type="search"
+              value={query}
+            />
           </label>
-          <button className="sage-outline-button" type="button">
+          <button className="sage-outline-button" onClick={() => setShowFilters((current) => !current)} type="button">
             <Filter aria-hidden="true" size={20} fill="currentColor" />
             Filtrar
           </button>
+          <button className="sage-outline-button" onClick={() => setShowColumns((current) => !current)} type="button">
+            Personalizar
+            <ChevronDown aria-hidden="true" size={15} />
+          </button>
         </div>
       </div>
-      <div className="products-reference-panel">
+
+      {showFilters ? (
+        <div className="sales-filter-strip">
+          <span>Filtros activos</span>
+          <button type="button">Estado: todos</button>
+          <button type="button">Vigencia: actual</button>
+        </div>
+      ) : null}
+
+      {showColumns ? (
+        <div className="sales-filter-strip columns-strip">
+          <span>Columnas visibles</span>
+          {activeSection.columns.map((column) => (
+            <button key={column} type="button">{column}</button>
+          ))}
+        </div>
+      ) : null}
+
+      <div className="products-reference-panel product-template-table-panel">
+        <div className="sales-template-table-head">
+          <h2>{activeSection.tableTitle}</h2>
+        </div>
         <table className="products-data-table">
           <thead>
             <tr>
-              <th>Codigo</th>
-              <th>Nombre</th>
-              <th>Categoria</th>
-              <th>Grupo de impuestos</th>
-              <th>Precio</th>
-              <th>Estado</th>
-              <th>Editar</th>
-              <th>Eliminar</th>
+              {activeSection.columns.map((column) => (
+                <th key={column}>{column}</th>
+              ))}
             </tr>
           </thead>
         </table>
         <div className="products-empty-state">
           <SearchX aria-hidden="true" size={94} strokeWidth={2.7} />
-          <strong>Esta lista esta en blanco.</strong>
-          <p>Crea el primer producto o servicio.</p>
+          <strong>{activeSection.emptyTitle}</strong>
+          <p>{activeSection.emptyDescription}</p>
         </div>
       </div>
     </section>
   );
+}
+
+function ProductTemplateHero({
+  activeSection,
+  onAction
+}: {
+  activeSection: ProductsSection;
+  onAction: (kind: ProductsHeroAction) => void;
+}) {
+  return (
+    <section className="sales-template-hero product-template-hero" aria-label={activeSection.title}>
+      <div>
+        <h1>{activeSection.title}</h1>
+      </div>
+      <div className="sales-template-hero-actions">
+        {activeSection.actions.map((action) => (
+          <button key={action.label} onClick={() => onAction(action.kind)} type="button">{action.label}</button>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function ProductMetricGrid({ activeSection }: { activeSection: ProductsSection }) {
+  return (
+    <section className="sales-template-metrics product-template-metrics" aria-label={`Resumen de ${activeSection.label.toLowerCase()}`}>
+      {activeSection.metrics.map((metric) => (
+        <article className="sales-template-metric" key={metric.label}>
+          <span className={`sales-template-metric-icon ${metric.tone}`}>
+            <BarChart3 aria-hidden="true" size={20} strokeWidth={2.3} />
+          </span>
+          <strong>{metric.value}</strong>
+          <h2>{metric.label}</h2>
+        </article>
+      ))}
+    </section>
+  );
+}
+
+function ProductSectionTabs({
+  activeSectionId,
+  onSectionChange,
+  sections
+}: {
+  activeSectionId: ProductsSectionId;
+  onSectionChange: (sectionId: ProductsSectionId) => void;
+  sections: ProductsSection[];
+}) {
+  return (
+    <div className="fiscal-tabs sales-section-tabs product-section-tabs" role="tablist" aria-label="Subsecciones de productos y servicios">
+      {sections.map((section) => (
+        <button
+          className={`tab${section.id === activeSectionId ? " active" : ""}`}
+          key={section.id}
+          onClick={() => onSectionChange(section.id)}
+          role="tab"
+          type="button"
+        >
+          {section.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function resolveProductsSectionId(view: ProductsView): ProductsSectionId {
+  if (view === "tariffs" || view === "tariff-form") {
+    return "tariffs";
+  }
+
+  if (view === "discount-groups" || view === "discount-form") {
+    return "discount-groups";
+  }
+
+  return "products";
 }
 
 function ProductServiceForm({ onCancel, onCreate }: { onCancel: () => void; onCreate: () => void }) {
@@ -366,88 +576,6 @@ function ProductServiceForm({ onCancel, onCreate }: { onCancel: () => void; onCr
           { label: "Precio con IVA y descuento", value: priceWithTax }
         ]}
       />
-    </section>
-  );
-}
-
-function ReferenceList({
-  columns,
-  focusCreate = false,
-  onBack,
-  onCreate,
-  searchLabel,
-  title
-}: {
-  columns: string[];
-  focusCreate?: boolean;
-  onBack: () => void;
-  onCreate: () => void;
-  searchLabel: string;
-  title: string;
-}) {
-  const [query, setQuery] = useState("");
-  const [showFilters, setShowFilters] = useState(false);
-  const emptyMessage = useMemo(() => (
-    query.trim().length > 0
-      ? "La busqueda no ha dado ningun resultado. Intentalo de nuevo."
-      : "La busqueda no ha dado ningun resultado. Intentalo de nuevo."
-  ), [query]);
-
-  return (
-    <section className="products-list-view" aria-label={title}>
-      <div className="products-list-breadcrumb">
-        <button className="products-back-button" onClick={onBack} type="button">
-          ← Productos y servicios
-        </button>
-      </div>
-      <h1>{title}</h1>
-      <div className="products-list-toolbar">
-        <button className={`sage-primary-button${focusCreate ? " focused" : ""}`} onClick={onCreate} type="button">
-          <Plus aria-hidden="true" size={22} />
-          Crear
-        </button>
-        <div className="products-toolbar-actions">
-          <label className="sales-search-control">
-            <Search aria-hidden="true" size={24} />
-            <input
-              aria-label={searchLabel}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Buscar..."
-              type="search"
-              value={query}
-            />
-          </label>
-          <button className="sage-outline-button" onClick={() => setShowFilters((current) => !current)} type="button">
-            <Filter aria-hidden="true" size={20} fill="currentColor" />
-            Filtrar
-          </button>
-        </div>
-      </div>
-
-      {showFilters ? (
-        <div className="sales-filter-strip">
-          <span>Filtros</span>
-          <button type="button">Activos</button>
-          <button type="button">Fecha vigente</button>
-        </div>
-      ) : null}
-
-      <div className="products-reference-panel">
-        <table className="products-data-table">
-          <thead>
-            <tr>
-              {columns.map((column) => (
-                <th key={column}>{column}</th>
-              ))}
-            </tr>
-          </thead>
-        </table>
-        <div className="products-empty-state">
-          <SearchX aria-hidden="true" size={94} strokeWidth={2.7} />
-          <strong>Esta lista esta en blanco.</strong>
-          <p>{emptyMessage}</p>
-        </div>
-      </div>
     </section>
   );
 }

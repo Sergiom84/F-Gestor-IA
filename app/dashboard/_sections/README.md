@@ -2,7 +2,7 @@
 
 Each sidebar area lives in its own folder:
 
-- `dashboard`: Cuadros de mando and its tabs (`Contabilidad`, `Gestoría`, `Ventas y compras`).
+- `dashboard`: Dashboard and its tabs (`Contabilidad`, `Gestoría`, `Ventas y compras`).
 - `sales`: Ventas and its internal sales document views.
 - `purchases`: Compras and purchase invoice intake/review views.
 - `contacts`: Contactos and contact detail tabs.
