@@ -10,7 +10,6 @@ import {
   Filter,
   FolderOpen,
   Mail,
-  MoreVertical,
   PenLine,
   Plus,
   Search,
@@ -35,6 +34,13 @@ import type { PurchaseDocRow } from "../../_lib/types";
 type PurchaseTabId = ArtificialPurchaseTabId;
 type PurchaseInvoiceRow = ArtificialPurchaseInvoiceRow;
 type PurchaseNotice = { tone: "success" | "warning"; text: string };
+type PurchaseInvoiceFormValues = {
+  description: string;
+  invoiceDate: string;
+  invoiceNumber: string;
+  supplier: string;
+  total: string;
+};
 
 const purchaseTabs = artificialPurchaseTabs;
 
@@ -53,8 +59,8 @@ export function PurchasesWorkspace({ organizationName, initialInvoices }: Purcha
   const [invoices, setInvoices] = useState<PurchaseInvoiceRow[]>(initialInvoices ?? artificialPurchaseRows);
   const [showAssistant, setShowAssistant] = useState(false);
   const [showEmailAddress, setShowEmailAddress] = useState(false);
+  const [showCreateForm, setShowCreateForm] = useState(false);
   const [selectedRow, setSelectedRow] = useState<PurchaseInvoiceRow | null>(null);
-  const [rowMenuId, setRowMenuId] = useState<string | null>(null);
   const [notice, setNotice] = useState<PurchaseNotice | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [, startTransition] = useTransition();
@@ -83,6 +89,29 @@ export function PurchasesWorkspace({ organizationName, initialInvoices }: Purcha
   const addManualInvoice = () => {
     setActiveTab("review");
     setQuery("");
+    setShowCreateForm(true);
+  };
+
+  const createManualInvoice = (values: PurchaseInvoiceFormValues) => {
+    const totalValue = parseSpanishAmount(values.total);
+    const invoice: PurchaseInvoiceRow = {
+      id: `manual-${Date.now()}`,
+      importDate: new Date().toLocaleDateString("es-ES"),
+      fileName: "Alta manual",
+      status: "Pendiente",
+      tab: "review",
+      description: values.description.trim() || "Factura creada manualmente",
+      supplier: values.supplier.trim(),
+      invoiceDate: values.invoiceDate ? formatDateForDisplay(values.invoiceDate) : "",
+      invoiceNumber: values.invoiceNumber.trim(),
+      total: totalValue
+    };
+
+    setInvoices((current) => [invoice, ...current]);
+    setActiveTab("review");
+    setQuery("");
+    setShowCreateForm(false);
+    setNotice({ tone: "success", text: "Factura de compra creada." });
   };
 
   const registerFiles = (files: FileList | null) => {
@@ -99,25 +128,15 @@ export function PurchasesWorkspace({ organizationName, initialInvoices }: Purcha
       row.id === rowId ? { ...row, status: "Pagada" as const, tab: "paid" as const } : row
     ));
     setNotice({ tone: "success", text: "Factura marcada como pagada." });
-    setRowMenuId(null);
     setSelectedRow(null);
     if (/^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(rowId)) {
       startTransition(() => { void markPurchaseInvoicePaid(rowId); });
     }
   };
 
-  const duplicateInvoice = (row: PurchaseInvoiceRow) => {
-    const copy: PurchaseInvoiceRow = { ...row, id: `${row.id}-copy-${Date.now()}` };
-
-    setInvoices((current) => [copy, ...current]);
-    setNotice({ tone: "success", text: `Factura ${row.invoiceNumber} duplicada.` });
-    setRowMenuId(null);
-  };
-
   const deleteInvoice = (rowId: string) => {
     setInvoices((current) => current.filter((r) => r.id !== rowId));
     setNotice({ tone: "warning", text: "Factura eliminada." });
-    setRowMenuId(null);
     if (selectedRow?.id === rowId) {
       setSelectedRow(null);
     }
@@ -145,18 +164,21 @@ export function PurchasesWorkspace({ organizationName, initialInvoices }: Purcha
             </button>
           </div>
           <p>
-            Introduce los datos de las facturas de compra en tus registros contables mediante la subida de un PDF o una imagen. Tambien lo puedes hacer manualmente.
+            Introduce los datos de las facturas de compra subiendo un PDF o una imagen. Tambien puedes hacerlo manualmente.
           </p>
         </div>
         <button
           className="purchase-email-link"
           onClick={() => {
             setShowEmailAddress((current) => !current);
-            setShowAssistant(false);
-          }}
-          title={organizationName}
-          type="button"
-        >Ver direccion de e-mail</button>
+          setShowAssistant(false);
+        }}
+        title={organizationName}
+        type="button"
+      >
+        <Mail aria-hidden="true" size={15} />
+        Ver direccion de e-mail
+      </button>
       </header>
 
       {notice ? (
@@ -186,7 +208,7 @@ export function PurchasesWorkspace({ organizationName, initialInvoices }: Purcha
             <X aria-hidden="true" size={31} />
             No volver a mostrar
           </button>
-          <h2>Clasificacion automatica de facturas de compras recibidas por e-mail</h2>
+          <h2>Clasificacion automatica de facturas recibidas por e-mail</h2>
           <div className="purchase-mail-steps">
             <PurchaseStep
               icon={<Mail aria-hidden="true" size={66} />}
@@ -208,7 +230,7 @@ export function PurchasesWorkspace({ organizationName, initialInvoices }: Purcha
       ) : null}
 
       <section className="purchase-intake-row" aria-label="Entrada de facturas">
-        <button className="sage-primary-button purchase-create-button" type="button">
+        <button className="sage-primary-button purchase-create-button" onClick={addManualInvoice} type="button">
           <Plus aria-hidden="true" size={22} />
           Crear
         </button>
@@ -241,7 +263,7 @@ export function PurchasesWorkspace({ organizationName, initialInvoices }: Purcha
             <input
               aria-label="Buscar facturas de compra"
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Buscar..."
+              placeholder="Buscar facturas, proveedores, importes..."
               type="search"
               value={query}
             />
@@ -262,6 +284,13 @@ export function PurchasesWorkspace({ organizationName, initialInvoices }: Purcha
           <strong>{uploadedFiles.length} fichero(s) listo(s) para revisar</strong>
           <span>{uploadedFiles.join(", ")}</span>
         </div>
+      ) : null}
+
+      {showCreateForm ? (
+        <PurchaseInvoiceForm
+          onCancel={() => setShowCreateForm(false)}
+          onCreate={createManualInvoice}
+        />
       ) : null}
 
       {showFilters ? (
@@ -306,7 +335,7 @@ export function PurchasesWorkspace({ organizationName, initialInvoices }: Purcha
           <table className="purchase-table">
             <thead>
               <tr>
-                <th>Fecha de import...</th>
+                <th>Fecha de importacion</th>
                 <th>Nombre de fichero</th>
                 <th>Estado</th>
                 <th>Descripcion</th>
@@ -315,7 +344,6 @@ export function PurchasesWorkspace({ organizationName, initialInvoices }: Purcha
                 <th>Numero de factura</th>
                 <th>Total</th>
                 <th>Editar</th>
-                <th>Acciones</th>
               </tr>
             </thead>
             <tbody>
@@ -334,7 +362,6 @@ export function PurchasesWorkspace({ organizationName, initialInvoices }: Purcha
                       className="sage-table-button"
                       onClick={() => {
                         setSelectedRow(row);
-                        setRowMenuId(null);
                       }}
                       type="button"
                       aria-label={`Editar ${row.invoiceNumber}`}
@@ -342,36 +369,14 @@ export function PurchasesWorkspace({ organizationName, initialInvoices }: Purcha
                       <PenLine aria-hidden="true" size={25} fill="currentColor" />
                     </button>
                   </td>
-                  <td>
-                    <div className="purchase-row-actions">
-                      <button
-                        className="sage-table-button"
-                        onClick={() => {
-                          setRowMenuId(rowMenuId === row.id ? null : row.id);
-                          setSelectedRow(null);
-                        }}
-                        type="button"
-                        aria-label={`Acciones ${row.invoiceNumber}`}
-                      >
-                        <MoreVertical aria-hidden="true" size={25} />
-                      </button>
-                      {rowMenuId === row.id ? (
-                        <div className="sales-popover" role="menu">
-                          <button onClick={() => markAsPaid(row.id)} type="button">Marcar pagada</button>
-                          <button onClick={() => duplicateInvoice(row)} type="button">Duplicar</button>
-                          <button onClick={() => deleteInvoice(row.id)} type="button">Eliminar</button>
-                        </div>
-                      ) : null}
-                    </div>
-                  </td>
                 </tr>
               )) : (
                 <tr>
-                  <td colSpan={10}>
+                  <td colSpan={9}>
                     <div className="sales-empty-list">
                       <FileText aria-hidden="true" size={64} />
-                      <strong>Esta lista esta en blanco.</strong>
-                      <p>No hay facturas de compra para los filtros actuales.</p>
+                      <strong>Esta lista esta en blanco</strong>
+                      <p>No hay facturas de compra para los filtros actuales. Sube un PDF o crea una manualmente.</p>
                     </div>
                   </td>
                 </tr>
@@ -380,6 +385,8 @@ export function PurchasesWorkspace({ organizationName, initialInvoices }: Purcha
           </table>
         </div>
       </section>
+
+      <footer className="purchase-table-footer">Elementos: {rows.length}</footer>
 
       {selectedRow ? (
         <PurchaseDetailPanel
@@ -493,7 +500,13 @@ function PurchaseDetailPanel({
   );
 }
 
-function PurchaseInvoiceForm({ onCancel }: { onCancel: () => void }) {
+function PurchaseInvoiceForm({
+  onCancel,
+  onCreate
+}: {
+  onCancel: () => void;
+  onCreate: (values: PurchaseInvoiceFormValues) => void;
+}) {
   const [supplier, setSupplier] = useState("");
   const [invoiceNumber, setInvoiceNumber] = useState("");
   const [invoiceDate, setInvoiceDate] = useState("");
@@ -535,10 +548,34 @@ function PurchaseInvoiceForm({ onCancel }: { onCancel: () => void }) {
 
       <footer className="purchase-form-footer">
         <button className="quote-cancel-action" onClick={onCancel} type="button">Cancelar</button>
-        <button className="sage-primary-button" disabled={!canCreate} type="button">Crear</button>
+        <button
+          className="sage-primary-button"
+          disabled={!canCreate}
+          onClick={() => onCreate({ description, invoiceDate, invoiceNumber, supplier, total })}
+          type="button"
+        >
+          Crear
+        </button>
       </footer>
     </section>
   );
+}
+
+function parseSpanishAmount(value: string): number {
+  const normalized = value
+    .replace(/\s/g, "")
+    .replace(/[\u20ac]/g, "")
+    .replace(/\./g, "")
+    .replace(",", ".");
+  const parsed = Number.parseFloat(normalized);
+
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function formatDateForDisplay(value: string): string {
+  const [year, month, day] = value.split("-");
+
+  return year && month && day ? `${day}/${month}/${year}` : value;
 }
 
 function PurchaseStep({

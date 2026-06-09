@@ -96,8 +96,9 @@ export function ContactsWorkspace({ organizationName, initialClients, initialSup
   };
 
   const handleAdd = () => {
-    const label = currentSection.label.toLowerCase();
-    setNotice({ tone: "success", text: `Alta de ${label.slice(0, -1)} disponible en la version completa.` });
+    setIsCreatingContact(true);
+    setSelectedClientId(null);
+    setActiveClientTab("info");
   };
 
   const handleImport = () => {
@@ -191,6 +192,7 @@ export function ContactsWorkspace({ organizationName, initialClients, initialSup
                   if (activeSection === "clients") {
                     setSelectedClientId(row.id);
                     setActiveClientTab("info");
+                    setIsCreatingContact(false);
                   }
                 }}
                 type="button"
@@ -614,6 +616,9 @@ function NewContactForm({ sectionLabel, onCancel }: { sectionLabel: string; onCa
   const [taxId, setTaxId] = useState("");
   const [email, setEmail] = useState("");
   const canCreate = name.trim().length > 0 && code.trim().length > 0;
+  const handleCreate = () => {
+    onCancel();
+  };
 
   return (
     <section className="new-contact-form" aria-label={`Nuevo ${sectionLabel.toLowerCase().replace(/s$/, "")}`}>
@@ -653,7 +658,7 @@ function NewContactForm({ sectionLabel, onCancel }: { sectionLabel: string; onCa
       </div>
       <footer className="client-sticky-bar">
         <button className="quote-cancel-action" onClick={onCancel} type="button">Cancelar</button>
-        <button className="client-update-action" disabled={!canCreate} type="button">Crear</button>
+        <button className="client-update-action" disabled={!canCreate} onClick={handleCreate} type="button">Crear</button>
       </footer>
     </section>
   );
