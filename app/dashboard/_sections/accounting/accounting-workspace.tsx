@@ -1,10 +1,9 @@
 "use client";
 
 import {
+  BarChart3,
   CalendarDays,
-  Check,
   ChevronDown,
-  Download,
   Eye,
   Filter,
   MoreVertical,
@@ -12,7 +11,6 @@ import {
   Plus,
   Search,
   SearchX,
-  Settings,
   Trash2,
   X
 } from "lucide-react";
@@ -38,25 +36,122 @@ type MatchingStatus = "Apuntes sin marcar" | "Apuntes marcados" | "Todos";
 type AccountingSection = {
   id: AccountingSectionId;
   label: string;
-  group?: "matching" | "closings";
+  title: string;
+  searchLabel: string;
+  tableTitle: string;
+  columns: string[];
+  metrics: Array<{
+    label: string;
+    tone: "teal" | "indigo" | "green";
+    value: string;
+  }>;
+  actions: Array<{
+    kind: AccountingSectionId | "create-entry" | "import-entries" | "prepare-closing";
+    label: string;
+  }>;
 };
 
 type MatchingSubject = ArtificialMatchingSubject;
 type MatchingLine = ArtificialMatchingLine;
 type ClosingPeriod = ArtificialClosingPeriod;
 
-const accountingSections: AccountingSection[] = [
-  { id: "entries", label: "Asientos" },
-  { id: "matching", label: "Marcaje", group: "matching" },
-  { id: "closings", label: "Cierres", group: "closings" },
-  { id: "fixed-assets", label: "Inmovilizado" },
-  { id: "fixed-asset-transactions", label: "Transacciones de inmovilizado" }
-];
-
 const matchingCategories = artificialMatchingCategories;
 const matchingSubjects: MatchingSubject[] = artificialMatchingSubjects;
 const matchingLines: Record<string, MatchingLine[]> = artificialMatchingLines;
 const closingPeriods: ClosingPeriod[] = artificialClosingPeriods;
+
+const accountingSections: AccountingSection[] = [
+  {
+    id: "entries",
+    label: "Asientos",
+    title: "Asientos",
+    searchLabel: "Buscar asientos",
+    tableTitle: "Asientos",
+    columns: ["Numero", "Diario", "Fecha", "Numero de docu...", "Fecha de docum...", "Estado", "Cuenta", "Tercero", "Descripcion", "Acciones"],
+    metrics: [
+      { label: "Asientos", tone: "teal", value: "0" },
+      { label: "Pendientes", tone: "indigo", value: "0" },
+      { label: "Descuadre", tone: "green", value: "0,00 €" }
+    ],
+    actions: [
+      { kind: "create-entry", label: "Crear asiento" },
+      { kind: "import-entries", label: "Importar asientos" },
+      { kind: "matching", label: "Marcar apuntes" }
+    ]
+  },
+  {
+    id: "matching",
+    label: "Marcaje",
+    title: "Marcaje",
+    searchLabel: "Buscar tercero o cuenta",
+    tableTitle: "Marcaje",
+    columns: ["Diario", "Fecha", "Numero", "Documento", "Cuenta", "Descripcion", "Debe", "Marca", "Acciones"],
+    metrics: [
+      { label: "Terceros", tone: "teal", value: String(matchingSubjects.length) },
+      { label: "Categorias", tone: "indigo", value: String(matchingCategories.length) },
+      { label: "Saldo", tone: "green", value: formatMoney(matchingSubjects.reduce((total, subject) => total + subject.amount, 0)) }
+    ],
+    actions: [
+      { kind: "entries", label: "Ver asientos" },
+      { kind: "closings", label: "Ver cierres" },
+      { kind: "fixed-assets", label: "Ver inmovilizado" }
+    ]
+  },
+  {
+    id: "closings",
+    label: "Cierres",
+    title: "Cierres",
+    searchLabel: "Buscar cierres",
+    tableTitle: "Periodos de cierre",
+    columns: ["Periodo", "Tipo", "Estado", "Controles", "Fecha", "Acciones"],
+    metrics: [
+      { label: "Periodos", tone: "teal", value: String(closingPeriods.length) },
+      { label: "Mensuales", tone: "indigo", value: String(closingPeriods.filter((period) => period.kind === "Mensual").length) },
+      { label: "Ejercicio", tone: "green", value: String(closingPeriods.filter((period) => period.kind === "Ejercicio").length) }
+    ],
+    actions: [
+      { kind: "prepare-closing", label: "Preparar cierre" },
+      { kind: "entries", label: "Ver asientos" },
+      { kind: "matching", label: "Ver marcaje" }
+    ]
+  },
+  {
+    id: "fixed-assets",
+    label: "Inmovilizado",
+    title: "Inmovilizado",
+    searchLabel: "Buscar inmovilizado",
+    tableTitle: "Inmovilizado",
+    columns: ["Codigo", "Descripcion", "Fecha de alta", "Cuenta", "Valor", "Estado", "Acciones"],
+    metrics: [
+      { label: "Activos", tone: "teal", value: "0" },
+      { label: "Altas", tone: "indigo", value: "0" },
+      { label: "Valor", tone: "green", value: "0,00 €" }
+    ],
+    actions: [
+      { kind: "fixed-asset-transactions", label: "Ver transacciones" },
+      { kind: "entries", label: "Ver asientos" },
+      { kind: "closings", label: "Ver cierres" }
+    ]
+  },
+  {
+    id: "fixed-asset-transactions",
+    label: "Transacciones",
+    title: "Transacciones de inmovilizado",
+    searchLabel: "Buscar transacciones",
+    tableTitle: "Transacciones de inmovilizado",
+    columns: ["Fecha", "Activo", "Tipo", "Cuenta", "Importe", "Estado", "Acciones"],
+    metrics: [
+      { label: "Transacciones", tone: "teal", value: "0" },
+      { label: "Pendientes", tone: "indigo", value: "0" },
+      { label: "Importe", tone: "green", value: "0,00 €" }
+    ],
+    actions: [
+      { kind: "fixed-assets", label: "Ver inmovilizado" },
+      { kind: "entries", label: "Ver asientos" },
+      { kind: "closings", label: "Ver cierres" }
+    ]
+  }
+];
 
 export function AccountingWorkspace({ organizationName }: { organizationName: string }) {
   const [activeSectionId, setActiveSectionId] = useState<AccountingSectionId>("entries");
@@ -67,88 +162,171 @@ export function AccountingWorkspace({ organizationName }: { organizationName: st
     setActiveSectionId(sectionId);
     setEntryView("list");
   };
+  const handleHeroAction = (kind: AccountingSection["actions"][number]["kind"]) => {
+    if (kind === "create-entry") {
+      setActiveSectionId("entries");
+      setEntryView("form");
+      return;
+    }
+
+    if (kind === "import-entries" || kind === "prepare-closing") {
+      return;
+    }
+
+    openSection(kind);
+  };
 
   return (
     <section className="accounting-module-shell" aria-label={`Contabilidad de ${organizationName}`}>
-      <aside className="accounting-secondary-nav" aria-label="Navegacion de contabilidad">
-        {accountingSections.map((section) => (
-          <button
-            className={`accounting-secondary-link${section.id === activeSectionId ? " active" : ""}${section.group ? " grouped" : ""}`}
-            key={section.id}
-            onClick={() => openSection(section.id)}
-            type="button"
-          >
-            {section.group ? <ChevronDown aria-hidden="true" size={22} /> : null}
-            <span>{section.label}</span>
-          </button>
-        ))}
-      </aside>
-
       <div className="accounting-operation-surface">
         {activeSection.id === "entries" ? (
           entryView === "form" ? (
             <EntryForm onCancel={() => setEntryView("list")} />
           ) : (
-            <EntriesList onCreate={() => setEntryView("form")} />
+            <AccountingTemplateView
+              activeSection={activeSection}
+              activeSectionId={activeSectionId}
+              onHeroAction={handleHeroAction}
+              onSectionChange={openSection}
+            >
+              <EntriesList />
+            </AccountingTemplateView>
           )
         ) : activeSection.id === "matching" ? (
-          <MatchingWorkspace />
+          <AccountingTemplateView
+            activeSection={activeSection}
+            activeSectionId={activeSectionId}
+            onHeroAction={handleHeroAction}
+            onSectionChange={openSection}
+          >
+            <MatchingWorkspace />
+          </AccountingTemplateView>
         ) : activeSection.id === "closings" ? (
-          <ClosingsWorkspace />
+          <AccountingTemplateView
+            activeSection={activeSection}
+            activeSectionId={activeSectionId}
+            onHeroAction={handleHeroAction}
+            onSectionChange={openSection}
+          >
+            <ClosingsWorkspace />
+          </AccountingTemplateView>
         ) : activeSection.id === "fixed-assets" ? (
-          <ReferenceWorkspace
-            title="Inmovilizado"
-            description=""
-            columns={["Codigo", "Descripcion", "Fecha de alta", "Cuenta", "Valor", "Estado", "Editar", "Eliminar"]}
-          />
+          <AccountingTemplateView
+            activeSection={activeSection}
+            activeSectionId={activeSectionId}
+            onHeroAction={handleHeroAction}
+            onSectionChange={openSection}
+          >
+            <ReferenceWorkspace section={activeSection} />
+          </AccountingTemplateView>
         ) : (
-          <ReferenceWorkspace
-            title="Transacciones de inmovilizado"
-            description="Operaciones de alta, baja, amortizacion y regularizacion de activos."
-            columns={["Fecha", "Activo", "Tipo", "Cuenta", "Importe", "Estado", "Editar", "Eliminar"]}
-          />
+          <AccountingTemplateView
+            activeSection={activeSection}
+            activeSectionId={activeSectionId}
+            onHeroAction={handleHeroAction}
+            onSectionChange={openSection}
+          >
+            <ReferenceWorkspace section={activeSection} />
+          </AccountingTemplateView>
         )}
       </div>
     </section>
   );
 }
 
-function EntriesList({ onCreate }: { onCreate: () => void }) {
+function AccountingTemplateView({
+  activeSection,
+  activeSectionId,
+  children,
+  onHeroAction,
+  onSectionChange
+}: {
+  activeSection: AccountingSection;
+  activeSectionId: AccountingSectionId;
+  children: ReactNode;
+  onHeroAction: (kind: AccountingSection["actions"][number]["kind"]) => void;
+  onSectionChange: (sectionId: AccountingSectionId) => void;
+}) {
+  return (
+    <section className="accounting-template-view" aria-label={activeSection.title}>
+      <AccountingSectionTabs activeSectionId={activeSectionId} onSectionChange={onSectionChange} sections={accountingSections} />
+      <AccountingTemplateHero activeSection={activeSection} onAction={onHeroAction} />
+      <AccountingMetricGrid activeSection={activeSection} />
+      {children}
+    </section>
+  );
+}
+
+function AccountingTemplateHero({
+  activeSection,
+  onAction
+}: {
+  activeSection: AccountingSection;
+  onAction: (kind: AccountingSection["actions"][number]["kind"]) => void;
+}) {
+  return (
+    <section className="sales-template-hero accounting-template-hero" aria-label={activeSection.title}>
+      <div>
+        <h1>{activeSection.title}</h1>
+      </div>
+      <div className="sales-template-hero-actions">
+        {activeSection.actions.map((action) => (
+          <button key={action.label} onClick={() => onAction(action.kind)} type="button">{action.label}</button>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function AccountingMetricGrid({ activeSection }: { activeSection: AccountingSection }) {
+  return (
+    <section className="sales-template-metrics accounting-template-metrics" aria-label={`Resumen de ${activeSection.label.toLowerCase()}`}>
+      {activeSection.metrics.map((metric) => (
+        <article className="sales-template-metric" key={metric.label}>
+          <span className={`sales-template-metric-icon ${metric.tone}`}>
+            <BarChart3 aria-hidden="true" size={20} strokeWidth={2.3} />
+          </span>
+          <strong>{metric.value}</strong>
+          <h2>{metric.label}</h2>
+        </article>
+      ))}
+    </section>
+  );
+}
+
+function AccountingSectionTabs({
+  activeSectionId,
+  onSectionChange,
+  sections
+}: {
+  activeSectionId: AccountingSectionId;
+  onSectionChange: (sectionId: AccountingSectionId) => void;
+  sections: AccountingSection[];
+}) {
+  return (
+    <div className="fiscal-tabs sales-section-tabs accounting-section-tabs" role="tablist" aria-label="Subsecciones de contabilidad">
+      {sections.map((section) => (
+        <button
+          className={`tab${section.id === activeSectionId ? " active" : ""}`}
+          key={section.id}
+          onClick={() => onSectionChange(section.id)}
+          role="tab"
+          type="button"
+        >
+          {section.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function EntriesList() {
   const [query, setQuery] = useState("");
   const [showFilters, setShowFilters] = useState(false);
-  const [showSettings, setShowSettings] = useState(false);
 
   return (
     <>
-      <header className="accounting-operation-header">
-        <h1>Asientos</h1>
-        <div className="accounting-header-actions">
-          <button className="accounting-text-action" type="button">
-            <Download aria-hidden="true" size={22} />
-            Importar asientos
-          </button>
-          <div className="sales-settings-menu">
-            <button className="sales-settings-button" onClick={() => setShowSettings((current) => !current)} type="button">
-              <Settings aria-hidden="true" size={27} fill="currentColor" />
-              <span>Configuracion</span>
-              <ChevronDown aria-hidden="true" size={15} />
-            </button>
-            {showSettings ? (
-              <div className="sales-popover settings-popover" role="menu">
-                <button type="button">Diarios contables</button>
-                <button type="button">Plan contable</button>
-                <button type="button">Periodos y cierres</button>
-              </div>
-            ) : null}
-          </div>
-        </div>
-      </header>
-
       <section className="accounting-list-toolbar" aria-label="Filtros de asientos">
-        <button className="sage-primary-button" onClick={onCreate} type="button">
-          <Plus aria-hidden="true" size={22} />
-          Crear
-        </button>
         <AccountingField label="Diario">
           <select defaultValue="">
             <option value="">Seleccionar...</option>
@@ -203,12 +381,15 @@ function EntriesList({ onCreate }: { onCreate: () => void }) {
       ) : null}
 
       <section className="sage-list-panel accounting-list-panel" aria-label="Lista de asientos">
+        <div className="sales-template-table-head">
+          <h2>Asientos</h2>
+        </div>
         <AccountingTable
-          columns={["Numero", "Diario", "Fecha", "Numero de docu...", "Fecha de docum...", "Estado", "Cuenta", "Tercero", "Descripcion", "Editar", "Eliminar"]}
+          columns={["Numero", "Diario", "Fecha", "Numero de docu...", "Fecha de docum...", "Estado", "Cuenta", "Tercero", "Descripcion", "Acciones"]}
           minWidth={1320}
         >
           <tr>
-            <td colSpan={11}>
+            <td colSpan={10}>
               <AccountingEmptyState
                 title="Esta lista esta en blanco."
                 description="La busqueda no ha dado ningun resultado. Intentalo de nuevo."
@@ -321,11 +502,6 @@ function MatchingWorkspace() {
   return (
     <section className="matching-workspace" aria-label="Marcaje contable">
       <aside className="matching-left-pane">
-        <header className="matching-pane-header">
-          <h1>Marcaje</h1>
-          <ChevronDown aria-hidden="true" size={25} />
-        </header>
-
         <div className="matching-category-select">
           <button
             aria-expanded={showCategoryMenu}
@@ -481,20 +657,6 @@ function MatchingWorkspace() {
 function ClosingsWorkspace() {
   return (
     <section className="closings-workspace" aria-label="Cierres contables">
-      <header className="accounting-operation-header">
-        <h1>Cierres</h1>
-        <div className="accounting-header-actions">
-          <button className="sage-outline-button" type="button">
-            <Download aria-hidden="true" size={20} />
-            Exportar
-          </button>
-          <button className="sage-primary-button" type="button">
-            <Check aria-hidden="true" size={20} />
-            Preparar cierre
-          </button>
-        </div>
-      </header>
-
       <section className="closing-summary-grid" aria-label="Resumen de cierres">
         <ClosingCard title="Cierre mensual" value="Sin datos" description="" />
         <ClosingCard title="Cierre de ejercicio" value="Sin datos" description="" />
@@ -502,6 +664,9 @@ function ClosingsWorkspace() {
       </section>
 
       <section className="sage-list-panel accounting-list-panel" aria-label="Periodos de cierre">
+        <div className="sales-template-table-head">
+          <h2>Periodos de cierre</h2>
+        </div>
         <AccountingTable columns={["Periodo", "Tipo", "Estado", "Controles", "Fecha", "Acciones"]} minWidth={900}>
           {closingPeriods.map((period) => (
             <tr key={period.id}>
@@ -523,34 +688,19 @@ function ClosingsWorkspace() {
   );
 }
 
-function ReferenceWorkspace({
-  title,
-  description,
-  columns
-}: {
-  title: string;
-  description: string;
-  columns: string[];
-}) {
+function ReferenceWorkspace({ section }: { section: AccountingSection }) {
   return (
-    <section className="accounting-reference-workspace" aria-label={title}>
-      <header className="accounting-operation-header">
-        <div>
-          <h1>{title}</h1>
-          <p>{description}</p>
+    <section className="accounting-reference-workspace" aria-label={section.title}>
+      <section className="sage-list-panel accounting-list-panel" aria-label={`Lista de ${section.title}`}>
+        <div className="sales-template-table-head">
+          <h2>{section.tableTitle}</h2>
         </div>
-        <button className="sage-primary-button" type="button">
-          <Plus aria-hidden="true" size={22} />
-          Crear
-        </button>
-      </header>
-      <section className="sage-list-panel accounting-list-panel" aria-label={`Lista de ${title}`}>
-        <AccountingTable columns={columns} minWidth={980}>
+        <AccountingTable columns={section.columns} minWidth={980}>
           <tr>
-            <td colSpan={columns.length}>
+            <td colSpan={section.columns.length}>
               <AccountingEmptyState
                 title="Esta lista esta en blanco."
-                description="Cuando conectemos el modelo contable real, los registros apareceran aqui."
+                description="No hay registros para mostrar."
               />
             </td>
           </tr>

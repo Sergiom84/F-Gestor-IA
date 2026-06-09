@@ -556,6 +556,20 @@ textarea {
   display: none;
 }
 
+.accounting-module-shell {
+  background: transparent;
+  display: block;
+  min-height: auto;
+}
+
+.accounting-operation-surface {
+  min-width: 0;
+}
+
+.accounting-secondary-nav {
+  display: none;
+}
+
 .product-section-tabs {
   max-width: 100%;
   overflow-x: auto;
@@ -567,6 +581,20 @@ textarea {
 }
 
 .product-section-tabs .tab {
+  white-space: nowrap;
+}
+
+.accounting-section-tabs {
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.accounting-section-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.accounting-section-tabs .tab {
   white-space: nowrap;
 }
 
@@ -739,11 +767,23 @@ textarea {
   display: block;
 }
 
+.accounting-template-view {
+  display: block;
+}
+
 .product-template-hero {
   min-height: 134px;
 }
 
+.accounting-template-hero {
+  min-height: 134px;
+}
+
 .product-template-metrics {
+  margin-bottom: 24px;
+}
+
+.accounting-template-metrics {
   margin-bottom: 24px;
 }
 
@@ -761,6 +801,67 @@ textarea {
   flex-wrap: wrap;
   gap: 20px;
   justify-content: flex-end;
+}
+
+.accounting-list-toolbar {
+  align-items: end;
+  background: transparent;
+  border: 0;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(5, minmax(120px, 1fr)) minmax(20px, 1fr) minmax(240px, 300px) auto;
+  margin: 0;
+  padding: 0;
+}
+
+.accounting-list-panel,
+.matching-table-shell,
+.closings-workspace .accounting-list-panel,
+.accounting-reference-workspace .accounting-list-panel {
+  background: #ffffff;
+  border: 1px solid var(--gf-line);
+  border-radius: var(--gf-radius-card);
+  box-shadow: var(--gf-shadow-sm);
+  margin-top: 22px;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.accounting-list-panel .accounting-table-wrap,
+.matching-table-shell .accounting-table-wrap {
+  border: 0;
+  border-radius: 0;
+}
+
+.accounting-table th {
+  background: var(--gf-card-soft);
+  color: #718096;
+  font-size: 0.6875rem;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.accounting-table td {
+  background: #ffffff;
+  border-color: var(--gf-line-soft);
+}
+
+.accounting-empty-state {
+  color: var(--gf-ink);
+  min-height: 250px;
+}
+
+.accounting-empty-state svg {
+  color: var(--gf-ink);
+}
+
+.accounting-empty-state p {
+  color: #718096;
+}
+
+.closing-summary-grid {
+  margin-top: 0;
 }
 
 .product-template-table-panel {
@@ -1093,6 +1194,10 @@ textarea {
   .sales-template-metrics {
     grid-template-columns: 1fr;
   }
+
+  .accounting-list-toolbar {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 760px) {
@@ -1144,5 +1249,9 @@ textarea {
   .fiscal-tabs {
     max-width: 100%;
     overflow-x: auto;
+  }
+
+  .accounting-list-toolbar {
+    grid-template-columns: 1fr;
   }
 }
