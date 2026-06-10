@@ -74,6 +74,9 @@ export function DashboardShell({
                 <Link className={`gfiscal-nav-item${isActive ? " active" : ""}`} href={moduleHref(item.module)} key={item.label}>
                   <Icon aria-hidden="true" size={17} strokeWidth={2.35} />
                   <span>{item.label}</span>
+                  {"badge" in item && item.badge ? (
+                    <em className="gfiscal-nav-badge">{item.badge}</em>
+                  ) : null}
                 </Link>
               );
             })}

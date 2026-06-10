@@ -369,8 +369,17 @@ export async function createSalesQuote(formData: FormData): Promise<{ error?: st
   const retentionAmount = roundMoney(subtotalAmount * retentionRate / 100);
   const suplidoAmount = Math.max(parseAmount(formData, "suplido_amount", 0), 0);
   const totalAmount = roundMoney(subtotalAmount + taxAmount - retentionAmount + suplidoAmount);
-  const quoteNumber = String(formData.get("quote_number") ?? "").trim()
-    || `PRES-${new Date().toISOString().slice(0, 10).replace(/-/g, "")}-${Date.now().toString().slice(-5)}`;
+  const numberResult = await supabase.rpc("next_document_number", {
+    target_organization_id: organizationId,
+    target_doc_type: "sales_quote",
+    target_prefix: String(formData.get("number_prefix") ?? "").trim() || null
+  });
+
+  if (numberResult.error || !numberResult.data) {
+    return { error: numberResult.error?.message ?? "No se pudo asignar numero de presupuesto." };
+  }
+
+  const quoteNumber = String(numberResult.data);
 
   const { data, error } = await supabase
     .from("sales_quotes")
@@ -458,8 +467,17 @@ export async function createSalesInvoice(formData: FormData): Promise<{ error?: 
   const retentionAmount = roundMoney(subtotalAmount * retentionRate / 100);
   const suplidoAmount = Math.max(parseAmount(formData, "suplido_amount", 0), 0);
   const totalAmount = roundMoney(subtotalAmount + taxAmount - retentionAmount + suplidoAmount);
-  const invoiceNumber = String(formData.get("invoice_number") ?? "").trim()
-    || `VENTA-${new Date().toISOString().slice(0, 10).replace(/-/g, "")}-${Date.now().toString().slice(-5)}`;
+  const numberResult = await supabase.rpc("next_document_number", {
+    target_organization_id: organizationId,
+    target_doc_type: "sales_invoice",
+    target_prefix: String(formData.get("number_prefix") ?? "").trim() || null
+  });
+
+  if (numberResult.error || !numberResult.data) {
+    return { error: numberResult.error?.message ?? "No se pudo asignar numero de factura." };
+  }
+
+  const invoiceNumber = String(numberResult.data);
 
   let invoiceInsertResult = await supabase
     .from("sales_invoices")
@@ -877,7 +895,17 @@ export async function duplicateSalesDocument(
       return { error: readError?.message ?? "Presupuesto no encontrado." };
     }
 
-    const copyNumber = `${original.quote_number ?? documentId.slice(0, 8)}-C`;
+    const copyNumberResult = await supabase.rpc("next_document_number", {
+      target_organization_id: original.organization_id,
+      target_doc_type: "sales_quote",
+      target_prefix: null
+    });
+
+    if (copyNumberResult.error || !copyNumberResult.data) {
+      return { error: copyNumberResult.error?.message ?? "No se pudo asignar numero al duplicado." };
+    }
+
+    const copyNumber = String(copyNumberResult.data);
     const { data: copy, error: insertError } = await supabase
       .from("sales_quotes")
       .insert({
@@ -922,7 +950,17 @@ export async function duplicateSalesDocument(
     return { error: readError?.message ?? "Factura no encontrada." };
   }
 
-  const copyNumber = `${original.invoice_number ?? documentId.slice(0, 8)}-C`;
+  const copyNumberResult = await supabase.rpc("next_document_number", {
+    target_organization_id: original.organization_id,
+    target_doc_type: "sales_invoice",
+    target_prefix: null
+  });
+
+  if (copyNumberResult.error || !copyNumberResult.data) {
+    return { error: copyNumberResult.error?.message ?? "No se pudo asignar numero al duplicado." };
+  }
+
+  const copyNumber = String(copyNumberResult.data);
   const { data: copy, error: insertError } = await supabase
     .from("sales_invoices")
     .insert({

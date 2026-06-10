@@ -267,7 +267,10 @@ function AccountingTemplateHero({
   return (
     <section className="sales-template-hero accounting-template-hero" aria-label={activeSection.title}>
       <div>
-        <h1>{activeSection.title}</h1>
+        <h1>
+          {activeSection.title}
+          <em className="gfiscal-sample-badge">Datos de ejemplo</em>
+        </h1>
       </div>
       <div className="sales-template-hero-actions">
         {activeSection.actions.map((action) => (

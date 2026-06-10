@@ -47,6 +47,11 @@ export function ModuleWorkspace({
 
   return (
     <section className="module-workspace" aria-labelledby={`${module}-module-title`}>
+      <div className="sales-live-notice warning module-preparation-notice" role="status">
+        <span>
+          Modulo en preparacion: esta vista todavia no guarda datos reales. Las acciones solo afectan a la vista local.
+        </span>
+      </div>
       <div className="module-hero">
         <div>
           <span className="module-eyebrow">{definition.eyebrow}</span>

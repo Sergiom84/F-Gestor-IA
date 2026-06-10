@@ -35,12 +35,12 @@ export const navigationItems = [
   { label: "Compras", icon: ShoppingCart, module: "purchases" },
   { label: "Contactos", icon: Users, module: "contacts" },
   { label: "Productos y servicios", icon: PackageSearch, module: "products" },
-  { label: "Bancos", icon: Landmark, module: "banks" },
-  { label: "Contabilidad", icon: SlidersHorizontal, module: "accounting" },
-  { label: "Declaraciones", icon: BadgeEuro, module: "tax" },
-  { label: "Informes", icon: FileText, module: "reports" },
-  { label: "Configuracion", icon: Settings, module: "settings" }
-] satisfies Array<{ label: string; icon: typeof LayoutDashboard; module: AppModule }>;
+  { label: "Bancos", icon: Landmark, module: "banks", badge: "En preparacion" },
+  { label: "Contabilidad", icon: SlidersHorizontal, module: "accounting", badge: "Datos de ejemplo" },
+  { label: "Declaraciones", icon: BadgeEuro, module: "tax", badge: "En preparacion" },
+  { label: "Informes", icon: FileText, module: "reports", badge: "En preparacion" },
+  { label: "Configuracion", icon: Settings, module: "settings", badge: "En preparacion" }
+] satisfies Array<{ label: string; icon: typeof LayoutDashboard; module: AppModule; badge?: string }>;
 
 function referenceQuickActions(module: AppModule, fallback: string[]): string[] {
   return getSageReferenceModule(module as SageReferenceModuleId)?.quickActions ?? fallback;
