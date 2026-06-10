@@ -1761,8 +1761,12 @@ textarea {
 }
 
 .sales-template-table-head {
+  align-items: center;
   border-bottom: 1px solid var(--gf-line);
-  padding: 20px 24px 16px;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  padding: 16px 24px;
 }
 
 .sales-template-table-head h2 {
