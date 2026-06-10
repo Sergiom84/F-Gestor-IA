@@ -9,6 +9,8 @@ export async function ProductsSection({ organizationId, organizationName }: { or
       organizationId={organizationId}
       organizationName={organizationName}
       initialProducts={data.products}
+      initialPriceLists={data.priceLists}
+      initialDiscountGroups={data.discountGroups}
     />
   );
 }

@@ -13,9 +13,9 @@ import {
   X
 } from "lucide-react";
 import { useState } from "react";
-import { createProductService } from "../../commercial-actions";
+import { createDiscountGroup, createPriceList, createProductService } from "../../commercial-actions";
 import { formatMoney } from "../../_lib/formatters";
-import type { ProductItem } from "../../_data/commercial-data";
+import type { DiscountGroupItem, PriceListItem, ProductItem } from "../../_data/commercial-data";
 
 type ProductsView = "product-list" | "product" | "tariffs" | "tariff-form" | "discount-groups" | "discount-form";
 type ProductsSectionId = "products" | "tariffs" | "discount-groups";
@@ -71,9 +71,7 @@ const productsSections: ProductsSection[] = [
       { label: "Valor catalogo", tone: "green", value: "0,00 €" }
     ],
     actions: [
-      { kind: "create", label: "Crear producto" },
-      { kind: "create-tariff", label: "Crear tarifa" },
-      { kind: "create-discount-group", label: "Crear descuento" }
+      { kind: "create", label: "Crear producto" }
     ]
   },
   {
@@ -92,9 +90,7 @@ const productsSections: ProductsSection[] = [
       { label: "Vigentes", tone: "green", value: "0" }
     ],
     actions: [
-      { kind: "create", label: "Crear tarifa" },
-      { kind: "products", label: "Ver productos" },
-      { kind: "discount-groups", label: "Ver descuentos" }
+      { kind: "create", label: "Crear tarifa" }
     ]
   },
   {
@@ -113,9 +109,7 @@ const productsSections: ProductsSection[] = [
       { label: "Vigentes", tone: "green", value: "0" }
     ],
     actions: [
-      { kind: "create", label: "Crear descuento" },
-      { kind: "products", label: "Ver productos" },
-      { kind: "tariffs", label: "Ver tarifas" }
+      { kind: "create", label: "Crear descuento" }
     ]
   }
 ];
@@ -123,15 +117,21 @@ const productsSections: ProductsSection[] = [
 export function ProductsWorkspace({
   organizationId,
   organizationName,
-  initialProducts
+  initialProducts,
+  initialPriceLists,
+  initialDiscountGroups
 }: {
   organizationId: string;
   organizationName: string;
   initialProducts?: ProductItem[];
+  initialPriceLists?: PriceListItem[];
+  initialDiscountGroups?: DiscountGroupItem[];
 }) {
   const [view, setView] = useState<ProductsView>("product-list");
   const [notice, setNotice] = useState<string | null>(null);
   const [products, setProducts] = useState<ProductItem[]>(initialProducts ?? []);
+  const [priceLists, setPriceLists] = useState<PriceListItem[]>(initialPriceLists ?? []);
+  const [discountGroups, setDiscountGroups] = useState<DiscountGroupItem[]>(initialDiscountGroups ?? []);
 
   const activeSectionId = resolveProductsSectionId(view);
   const activeSection = productsSections.find((section) => section.id === activeSectionId) ?? productsSections[0]!;
@@ -191,6 +191,8 @@ export function ProductsWorkspace({
             activeSection={activeSection}
             activeSectionId={activeSectionId}
             productRows={products}
+            priceListRows={priceLists}
+            discountGroupRows={discountGroups}
             onHeroAction={handleHeroAction}
             onSectionChange={openSection}
           />
@@ -209,26 +211,40 @@ export function ProductsWorkspace({
             activeSection={activeSection}
             activeSectionId={activeSectionId}
             productRows={products}
+            priceListRows={priceLists}
+            discountGroupRows={discountGroups}
             onHeroAction={handleHeroAction}
             onSectionChange={openSection}
           />
         ) : view === "tariff-form" ? (
           <TariffForm
+            organizationId={organizationId}
             onCancel={openTariffs}
-            onCreate={() => { openTariffs(); setNotice("Tarifa preparada en la vista. Las tarifas aun no se guardan en el modelo real."); }}
+            onCreated={(pl) => {
+              setPriceLists((current) => [...current, pl].sort((a, b) => a.name.localeCompare(b.name)));
+              openTariffs();
+              setNotice(`Tarifa ${pl.name} guardada.`);
+            }}
           />
         ) : view === "discount-groups" ? (
           <ProductsTemplateView
             activeSection={activeSection}
             activeSectionId={activeSectionId}
             productRows={products}
+            priceListRows={priceLists}
+            discountGroupRows={discountGroups}
             onHeroAction={handleHeroAction}
             onSectionChange={openSection}
           />
         ) : (
           <DiscountGroupForm
+            organizationId={organizationId}
             onCancel={openDiscountGroups}
-            onCreate={() => { openDiscountGroups(); setNotice("Grupo de descuentos preparado en la vista. Los descuentos aun no se guardan en el modelo real."); }}
+            onCreated={(dg) => {
+              setDiscountGroups((current) => [...current, dg].sort((a, b) => a.name.localeCompare(b.name)));
+              openDiscountGroups();
+              setNotice(`Grupo de descuentos ${dg.name} guardado.`);
+            }}
           />
         )}
       </div>
@@ -240,12 +256,16 @@ function ProductsTemplateView({
   activeSection,
   activeSectionId,
   productRows,
+  priceListRows,
+  discountGroupRows,
   onHeroAction,
   onSectionChange
 }: {
   activeSection: ProductsSection;
   activeSectionId: ProductsSectionId;
   productRows: ProductItem[];
+  priceListRows: PriceListItem[];
+  discountGroupRows: DiscountGroupItem[];
   onHeroAction: (kind: ProductsHeroAction) => void;
   onSectionChange: (sectionId: ProductsSectionId) => void;
 }) {
@@ -253,6 +273,7 @@ function ProductsTemplateView({
   const [showFilters, setShowFilters] = useState(false);
   const [showColumns, setShowColumns] = useState(false);
   const isProductsSection = activeSectionId === "products";
+  const isTariffsSection = activeSectionId === "tariffs";
   const normalizedQuery = query.trim().toLowerCase();
   const visibleProducts = isProductsSection
     ? productRows.filter((product) => (
@@ -261,11 +282,43 @@ function ProductsTemplateView({
       || product.code.toLowerCase().includes(normalizedQuery)
     ))
     : [];
+  const visiblePriceLists = isTariffsSection
+    ? priceListRows.filter((pl) => (
+      !normalizedQuery
+      || pl.name.toLowerCase().includes(normalizedQuery)
+      || pl.code.toLowerCase().includes(normalizedQuery)
+    ))
+    : [];
+  const visibleDiscountGroups = activeSectionId === "discount-groups"
+    ? discountGroupRows.filter((dg) => (
+      !normalizedQuery
+      || dg.name.toLowerCase().includes(normalizedQuery)
+      || dg.code.toLowerCase().includes(normalizedQuery)
+    ))
+    : [];
+  const adjustmentTypeLabel = (type: string) => {
+    if (type === "fixed_price") return "Precio fijo";
+    if (type === "percentage_discount") return "Descuento porcentual";
+    if (type === "tiered") return "Precio por tramo";
+    return type;
+  };
   const metrics = isProductsSection
     ? [
       { label: "Productos", tone: "teal" as const, value: String(productRows.filter((p) => p.kind === "product").length) },
       { label: "Servicios", tone: "indigo" as const, value: String(productRows.filter((p) => p.kind === "service").length) },
       { label: "Valor catalogo", tone: "green" as const, value: formatMoney(productRows.reduce((sum, p) => sum + (p.isActive ? p.unitPrice : 0), 0)) }
+    ]
+    : isTariffsSection
+    ? [
+      { label: "Tarifas", tone: "teal" as const, value: String(priceListRows.length) },
+      { label: "Activas", tone: "indigo" as const, value: String(priceListRows.filter((pl) => pl.isActive).length) },
+      { label: "Vigentes", tone: "green" as const, value: String(priceListRows.filter((pl) => pl.isActive && !pl.endDate).length) }
+    ]
+    : activeSectionId === "discount-groups"
+    ? [
+      { label: "Grupos", tone: "teal" as const, value: String(discountGroupRows.length) },
+      { label: "Activos", tone: "indigo" as const, value: String(discountGroupRows.filter((dg) => dg.isActive).length) },
+      { label: "Vigentes", tone: "green" as const, value: String(discountGroupRows.filter((dg) => dg.isActive && !dg.endDate).length) }
     ]
     : activeSection.metrics;
 
@@ -346,8 +399,49 @@ function ProductsTemplateView({
               ))}
             </tbody>
           ) : null}
+          {visiblePriceLists.length > 0 ? (
+            <tbody>
+              {visiblePriceLists.map((pl) => (
+                <tr key={pl.id}>
+                  <td>{pl.code}</td>
+                  <td>{pl.name}</td>
+                  <td>{pl.startDate ?? "—"}</td>
+                  <td>{pl.endDate ?? "—"}</td>
+                  <td>{adjustmentTypeLabel(pl.adjustmentType)}</td>
+                  <td>{pl.isActive ? "Sí" : "No"}</td>
+                  <td>—</td>
+                </tr>
+              ))}
+            </tbody>
+          ) : null}
+          {visibleDiscountGroups.length > 0 ? (
+            <tbody>
+              {visibleDiscountGroups.map((dg) => (
+                <tr key={dg.id}>
+                  <td>{dg.code}</td>
+                  <td>{dg.name}</td>
+                  <td>{dg.startDate ?? "—"}</td>
+                  <td>{dg.endDate ?? "—"}</td>
+                  <td>{dg.isActive ? "Sí" : "No"}</td>
+                  <td>—</td>
+                </tr>
+              ))}
+            </tbody>
+          ) : null}
         </table>
-        {visibleProducts.length === 0 ? (
+        {isProductsSection && visibleProducts.length === 0 ? (
+          <div className="products-empty-state">
+            <SearchX aria-hidden="true" size={94} strokeWidth={2.7} />
+            <strong>{activeSection.emptyTitle}</strong>
+            <p>{activeSection.emptyDescription}</p>
+          </div>
+        ) : isTariffsSection && visiblePriceLists.length === 0 ? (
+          <div className="products-empty-state">
+            <SearchX aria-hidden="true" size={94} strokeWidth={2.7} />
+            <strong>{activeSection.emptyTitle}</strong>
+            <p>{activeSection.emptyDescription}</p>
+          </div>
+        ) : activeSectionId === "discount-groups" && visibleDiscountGroups.length === 0 ? (
           <div className="products-empty-state">
             <SearchX aria-hidden="true" size={94} strokeWidth={2.7} />
             <strong>{activeSection.emptyTitle}</strong>
@@ -691,30 +785,68 @@ function ProductServiceForm({
 type TariffItemRow = { id: number };
 type DiscountItemRow = { id: number };
 
-function TariffForm({ onCancel, onCreate }: { onCancel: () => void; onCreate: () => void }) {
+function TariffForm({
+  organizationId,
+  onCancel,
+  onCreated
+}: {
+  organizationId: string;
+  onCancel: () => void;
+  onCreated: (pl: PriceListItem) => void;
+}) {
   const [code, setCode] = useState("");
   const [name, setName] = useState("");
+  const [adjustmentType, setAdjustmentType] = useState("Precio fijo");
+  const [startDate, setStartDate] = useState("10/06/2026");
+  const [endDate, setEndDate] = useState("");
   const [active, setActive] = useState(true);
   const [items, setItems] = useState<TariffItemRow[]>([]);
-  const canCreate = code.trim().length > 0 && name.trim().length > 0;
+  const [isSaving, setIsSaving] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const canCreate = code.trim().length > 0 && name.trim().length > 0 && !isSaving;
+
+  const submit = async () => {
+    const formData = new FormData();
+    formData.set("organization_id", organizationId);
+    formData.set("code", code.trim());
+    formData.set("name", name.trim());
+    formData.set("adjustment_type", adjustmentType);
+    formData.set("start_date", startDate);
+    formData.set("end_date", endDate);
+    formData.set("is_active", String(active));
+    setSubmitError(null);
+    setIsSaving(true);
+    const result = await createPriceList(formData);
+    setIsSaving(false);
+    if (result.error || !result.priceList) {
+      setSubmitError(result.error ?? "No se pudo guardar la tarifa.");
+      return;
+    }
+    const adjustmentTypeMap: Record<string, PriceListItem["adjustmentType"]> = {
+      "Precio fijo": "fixed_price",
+      "Descuento porcentual": "percentage_discount",
+      "Precio por tramo": "tiered"
+    };
+    onCreated({
+      id: result.priceList.id,
+      code: code.trim(),
+      name: name.trim(),
+      adjustmentType: adjustmentTypeMap[adjustmentType] ?? "fixed_price",
+      startDate: startDate || null,
+      endDate: endDate || null,
+      isActive: active
+    });
+  };
 
   return (
     <section className="product-reference-form" aria-label="Tarifa">
       <ReferenceFormHeader onCancel={onCancel} title="Tarifa" />
       <div className="product-reference-grid tariff-reference-grid">
-        <RequiredTextField
-          label="Codigo"
-          onChange={setCode}
-          value={code}
-        />
-        <RequiredTextField
-          label="Nombre"
-          onChange={setName}
-          value={name}
-        />
+        <RequiredTextField label="Codigo" onChange={setCode} value={code} />
+        <RequiredTextField label="Nombre" onChange={setName} value={name} />
         <label className="sage-field">
           <span>Tipo de ajuste <RequiredMark /></span>
-          <select defaultValue="Precio fijo">
+          <select value={adjustmentType} onChange={(e) => setAdjustmentType(e.target.value)}>
             <option>Precio fijo</option>
             <option>Descuento porcentual</option>
             <option>Precio por tramo</option>
@@ -722,11 +854,11 @@ function TariffForm({ onCancel, onCreate }: { onCancel: () => void; onCreate: ()
         </label>
         <label className="sage-field">
           <span>Fecha de inicio</span>
-          <DateInput defaultValue="04/06/2026" />
+          <DateInput value={startDate} onChange={setStartDate} />
         </label>
         <label className="sage-field">
           <span>Fecha de fin</span>
-          <DateInput defaultValue="" />
+          <DateInput value={endDate} onChange={setEndDate} />
         </label>
         <div className="sage-toggle-row product-status-toggle">
           <span>Activa</span>
@@ -746,39 +878,70 @@ function TariffForm({ onCancel, onCreate }: { onCancel: () => void; onCreate: ()
         items={items}
         onRemoveItem={(id) => setItems((current) => current.filter((item) => item.id !== id))}
       />
-      <ProductStickyBar canCreate={canCreate} onCancel={onCancel} onCreate={onCreate} />
+      {submitError ? <div className="sales-live-notice warning" role="alert">{submitError}</div> : null}
+      <ProductStickyBar canCreate={canCreate} isPending={isSaving} onCancel={onCancel} onCreate={() => { void submit(); }} />
     </section>
   );
 }
 
-function DiscountGroupForm({ onCancel, onCreate }: { onCancel: () => void; onCreate: () => void }) {
+function DiscountGroupForm({
+  organizationId,
+  onCancel,
+  onCreated
+}: {
+  organizationId: string;
+  onCancel: () => void;
+  onCreated: (dg: DiscountGroupItem) => void;
+}) {
   const [code, setCode] = useState("");
   const [description, setDescription] = useState("");
+  const [startDate, setStartDate] = useState("10/06/2026");
+  const [endDate, setEndDate] = useState("");
   const [active, setActive] = useState(true);
   const [items, setItems] = useState<DiscountItemRow[]>([]);
-  const canCreate = code.trim().length > 0 && description.trim().length > 0;
+  const [isSaving, setIsSaving] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const canCreate = code.trim().length > 0 && description.trim().length > 0 && !isSaving;
+
+  const submit = async () => {
+    const formData = new FormData();
+    formData.set("organization_id", organizationId);
+    formData.set("code", code.trim());
+    formData.set("name", description.trim());
+    formData.set("start_date", startDate);
+    formData.set("end_date", endDate);
+    formData.set("is_active", String(active));
+    setSubmitError(null);
+    setIsSaving(true);
+    const result = await createDiscountGroup(formData);
+    setIsSaving(false);
+    if (result.error || !result.discountGroup) {
+      setSubmitError(result.error ?? "No se pudo guardar el grupo de descuentos.");
+      return;
+    }
+    onCreated({
+      id: result.discountGroup.id,
+      code: code.trim(),
+      name: description.trim(),
+      startDate: startDate || null,
+      endDate: endDate || null,
+      isActive: active
+    });
+  };
 
   return (
     <section className="product-reference-form" aria-label="Grupo de descuentos">
       <ReferenceFormHeader onCancel={onCancel} title="Grupo de descuentos" />
       <div className="product-reference-grid discount-reference-grid">
-        <RequiredTextField
-          label="Codigo"
-          onChange={setCode}
-          value={code}
-        />
-        <RequiredTextField
-          label="Descripcion"
-          onChange={setDescription}
-          value={description}
-        />
+        <RequiredTextField label="Codigo" onChange={setCode} value={code} />
+        <RequiredTextField label="Descripcion" onChange={setDescription} value={description} />
         <label className="sage-field">
           <span>Fecha de inicio</span>
-          <DateInput defaultValue="04/06/2026" />
+          <DateInput value={startDate} onChange={setStartDate} />
         </label>
         <label className="sage-field">
           <span>Fecha de fin</span>
-          <DateInput defaultValue="" />
+          <DateInput value={endDate} onChange={setEndDate} />
         </label>
         <div className="sage-toggle-row product-status-toggle">
           <span>Activo</span>
@@ -798,7 +961,8 @@ function DiscountGroupForm({ onCancel, onCreate }: { onCancel: () => void; onCre
         items={items}
         onRemoveItem={(id) => setItems((current) => current.filter((item) => item.id !== id))}
       />
-      <ProductStickyBar canCreate={canCreate} onCancel={onCancel} onCreate={onCreate} />
+      {submitError ? <div className="sales-live-notice warning" role="alert">{submitError}</div> : null}
+      <ProductStickyBar canCreate={canCreate} isPending={isSaving} onCancel={onCancel} onCreate={() => { void submit(); }} />
     </section>
   );
 }
@@ -838,10 +1002,21 @@ function RequiredTextField({
   );
 }
 
-function DateInput({ defaultValue }: { defaultValue: string }) {
+function DateInput({
+  defaultValue,
+  value,
+  onChange
+}: {
+  defaultValue?: string;
+  value?: string;
+  onChange?: (v: string) => void;
+}) {
   return (
     <span className="date-input-shell">
-      <input defaultValue={defaultValue} />
+      {value !== undefined
+        ? <input value={value} onChange={(e) => onChange?.(e.target.value)} />
+        : <input defaultValue={defaultValue ?? ""} />
+      }
       <CalendarDays aria-hidden="true" size={23} />
     </span>
   );

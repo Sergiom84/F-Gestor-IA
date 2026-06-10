@@ -1837,9 +1837,7 @@ textarea {
 }
 
 .sales-template-table-panel .closed-badge {
-  background: #d83a57;
-  border-radius: 4px;
-  color: #ffffff;
+  border-radius: 999px;
 }
 
 .sales-row-actions-cell {

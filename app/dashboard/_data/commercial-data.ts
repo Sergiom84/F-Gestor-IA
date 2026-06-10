@@ -13,12 +13,15 @@ type DbClientRow = {
   city: string | null;
   code: string | null;
   contact_email: string | null;
+  contact_phone: string | null;
+  country: string | null;
   default_irpf_rate: number | null;
   fiscal_address: string | null;
   name: string;
   postal_code: string | null;
   province: string | null;
   tax_id: string | null;
+  type: "individual" | "company";
 };
 
 type DbSupplierRow = {
@@ -45,7 +48,8 @@ type DbSalesInvoiceRow = {
   issue_date: string | null;
   status: string;
   total_amount: number;
-  clients: { name: string } | null;
+  reference: string | null;
+  clients: { name: string; code: string | null } | null;
 };
 
 type DbFiscalEntityOptionRow = {
@@ -59,7 +63,39 @@ type DbSalesQuoteRow = {
   quote_date: string | null;
   status: string;
   total_amount: number;
-  clients: { name: string } | null;
+  reference: string | null;
+  clients: { name: string; code: string | null } | null;
+};
+
+type DbSalesOrderRow = {
+  id: string;
+  order_number: string | null;
+  order_date: string | null;
+  status: string;
+  total_amount: number;
+  reference: string | null;
+  clients: { name: string; code: string | null } | null;
+};
+
+type DbSalesDeliveryNoteRow = {
+  id: string;
+  note_number: string | null;
+  note_date: string | null;
+  status: string;
+  total_amount: number;
+  reference: string | null;
+  clients: { name: string; code: string | null } | null;
+};
+
+type DbSalesRecurringInvoiceRow = {
+  id: string;
+  template_number: string | null;
+  next_issue_date: string | null;
+  frequency: string;
+  status: string;
+  total_amount: number;
+  reference: string | null;
+  clients: { name: string; code: string | null } | null;
 };
 
 type DbProductRow = {
@@ -69,6 +105,25 @@ type DbProductRow = {
   kind: string;
   unit_price: number;
   tax_rate: number | null;
+  is_active: boolean;
+};
+
+type DbPriceListRow = {
+  id: string;
+  code: string;
+  name: string;
+  adjustment_type: string;
+  start_date: string | null;
+  end_date: string | null;
+  is_active: boolean;
+};
+
+type DbDiscountGroupRow = {
+  id: string;
+  code: string;
+  name: string;
+  start_date: string | null;
+  end_date: string | null;
   is_active: boolean;
 };
 
@@ -95,7 +150,7 @@ async function readClientRows(
 ): Promise<DbClientRow[]> {
   const extendedResult = await supabase
     .from("clients")
-    .select("id, code, name, tax_id, contact_email, fiscal_address, city, province, postal_code, apply_irpf_by_default, default_irpf_rate")
+    .select("id, code, name, type, tax_id, contact_email, contact_phone, fiscal_address, city, province, postal_code, country, apply_irpf_by_default, default_irpf_rate")
     .eq("organization_id", organizationId)
     .is("deleted_at", null)
     .order("name", { ascending: true })
@@ -119,12 +174,15 @@ async function readClientRows(
     city: null,
     code: null,
     contact_email: client.contact_email,
+    contact_phone: null,
+    country: "ES",
     default_irpf_rate: 0,
     fiscal_address: null,
     name: client.name,
     postal_code: null,
     province: null,
-    tax_id: null
+    tax_id: null,
+    type: "company"
   }));
 }
 
@@ -163,8 +221,14 @@ export type ContactsData = {
 export async function readContactsData(organizationId: string): Promise<ContactsData> {
   const supabase = await createClient();
 
-  const [clientRows, suppliersResult] = await Promise.all([
+  const [clientRows, fiscalEntityClientsResult, suppliersResult] = await Promise.all([
     readClientRows(supabase, organizationId),
+    supabase
+      .from("fiscal_entities")
+      .select("client_id")
+      .eq("organization_id", organizationId)
+      .is("deleted_at", null)
+      .returns<Array<{ client_id: string }>>(),
     supabase
       .from("suppliers")
       .select("id, name, tax_id")
@@ -174,14 +238,18 @@ export async function readContactsData(organizationId: string): Promise<Contacts
       .returns<DbSupplierRow[]>()
   ]);
 
-  const clients: ArtificialContactListItem[] = clientRows.map((c) => ({
+  const fiscalEntityClientIds = new Set((fiscalEntityClientsResult.data ?? []).map((row) => row.client_id));
+  const clients: ArtificialContactListItem[] = clientRows.filter((c) => !fiscalEntityClientIds.has(c.id)).map((c) => ({
     id: c.id,
     name: c.name,
     code: c.code ?? shortId(c.id),
     taxId: c.tax_id ?? "",
+    clientKind: c.type === "individual" ? "individual" : "self_employed",
     applyIrpfByDefault: Boolean(c.apply_irpf_by_default),
     city: c.city ?? "",
     contactEmail: c.contact_email ?? "",
+    contactPhone: c.contact_phone ?? "",
+    country: c.country ?? "ES",
     defaultIrpfRate: Number(c.default_irpf_rate ?? 0),
     fiscalAddress: c.fiscal_address ?? "",
     postalCode: c.postal_code ?? "",
@@ -266,10 +334,10 @@ export type SalesData = {
 export async function readSalesData(organizationId: string): Promise<SalesData> {
   const supabase = await createClient();
 
-  const [invoicesResult, quotesResult, clientRows, fiscalEntitiesResult, configResult, productsResult] = await Promise.all([
+  const [invoicesResult, quotesResult, ordersResult, deliveryNotesResult, recurringInvoicesResult, clientRows, fiscalEntitiesResult, fiscalEntityClientsResult, configResult, productsResult] = await Promise.all([
     supabase
       .from("sales_invoices")
-      .select("id, invoice_number, issue_date, status, total_amount, clients!client_id(name)")
+      .select("id, invoice_number, issue_date, status, total_amount, reference, clients!client_id(name, code)")
       .eq("organization_id", organizationId)
       .is("deleted_at", null)
       .order("issue_date", { ascending: false })
@@ -277,12 +345,38 @@ export async function readSalesData(organizationId: string): Promise<SalesData> 
       .returns<DbSalesInvoiceRow[]>(),
     supabase
       .from("sales_quotes")
-      .select("id, quote_number, quote_date, status, total_amount, clients!client_id(name)")
+      .select("id, quote_number, quote_date, status, total_amount, reference, clients!client_id(name, code)")
       .eq("organization_id", organizationId)
       .is("deleted_at", null)
       .order("quote_date", { ascending: false })
       .limit(50)
       .returns<DbSalesQuoteRow[]>(),
+    supabase
+      .from("sales_orders")
+      .select("id, order_number, order_date, status, total_amount, reference, clients!client_id(name, code)")
+      .eq("organization_id", organizationId)
+      .is("deleted_at", null)
+      .order("order_date", { ascending: false })
+      .limit(50)
+      .returns<DbSalesOrderRow[]>(),
+    supabase
+      .from("sales_delivery_notes")
+      .select("id, note_number, note_date, status, total_amount, reference, clients!client_id(name, code)")
+      .eq("organization_id", organizationId)
+      .is("deleted_at", null)
+      .order("note_date", { ascending: false })
+      .limit(50)
+      .returns<DbSalesDeliveryNoteRow[]>()
+      .then((r) => ({ data: r.data ?? [], error: r.error })),
+    supabase
+      .from("sales_recurring_invoices")
+      .select("id, template_number, next_issue_date, frequency, status, total_amount, reference, clients!client_id(name, code)")
+      .eq("organization_id", organizationId)
+      .is("deleted_at", null)
+      .order("next_issue_date", { ascending: true })
+      .limit(50)
+      .returns<DbSalesRecurringInvoiceRow[]>()
+      .then((r) => ({ data: r.data ?? [], error: r.error })),
     readClientRows(supabase, organizationId),
     supabase
       .from("fiscal_entities")
@@ -291,6 +385,12 @@ export async function readSalesData(organizationId: string): Promise<SalesData> 
       .is("deleted_at", null)
       .order("created_at", { ascending: true })
       .returns<DbFiscalEntityOptionRow[]>(),
+    supabase
+      .from("fiscal_entities")
+      .select("client_id")
+      .eq("organization_id", organizationId)
+      .is("deleted_at", null)
+      .returns<Array<{ client_id: string }>>(),
     supabase
       .from("sales_config")
       .select("payload")
@@ -311,8 +411,8 @@ export async function readSalesData(organizationId: string): Promise<SalesData> 
     status: mapSalesStatus(row.status),
     date: formatIsoDate(row.issue_date),
     number: row.invoice_number ?? shortId(row.id),
-    reference: "",
-    clientCode: "",
+    reference: row.reference ?? "",
+    clientCode: row.clients?.code ?? "",
     client: row.clients?.name ?? "—",
     total: Number(row.total_amount)
   }));
@@ -322,21 +422,59 @@ export async function readSalesData(organizationId: string): Promise<SalesData> 
     status: mapSalesStatus(row.status),
     date: formatIsoDate(row.quote_date),
     number: row.quote_number ?? shortId(row.id),
-    reference: "",
-    clientCode: "",
+    reference: row.reference ?? "",
+    clientCode: row.clients?.code ?? "",
     client: row.clients?.name ?? "—",
     total: Number(row.total_amount)
   }));
 
+  const orders: ArtificialSalesDocumentRow[] = (ordersResult.data ?? []).map((row) => ({
+    id: row.id,
+    status: mapSalesStatus(row.status),
+    date: formatIsoDate(row.order_date),
+    number: row.order_number ?? shortId(row.id),
+    reference: row.reference ?? "",
+    clientCode: row.clients?.code ?? "",
+    client: row.clients?.name ?? "—",
+    total: Number(row.total_amount)
+  }));
+
+  const deliveryNotes: ArtificialSalesDocumentRow[] = (deliveryNotesResult.data ?? []).map((row) => ({
+    id: row.id,
+    status: mapSalesStatus(row.status),
+    date: formatIsoDate(row.note_date),
+    number: row.note_number ?? shortId(row.id),
+    reference: row.reference ?? "",
+    clientCode: row.clients?.code ?? "",
+    client: row.clients?.name ?? "—",
+    total: Number(row.total_amount)
+  }));
+
+  const recurringInvoices: ArtificialSalesDocumentRow[] = (recurringInvoicesResult.data ?? []).map((row) => ({
+    id: row.id,
+    status: mapSalesStatus(row.status),
+    date: formatIsoDate(row.next_issue_date),
+    number: row.template_number ?? shortId(row.id),
+    reference: row.reference ?? "",
+    clientCode: row.clients?.code ?? "",
+    client: row.clients?.name ?? "—",
+    total: Number(row.total_amount)
+  }));
+
+  const fiscalEntityClientIds = new Set((fiscalEntityClientsResult.data ?? []).map((row) => row.client_id));
+
   return {
-    clients: clientRows.map((c) => ({
+    clients: clientRows.filter((c) => !fiscalEntityClientIds.has(c.id)).map((c) => ({
       id: c.id,
       name: c.name,
       code: c.code ?? shortId(c.id),
       taxId: c.tax_id ?? "",
+      clientKind: c.type === "individual" ? "individual" : "self_employed",
       applyIrpfByDefault: Boolean(c.apply_irpf_by_default),
       city: c.city ?? "",
       contactEmail: c.contact_email ?? "",
+      contactPhone: c.contact_phone ?? "",
+      country: c.country ?? "ES",
       defaultIrpfRate: Number(c.default_irpf_rate ?? 0),
       fiscalAddress: c.fiscal_address ?? "",
       postalCode: c.postal_code ?? "",
@@ -345,9 +483,9 @@ export async function readSalesData(organizationId: string): Promise<SalesData> 
     documents: {
       invoices,
       quotes,
-      orders: [],
-      "delivery-notes": [],
-      "recurring-invoices": []
+      orders,
+      "delivery-notes": deliveryNotes,
+      "recurring-invoices": recurringInvoices
     },
     fiscalEntities: (fiscalEntitiesResult.data ?? []).map((entity) => ({
       id: entity.id,
@@ -368,22 +506,66 @@ export type ProductItem = {
   isActive: boolean;
 };
 
+export type PriceListItem = {
+  id: string;
+  code: string;
+  name: string;
+  adjustmentType: "fixed_price" | "percentage_discount" | "tiered";
+  startDate: string | null;
+  endDate: string | null;
+  isActive: boolean;
+};
+
+export type DiscountGroupItem = {
+  id: string;
+  code: string;
+  name: string;
+  startDate: string | null;
+  endDate: string | null;
+  isActive: boolean;
+};
+
 export type ProductsData = {
   products: ProductItem[];
+  priceLists: PriceListItem[];
+  discountGroups: DiscountGroupItem[];
 };
 
 export async function readProductsData(organizationId: string): Promise<ProductsData> {
   const supabase = await createClient();
 
-  const { data } = await supabase
-    .from("products_services")
-    .select("id, code, name, kind, unit_price, tax_rate, is_active")
-    .eq("organization_id", organizationId)
-    .is("deleted_at", null)
-    .order("name", { ascending: true })
-    .returns<DbProductRow[]>();
+  const [productsResult, priceListsResult, discountGroupsResult] = await Promise.all([
+    supabase
+      .from("products_services")
+      .select("id, code, name, kind, unit_price, tax_rate, is_active")
+      .eq("organization_id", organizationId)
+      .is("deleted_at", null)
+      .order("name", { ascending: true })
+      .returns<DbProductRow[]>()
+      .then((r) => ({ data: r.data ?? [], error: r.error })),
+    supabase
+      .from("price_lists")
+      .select("id, code, name, adjustment_type, start_date, end_date, is_active")
+      .eq("organization_id", organizationId)
+      .is("deleted_at", null)
+      .order("name", { ascending: true })
+      .returns<DbPriceListRow[]>()
+      .then((r) => ({ data: r.data ?? [], error: r.error })),
+    supabase
+      .from("discount_groups")
+      .select("id, code, name, start_date, end_date, is_active")
+      .eq("organization_id", organizationId)
+      .is("deleted_at", null)
+      .order("name", { ascending: true })
+      .returns<DbDiscountGroupRow[]>()
+      .then((r) => ({ data: r.data ?? [], error: r.error }))
+  ]);
 
-  return { products: (data ?? []).map(mapProductRow) };
+  return {
+    products: productsResult.data.map(mapProductRow),
+    priceLists: priceListsResult.data.map(mapPriceListRow),
+    discountGroups: discountGroupsResult.data.map(mapDiscountGroupRow)
+  };
 }
 
 function mapProductRow(row: DbProductRow): ProductItem {
@@ -394,6 +576,29 @@ function mapProductRow(row: DbProductRow): ProductItem {
     kind: row.kind as "product" | "service",
     unitPrice: Number(row.unit_price),
     taxRate: row.tax_rate === null ? null : Number(row.tax_rate),
+    isActive: row.is_active
+  };
+}
+
+function mapPriceListRow(row: DbPriceListRow): PriceListItem {
+  return {
+    id: row.id,
+    code: row.code,
+    name: row.name,
+    adjustmentType: (row.adjustment_type as PriceListItem["adjustmentType"]) ?? "fixed_price",
+    startDate: row.start_date,
+    endDate: row.end_date,
+    isActive: row.is_active
+  };
+}
+
+function mapDiscountGroupRow(row: DbDiscountGroupRow): DiscountGroupItem {
+  return {
+    id: row.id,
+    code: row.code,
+    name: row.name,
+    startDate: row.start_date,
+    endDate: row.end_date,
     isActive: row.is_active
   };
 }

@@ -2241,6 +2241,12 @@ a {
   padding: 16px;
 }
 
+.inline-document-detail-panel {
+  border-radius: 0;
+  box-shadow: none;
+  margin-top: 0;
+}
+
 .sales-action-panel header,
 .sales-action-panel footer {
   align-items: center;
@@ -2308,6 +2314,65 @@ a {
   justify-content: flex-end;
 }
 
+.sales-detail-row td {
+  background: #f8fbfc;
+  padding: 0;
+}
+
+.document-detail-meta-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.sales-detail-card {
+  background: #f5f8fa;
+  border: 1px solid #d6dfe6;
+  border-radius: 10px;
+  display: grid;
+  gap: 5px;
+  padding: 12px 14px;
+}
+
+.sales-detail-card span {
+  color: #587082;
+  font-size: 0.83rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.sales-detail-card strong {
+  color: #10212b;
+  font-size: 1rem;
+  font-weight: 900;
+}
+
+.sales-inline-toggle {
+  align-items: center;
+  color: #10212b;
+  display: inline-flex;
+  gap: 10px;
+  width: fit-content;
+}
+
+.sales-inline-toggle input {
+  accent-color: #008a45;
+}
+
+.document-detail-compact-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+}
+
+.document-detail-compact-meta span {
+  color: #425466;
+}
+
+.compact-sales-notes textarea {
+  min-height: 120px;
+}
+
 .delete-panel {
   border-color: #f0bdc6;
 }
@@ -2321,7 +2386,7 @@ a {
   border: 1px solid #d5dde5;
   border-radius: 8px 8px 0 0;
   margin-top: 18px;
-  min-height: 480px;
+  min-height: 0;
   overflow: hidden;
 }
 
@@ -2372,7 +2437,6 @@ a {
 }
 
 .closed-badge {
-  background: #008a00;
   border-radius: 3px;
   color: #ffffff;
   display: inline-flex;
@@ -2381,6 +2445,42 @@ a {
   min-width: 105px;
   padding: 5px 12px;
 }
+
+.closed-badge.status-draft {
+  background: #9ca3af;
+  color: #1f2937;
+}
+
+.closed-badge.status-open {
+  background: #ea580c;
+}
+
+.closed-badge.status-sent {
+  background: #2563eb;
+}
+
+.closed-badge.status-accepted,
+.closed-badge.status-paid {
+  background: #16a34a;
+}
+
+.closed-badge.status-rejected,
+.closed-badge.status-overdue {
+  background: #dc2626;
+}
+
+.closed-badge.status-booked {
+  background: #6d28d9;
+}
+
+.closed-badge.status-cancelled {
+  background: #6b7280;
+}
+
+.closed-badge.status-default {
+  background: #008a45;
+}
+
 
 .sage-table-button {
   align-items: center;
@@ -2529,6 +2629,17 @@ a {
 
 .date-input-shell svg {
   color: #63676b;
+}
+
+.quote-inline-icon-button {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: #006b3f;
+  cursor: pointer;
+  display: inline-flex;
+  justify-content: center;
+  padding: 0;
 }
 
 .quote-tabs {
@@ -3519,6 +3630,18 @@ a {
   font-size: 0.82rem;
   font-weight: 900;
   margin-top: 6px;
+}
+
+.client-delete-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  margin: 12px 0 18px;
+}
+
+.client-delete-grid .client-metric {
+  justify-items: flex-start;
+  min-width: 200px;
 }
 
 .client-tabs {

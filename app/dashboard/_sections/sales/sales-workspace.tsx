@@ -26,14 +26,18 @@ import {
 import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  createSalesDeliveryNote,
   createSalesInvoice,
+  createSalesOrder,
   createSalesQuote,
+  createSalesRecurringInvoice,
   duplicateSalesDocument,
+  getSalesDocumentStatusDetail,
   saveSalesConfigSection,
   softDeleteSalesDocument,
   updateSalesDocumentStatus
 } from "../../commercial-actions";
-import type { SalesConfigPayload, SalesDocumentKind } from "../../commercial-actions";
+import type { SalesConfigPayload, SalesDocumentKind, SalesDocumentStatusDetail } from "../../commercial-actions";
 import { artificialSalesDocuments } from "../../_data/artificial-business-data";
 import type { ArtificialContactListItem, SalesSectionId } from "../../_data/artificial-business-data";
 import type { ProductItem } from "../../_data/commercial-data";
@@ -46,6 +50,11 @@ type SalesColumnId = "status" | "date" | "number" | "client" | "clientCode" | "t
 type SalesNotice = {
   tone: "success" | "warning";
   text: string;
+};
+
+type StatusPresentation = {
+  className: string;
+  summary: string;
 };
 
 type SalesSection = {
@@ -129,8 +138,7 @@ const salesSections: SalesSection[] = [
       description: "",
       actions: [
         { kind: "create", label: "Crear presupuesto" },
-        { kind: "contacts", label: "Crear cliente" },
-        { kind: "orders", label: "Convertir a pedido" }
+        { kind: "contacts", label: "Crear cliente" }
       ]
     },
     metrics: [
@@ -164,8 +172,7 @@ const salesSections: SalesSection[] = [
       description: "",
       actions: [
         { kind: "create", label: "Crear pedido" },
-        { kind: "contacts", label: "Crear cliente" },
-        { kind: "delivery-notes", label: "Preparar albaran" }
+        { kind: "contacts", label: "Crear cliente" }
       ]
     },
     metrics: [
@@ -199,8 +206,7 @@ const salesSections: SalesSection[] = [
       description: "",
       actions: [
         { kind: "create", label: "Crear albaran" },
-        { kind: "contacts", label: "Crear cliente" },
-        { kind: "invoices", label: "Facturar entregas" }
+        { kind: "contacts", label: "Crear cliente" }
       ]
     },
     metrics: [
@@ -234,8 +240,7 @@ const salesSections: SalesSection[] = [
       description: "",
       actions: [
         { kind: "create", label: "Crear factura de venta" },
-        { kind: "contacts", label: "Crear cliente" },
-        { kind: "recurring-invoices", label: "Preparar recordatorio" }
+        { kind: "contacts", label: "Crear cliente" }
       ]
     },
     metrics: [
@@ -269,8 +274,7 @@ const salesSections: SalesSection[] = [
       description: "",
       actions: [
         { kind: "create", label: "Crear recurrente" },
-        { kind: "contacts", label: "Crear cliente" },
-        { kind: "invoices", label: "Planificar emision" }
+        { kind: "contacts", label: "Crear cliente" }
       ]
     },
     metrics: [
@@ -284,7 +288,7 @@ const salesSections: SalesSection[] = [
 
 const salesSectionIds = new Set<SalesSectionId>(salesSections.map((section) => section.id));
 
-const creatableSectionIds = new Set<SalesSectionId>(["quotes", "invoices"]);
+const creatableSectionIds = new Set<SalesSectionId>(["quotes", "orders", "invoices", "delivery-notes", "recurring-invoices"]);
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -305,6 +309,25 @@ const statusOptionsByKind: Record<SalesDocumentKind, Array<{ value: string; labe
     { value: "accepted", label: "Aceptada" },
     { value: "rejected", label: "Rechazada" },
     { value: "cancelled", label: "Cancelada" }
+  ],
+  order: [
+    { value: "draft", label: "Borrador" },
+    { value: "open", label: "Abierta" },
+    { value: "sent", label: "Enviada" },
+    { value: "accepted", label: "Aceptada" },
+    { value: "rejected", label: "Rechazada" },
+    { value: "cancelled", label: "Cancelada" }
+  ],
+  "delivery-note": [
+    { value: "open", label: "Abierta" },
+    { value: "sent", label: "Enviada" },
+    { value: "accepted", label: "Aceptada" },
+    { value: "cancelled", label: "Cancelada" }
+  ],
+  "recurring-invoice": [
+    { value: "draft", label: "Borrador" },
+    { value: "open", label: "Abierta" },
+    { value: "cancelled", label: "Cancelada" }
   ]
 };
 
@@ -316,9 +339,49 @@ function statusValueFromLabel(kind: SalesDocumentKind, label: string): string {
   return statusOptionsByKind[kind].find((option) => option.label === label)?.value ?? "draft";
 }
 
+function statusPresentation(status: string): StatusPresentation {
+  switch (status) {
+    case "draft":
+      return { className: "status-draft", summary: "Todavia en borrador." };
+    case "open":
+      return { className: "status-open", summary: "Creado y pendiente de envio." };
+    case "sent":
+      return { className: "status-sent", summary: "Enviado al cliente." };
+    case "accepted":
+      return { className: "status-accepted", summary: "Aceptado por el cliente." };
+    case "rejected":
+      return { className: "status-rejected", summary: "Rechazado por el cliente." };
+    case "overdue":
+      return { className: "status-overdue", summary: "Vencido sin pagar." };
+    case "paid":
+      return { className: "status-paid", summary: "Cobrado y cerrado." };
+    case "booked":
+      return { className: "status-booked", summary: "Contabilizado." };
+    case "cancelled":
+      return { className: "status-cancelled", summary: "Cancelado y fuera de circuito." };
+    default:
+      return { className: "status-default", summary: "Estado actualizado." };
+  }
+}
+
+function formatDateTime(value: string | null): string {
+  if (!value) return "Sin registro";
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) return value;
+
+  return new Intl.DateTimeFormat("es-ES", {
+    dateStyle: "short",
+    timeStyle: "short"
+  }).format(date);
+}
+
 function sectionDocumentKind(sectionId: SalesSectionId): SalesDocumentKind | null {
   if (sectionId === "quotes") return "quote";
+  if (sectionId === "orders") return "order";
   if (sectionId === "invoices") return "invoice";
+  if (sectionId === "delivery-notes") return "delivery-note";
+  if (sectionId === "recurring-invoices") return "recurring-invoice";
   return null;
 }
 
@@ -449,13 +512,13 @@ export function SalesWorkspace({ clients, fiscalEntities, organizationId, organi
     setNotice({ tone: "success", text: `Duplicado creado como ${result.document.number}.` });
   };
 
-  const updateDocumentStatus = async (rowId: string, dbStatus: string) => {
+  const updateDocumentStatus = async (rowId: string, dbStatus: string, options?: { notes?: string; isPaid?: boolean }) => {
     if (!activeKind || !UUID_PATTERN.test(rowId)) {
       setNotice({ tone: "warning", text: "Este documento no esta conectado al modelo real y no se puede actualizar." });
       return;
     }
 
-    const result = await updateSalesDocumentStatus(activeKind, rowId, dbStatus);
+    const result = await updateSalesDocumentStatus(activeKind, rowId, dbStatus, options);
 
     if (result.error) {
       setNotice({ tone: "warning", text: `No se pudo actualizar el estado: ${result.error}` });
@@ -471,6 +534,7 @@ export function SalesWorkspace({ clients, fiscalEntities, organizationId, organi
       ))
     }));
     setNotice({ tone: "success", text: `Estado actualizado a ${label}.` });
+    return result;
   };
 
   return (
@@ -600,7 +664,7 @@ function DocumentList({
   onToggleColumns: () => void;
   onToggleFilters: () => void;
   onToggleSettings: () => void;
-  onUpdateDocumentStatus: (rowId: string, dbStatus: string) => void;
+  onUpdateDocumentStatus: (rowId: string, dbStatus: string, options?: { notes?: string; isPaid?: boolean }) => Promise<{ error?: string } | undefined>;
 }) {
   const [selectedRow, setSelectedRow] = useState<SalesDocumentRow | null>(null);
   const [rowPendingDelete, setRowPendingDelete] = useState<SalesDocumentRow | null>(null);
@@ -787,30 +851,68 @@ function DocumentList({
               </tr>
             </thead>
             <tbody>
-              {visibleRows.length > 0 ? visibleRows.map((row) => (
-                <tr key={row.id}>
-                  {isColumnVisible("status") ? <td><span className="closed-badge">{row.status}</span></td> : null}
-                  {isColumnVisible("date") ? <td>{row.date}</td> : null}
-                  {isColumnVisible("number") ? <td>{row.number}</td> : null}
-                  {isColumnVisible("client") ? <td>{row.client}</td> : null}
-                  {isColumnVisible("clientCode") ? <td>{row.clientCode}</td> : null}
-                  {isColumnVisible("total") ? <td>{formatMoney(row.total)}</td> : null}
-                  <td className="sales-row-actions-cell">
-                    <button
-                      className="sage-table-button"
-                      onClick={() => {
-                        setSelectedRow(row);
-                        setRowPendingDelete(null);
-                        onSettingsPanelChange(null);
-                      }}
-                      type="button"
-                      aria-label={`Abrir acciones de ${row.number}`}
-                    >
-                      <MoreVertical aria-hidden="true" size={22} />
-                    </button>
-                  </td>
-                </tr>
-              )) : (
+              {visibleRows.length > 0 ? visibleRows.flatMap((row) => {
+                const kind = activeKind ?? "quote";
+                const presentation = statusPresentation(statusValueFromLabel(kind, row.status));
+
+                return [
+                  (
+                    <tr key={`${row.id}-${row.status}`}>
+                      {isColumnVisible("status") ? <td><span className={`closed-badge ${presentation.className}`}>{row.status}</span></td> : null}
+                      {isColumnVisible("date") ? <td>{row.date}</td> : null}
+                      {isColumnVisible("number") ? <td>{row.number}</td> : null}
+                      {isColumnVisible("client") ? <td>{row.client}</td> : null}
+                      {isColumnVisible("clientCode") ? <td>{row.clientCode}</td> : null}
+                      {isColumnVisible("total") ? <td>{formatMoney(row.total)}</td> : null}
+                      <td className="sales-row-actions-cell">
+                        <button
+                          className="sage-table-button"
+                          onClick={() => {
+                            setSelectedRow(selectedRow?.id === row.id ? null : row);
+                            setRowPendingDelete(null);
+                            onSettingsPanelChange(null);
+                          }}
+                          type="button"
+                          aria-label={`Abrir acciones de ${row.number}`}
+                        >
+                          <MoreVertical aria-hidden="true" size={22} />
+                        </button>
+                      </td>
+                    </tr>
+                  ),
+                  selectedRow?.id === row.id ? (
+                    <tr className="sales-detail-row" key={`${row.id}-detail`}>
+                      <td colSpan={visibleColumnCount}>
+                        <SalesDocumentPanel
+                          activeSection={activeSection}
+                          kind={kind}
+                          row={selectedRow}
+                          onClose={() => setSelectedRow(null)}
+                          onDelete={() => {
+                            setRowPendingDelete(selectedRow);
+                            setSelectedRow(null);
+                          }}
+                          onDuplicate={() => {
+                            onDuplicateDocument(selectedRow);
+                            setSelectedRow(null);
+                          }}
+                          onPrint={() => window.print()}
+                          onSave={async (dbStatus, notes, isPaid) => {
+                            const result = await onUpdateDocumentStatus(selectedRow.id, dbStatus, { notes, isPaid });
+
+                            if (result?.error) {
+                              onShowNotice({ tone: "warning", text: `No se pudo actualizar el estado: ${result.error}` });
+                              return;
+                            }
+
+                            setSelectedRow(null);
+                          }}
+                        />
+                      </td>
+                    </tr>
+                  ) : null
+                ];
+              }) : (
                 <tr>
                   <td colSpan={visibleColumnCount}>
                     <div className="sales-empty-list">
@@ -830,27 +932,6 @@ function DocumentList({
           </table>
         </div>
       </section>
-
-      {selectedRow ? (
-        <SalesDocumentPanel
-          activeSection={activeSection}
-          kind={activeKind ?? "invoice"}
-          row={selectedRow}
-          onClose={() => setSelectedRow(null)}
-          onDelete={() => {
-            setRowPendingDelete(selectedRow);
-            setSelectedRow(null);
-          }}
-          onDuplicate={() => {
-            onDuplicateDocument(selectedRow);
-            setSelectedRow(null);
-          }}
-          onSave={(dbStatus) => {
-            onUpdateDocumentStatus(selectedRow.id, dbStatus);
-            setSelectedRow(null);
-          }}
-        />
-      ) : null}
 
       {rowPendingDelete ? (
         <DeleteDocumentPanel
@@ -1132,6 +1213,7 @@ function SalesDocumentPanel({
   onClose,
   onDelete,
   onDuplicate,
+  onPrint,
   onSave
 }: {
   activeSection: SalesSection;
@@ -1140,12 +1222,33 @@ function SalesDocumentPanel({
   onClose: () => void;
   onDelete: () => void;
   onDuplicate: () => void;
-  onSave: (dbStatus: string) => void;
+  onPrint: () => void;
+  onSave: (dbStatus: string, notes: string, isPaid: boolean) => void;
 }) {
   const [statusValue, setStatusValue] = useState(() => statusValueFromLabel(kind, row.status));
+  const [notes, setNotes] = useState("");
+  const [isPaid, setIsPaid] = useState(false);
+  const [detail, setDetail] = useState<SalesDocumentStatusDetail | null>(null);
+  const [isLoadingDetail, setIsLoadingDetail] = useState(true);
+  useEffect(() => {
+    let isMounted = true;
+    setIsLoadingDetail(true);
+
+    void getSalesDocumentStatusDetail(kind, row.id).then((result) => {
+      if (!isMounted) return;
+      setDetail(result.detail ?? null);
+      setNotes(result.detail?.notes ?? "");
+      setIsPaid(Boolean(result.detail?.isPaid));
+      setIsLoadingDetail(false);
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [kind, row.id]);
 
   return (
-    <section className="sales-action-panel document-detail-panel" aria-label={`Editar ${row.number}`}>
+    <section className="sales-action-panel document-detail-panel inline-document-detail-panel" aria-label={`Editar ${row.number}`}>
       <header>
         <div>
           <PenLine aria-hidden="true" size={22} />
@@ -1169,17 +1272,80 @@ function SalesDocumentPanel({
           <span>Fecha</span>
           <input disabled value={row.date} />
         </label>
-        <label className="sage-field">
-          <span>Cliente</span>
-          <input disabled value={row.client} />
+      </div>
+
+      <div className="document-detail-meta-grid">
+        {statusValue === "open" ? (
+          <>
+            <article className="sales-detail-card">
+              <span>Creado por</span>
+              <strong>{detail?.createdByName ?? "Usuario de la organizacion"}</strong>
+            </article>
+            <article className="sales-detail-card">
+              <span>Fecha y hora de creacion</span>
+              <strong>{formatDateTime(detail?.createdAt ?? null)}</strong>
+            </article>
+          </>
+        ) : null}
+        {statusValue === "sent" ? (
+          <article className="sales-detail-card">
+            <span>Fecha y hora de envio</span>
+            <strong>{formatDateTime(detail?.eventAt ?? null)}</strong>
+          </article>
+        ) : null}
+        {statusValue === "accepted" ? (
+          <>
+            <article className="sales-detail-card">
+              <span>Fecha y hora de aceptacion</span>
+              <strong>{formatDateTime(detail?.eventAt ?? null)}</strong>
+            </article>
+            <article className="sales-detail-card">
+              <span>Abonado</span>
+              <strong>{isPaid ? "Si" : "No"}</strong>
+            </article>
+          </>
+        ) : null}
+        {statusValue === "rejected" ? (
+          <article className="sales-detail-card">
+            <span>Fecha y hora de rechazo</span>
+            <strong>{formatDateTime(detail?.eventAt ?? null)}</strong>
+          </article>
+        ) : null}
+        {statusValue === "cancelled" ? (
+          <article className="sales-detail-card">
+            <span>Fecha y hora de cancelacion</span>
+            <strong>{formatDateTime(detail?.eventAt ?? null)}</strong>
+          </article>
+        ) : null}
+      </div>
+
+      <label className="sage-textarea-field compact-sales-notes">
+        <span>Notas</span>
+        <textarea
+          onChange={(event) => setNotes(event.target.value)}
+          placeholder={isLoadingDetail ? "Cargando historial..." : "Anade contexto para este estado"}
+          rows={4}
+          value={notes}
+        />
+      </label>
+
+      {statusValue === "accepted" ? (
+        <label className="sales-inline-toggle">
+          <input checked={isPaid} onChange={(event) => setIsPaid(event.target.checked)} type="checkbox" />
+          <span>Marcar como abonado</span>
         </label>
-        <label className="sage-field">
-          <span>Total</span>
-          <input disabled value={formatMoney(row.total)} />
-        </label>
+      ) : null}
+
+      <div className="document-detail-compact-meta">
+        <span>Cliente: <strong>{row.client}</strong></span>
+        <span>Total: <strong>{formatMoney(row.total)}</strong></span>
       </div>
 
       <div className="document-action-strip">
+        <button className="sage-outline-button" onClick={onPrint} type="button">
+          <FileText aria-hidden="true" size={18} />
+          Imprimir
+        </button>
         <button className="sage-outline-button" onClick={onDuplicate} type="button">
           <Copy aria-hidden="true" size={18} />
           Duplicar
@@ -1188,7 +1354,7 @@ function SalesDocumentPanel({
           <Trash2 aria-hidden="true" size={18} />
           Eliminar
         </button>
-        <button className="sage-primary-button" onClick={() => onSave(statusValue)} type="button">
+        <button className="sage-primary-button" onClick={() => onSave(statusValue, notes, isPaid)} type="button">
           Guardar cambios
         </button>
       </div>
@@ -1249,7 +1415,8 @@ function QuoteForm({
   const [clientEmail, setClientEmail] = useState("");
   const [clientPhone, setClientPhone] = useState("");
   const [reference, setReference] = useState("");
-  const [quoteDate, setQuoteDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [isReferenceManual, setIsReferenceManual] = useState(false);
+  const [documentDate, setDocumentDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [lines, setLines] = useState<QuoteLine[]>([]);
   const [discountPercent, setDiscountPercent] = useState(0);
   const [retentionRate, setRetentionRate] = useState(15);
@@ -1263,8 +1430,13 @@ function QuoteForm({
   const clientEmailInputRef = useRef<HTMLInputElement>(null);
   const clientPhoneInputRef = useRef<HTMLInputElement>(null);
   const isQuote = section.id === "quotes";
-  const defaultPrefix = isQuote ? "PRES" : "VENTA";
+  const isOrder = section.id === "orders";
+  const isDeliveryNote = section.id === "delivery-notes";
+  const isRecurring = section.id === "recurring-invoices";
+  const defaultPrefix = isQuote ? "PRES" : isOrder ? "PED" : isDeliveryNote ? "ALB" : isRecurring ? "REC" : "FAC";
   const [prefix, setPrefix] = useState(defaultPrefix);
+  const normalizedDocumentDate = documentDate || new Date().toISOString().slice(0, 10);
+  const autoReference = `${prefix}-${normalizedDocumentDate.replaceAll("-", "")}`;
   const subtotal = lines.reduce((total, line) => {
     const rawLineTotal = line.quantity * line.unitPrice;
     const discountAmount = rawLineTotal * (line.discount / 100);
@@ -1278,16 +1450,26 @@ function QuoteForm({
   const total = taxableBase + taxTotal - retentionTotal + suplidoAmount;
   const canCreate = client.trim().length > 0 && lines.length > 0 && !isSaving;
 
+  useEffect(() => {
+    if (!isReferenceManual) {
+      setReference(autoReference);
+    }
+  }, [autoReference, isReferenceManual]);
+
   const selectClient = (nextClientId: string) => {
     setClientId(nextClientId);
     const selectedClient = clients.find((item) => item.id === nextClientId);
 
     if (!selectedClient) {
+      setClient("");
+      setClientEmail("");
+      setClientPhone("");
       return;
     }
 
     setClient(selectedClient.name);
     setClientEmail(selectedClient.contactEmail ?? "");
+    setClientPhone(selectedClient.contactPhone ?? "");
     if (selectedClient.applyIrpfByDefault) {
       setRetentionRate(selectedClient.defaultIrpfRate ?? 15);
     }
@@ -1356,13 +1538,23 @@ function QuoteForm({
     formData.set("client_email", clientEmailValue);
     formData.set("client_phone", clientPhoneValue);
     formData.set("number_prefix", prefix);
-    formData.set("reference", reference);
-    formData.set(isQuote ? "quote_date" : "issue_date", quoteDate);
+    formData.set("reference", reference.trim() || autoReference);
+    formData.set(
+      isQuote ? "quote_date" : isOrder ? "order_date" : isDeliveryNote ? "note_date" : isRecurring ? "next_issue_date" : "issue_date",
+      documentDate
+    );
+    if (isRecurring) {
+      const frequencySelect = document.querySelector<HTMLSelectElement>("[data-field='frequency']");
+
+      formData.set("frequency", frequencySelect?.value ?? "monthly");
+    }
     formData.set("retention_rate", String(retentionRate));
     formData.set("suplido_amount", String(suplidoAmount));
     formData.set("pdf_template", pdfTemplate);
     formData.set("notes", [customMessage, internalNotes].filter(Boolean).join("\n\n"));
     formData.set("lines_json", JSON.stringify(lines));
+
+    const docLabel = isQuote ? "el presupuesto" : isOrder ? "el pedido" : isDeliveryNote ? "el albarán" : isRecurring ? "la plantilla recurrente" : "la factura";
 
     setSubmitError(null);
     setIsSaving(true);
@@ -1370,28 +1562,40 @@ function QuoteForm({
     try {
       const result = isQuote
         ? await createSalesQuote(formData)
-        : await createSalesInvoice(formData);
+        : isOrder
+          ? await createSalesOrder(formData)
+          : isDeliveryNote
+            ? await createSalesDeliveryNote(formData)
+            : isRecurring
+              ? await createSalesRecurringInvoice(formData)
+              : await createSalesInvoice(formData);
       const persisted = isQuote
         ? ("quote" in result ? result.quote : null)
-        : ("invoice" in result ? result.invoice : null);
+        : isOrder
+          ? ("order" in result ? result.order : null)
+          : isDeliveryNote
+            ? ("note" in result ? result.note : null)
+            : isRecurring
+              ? ("recurring" in result ? result.recurring : null)
+              : ("invoice" in result ? result.invoice : null);
 
       if (result.error || !persisted) {
-        setSubmitError(result.error ?? `No se pudo crear ${isQuote ? "el presupuesto" : "la factura"}.`);
+        setSubmitError(result.error ?? `No se pudo crear ${docLabel}.`);
         return;
       }
 
       onCreated({
         id: persisted.id,
-        status: isQuote ? "Abierta" : "Borrador",
-        date: new Date(quoteDate).toLocaleDateString("es-ES"),
+        status: isQuote || isOrder || isDeliveryNote || isRecurring ? "Abierta" : "Borrador",
+        date: new Date(documentDate).toLocaleDateString("es-ES"),
         number: persisted.number,
-        reference,
+        reference: reference.trim() || autoReference,
         clientCode: clients.find((item) => item.id === clientId)?.code ?? "",
         client: clientNameValue,
         total: persisted.total
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : `No se pudo crear ${isQuote ? "el presupuesto" : "la factura"}.`;
+      const message = error instanceof Error ? error.message : `No se pudo crear ${docLabel}.`;
       setSubmitError(message);
       onPersistenceError(message);
     } finally {
@@ -1422,11 +1626,20 @@ function QuoteForm({
           <label className="sage-field">
             <span>Prefijo</span>
             <select value={prefix} onChange={(event) => setPrefix(event.target.value)}>
-              <option>PRES</option>
-              <option>VENTA</option>
-              <option>2026</option>
+              {isQuote ? <option value="PRES">PRES</option> : isOrder ? <option value="PED">PED</option> : isDeliveryNote ? <option value="ALB">ALB</option> : isRecurring ? <option value="REC">REC</option> : <option value="FAC">FAC</option>}
             </select>
           </label>
+          {isRecurring ? (
+            <label className="sage-field">
+              <span>Frecuencia</span>
+              <select data-field="frequency" defaultValue="monthly">
+                <option value="weekly">Semanal</option>
+                <option value="monthly">Mensual</option>
+                <option value="quarterly">Trimestral</option>
+                <option value="annual">Anual</option>
+              </select>
+            </label>
+          ) : null}
           <label className="sage-field">
             <span>Plantilla PDF</span>
             <select value={pdfTemplate} onChange={(event) => setPdfTemplate(event.target.value)}>
@@ -1436,12 +1649,34 @@ function QuoteForm({
           </label>
           <label className="sage-field">
             <span>Referencia</span>
-            <input value={reference} onChange={(event) => setReference(event.target.value)} />
+            <div className="date-input-shell">
+              <input
+                readOnly={!isReferenceManual}
+                value={reference}
+                onChange={(event) => setReference(event.target.value)}
+              />
+              <button
+                aria-label={isReferenceManual ? "Bloquear referencia automatica" : "Editar referencia"}
+                className="quote-inline-icon-button"
+                onClick={() => {
+                  if (isReferenceManual) {
+                    setIsReferenceManual(false);
+                    setReference(autoReference);
+                    return;
+                  }
+
+                  setIsReferenceManual(true);
+                }}
+                type="button"
+              >
+                <PenLine aria-hidden="true" size={18} />
+              </button>
+            </div>
           </label>
           <label className="sage-field compact-date">
             <span>{section.dateLabel.replace("...", "uesto")} *</span>
             <span className="date-input-shell">
-              <input value={quoteDate} onChange={(event) => setQuoteDate(event.target.value)} type="date" />
+              <input value={documentDate} onChange={(event) => setDocumentDate(event.target.value)} type="date" />
               <CalendarDays aria-hidden="true" size={24} fill="currentColor" />
             </span>
           </label>

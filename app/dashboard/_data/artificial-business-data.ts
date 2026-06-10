@@ -51,9 +51,12 @@ export type ArtificialContactListItem = {
   name: string;
   code: string;
   taxId: string;
+  clientKind?: "self_employed" | "individual";
   applyIrpfByDefault?: boolean;
   city?: string;
   contactEmail?: string;
+  contactPhone?: string;
+  country?: string;
   defaultIrpfRate?: number;
   fiscalAddress?: string;
   postalCode?: string;
