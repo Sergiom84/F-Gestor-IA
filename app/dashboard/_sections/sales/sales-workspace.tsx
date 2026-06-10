@@ -20,7 +20,6 @@ import {
   Plus,
   Search,
   Settings,
-  Sparkles,
   Trash2,
   X
 } from "lucide-react";
@@ -43,6 +42,7 @@ import { formatMoney } from "../../_lib/formatters";
 
 type QuoteFormTab = "products" | "totals" | "notes" | "client";
 type SalesSettingsPanelId = "numbering" | "payments" | "preferences";
+type SalesColumnId = "status" | "date" | "number" | "client" | "clientCode" | "total";
 type SalesNotice = {
   tone: "success" | "warning";
   text: string;
@@ -604,8 +604,31 @@ function DocumentList({
 }) {
   const [selectedRow, setSelectedRow] = useState<SalesDocumentRow | null>(null);
   const [rowPendingDelete, setRowPendingDelete] = useState<SalesDocumentRow | null>(null);
-  const [showAssistant, setShowAssistant] = useState(false);
+  const [statusFilter, setStatusFilter] = useState("");
+  const [clientFilter, setClientFilter] = useState("");
+  const [hiddenColumns, setHiddenColumns] = useState<SalesColumnId[]>([]);
   const totalAmount = rows.reduce((sum, row) => sum + row.total, 0);
+  const statusOptions = Array.from(new Set(rows.map((row) => row.status))).sort();
+  const clientOptions = Array.from(new Set(rows.map((row) => row.client).filter(Boolean))).sort();
+  const visibleRows = rows.filter((row) => (
+    (statusFilter === "" || row.status === statusFilter)
+    && (clientFilter === "" || row.client === clientFilter)
+  ));
+  const columns: Array<{ id: SalesColumnId; label: string }> = [
+    { id: "status", label: "Estado" },
+    { id: "date", label: activeSection.tableHeaders.date },
+    { id: "number", label: activeSection.tableHeaders.number },
+    { id: "client", label: activeSection.tableHeaders.client },
+    { id: "clientCode", label: activeSection.tableHeaders.clientCode },
+    { id: "total", label: activeSection.tableHeaders.total }
+  ];
+  const isColumnVisible = (id: SalesColumnId) => !hiddenColumns.includes(id);
+  const visibleColumnCount = columns.filter((column) => isColumnVisible(column.id)).length + 1;
+  const toggleColumn = (id: SalesColumnId) => {
+    setHiddenColumns((current) => (
+      current.includes(id) ? current.filter((item) => item !== id) : [...current, id]
+    ));
+  };
   const openSettingsPanel = (panel: SalesSettingsPanelId) => {
     onSettingsPanelChange(panel);
     setSelectedRow(null);
@@ -658,10 +681,6 @@ function DocumentList({
         </div>
       ) : null}
 
-      {showAssistant ? (
-        <SalesAssistantPanel activeSection={activeSection} rows={rows} />
-      ) : null}
-
       {activeSettingsPanel ? (
         <SalesSettingsPanel
           activePanel={activeSettingsPanel}
@@ -708,26 +727,43 @@ function DocumentList({
       {showFilters ? (
         <div className="sales-filter-strip">
           <span>Filtros activos</span>
-          <button type="button">Estado: todos</button>
-          <button type="button">Fecha: ejercicio actual</button>
-          <button type="button">Cliente: todos</button>
+          <label className="sales-filter-select">
+            Estado
+            <select onChange={(event) => setStatusFilter(event.target.value)} value={statusFilter}>
+              <option value="">Todos</option>
+              {statusOptions.map((status) => (
+                <option key={status} value={status}>{status}</option>
+              ))}
+            </select>
+          </label>
+          <label className="sales-filter-select">
+            Cliente
+            <select onChange={(event) => setClientFilter(event.target.value)} value={clientFilter}>
+              <option value="">Todos</option>
+              {clientOptions.map((clientName) => (
+                <option key={clientName} value={clientName}>{clientName}</option>
+              ))}
+            </select>
+          </label>
+          {statusFilter !== "" || clientFilter !== "" ? (
+            <button onClick={() => { setStatusFilter(""); setClientFilter(""); }} type="button">
+              Limpiar filtros
+            </button>
+          ) : null}
         </div>
       ) : null}
 
       {showColumns ? (
         <div className="sales-filter-strip columns-strip">
           <span>Columnas visibles</span>
-          {[
-            "Estado",
-            activeSection.tableHeaders.date,
-            activeSection.tableHeaders.number,
-            activeSection.tableHeaders.client,
-            activeSection.tableHeaders.clientCode,
-            activeSection.tableHeaders.total
-          ].map((column) => (
-            <label key={column}>
-              <input defaultChecked type="checkbox" />
-              {column}
+          {columns.map((column) => (
+            <label key={column.id}>
+              <input
+                checked={isColumnVisible(column.id)}
+                onChange={() => toggleColumn(column.id)}
+                type="checkbox"
+              />
+              {column.label}
             </label>
           ))}
         </div>
@@ -744,24 +780,21 @@ function DocumentList({
           <table className="sales-document-table">
             <thead>
               <tr>
-                <th>Estado</th>
-                <th>{activeSection.tableHeaders.date}</th>
-                <th>{activeSection.tableHeaders.number}</th>
-                <th>{activeSection.tableHeaders.client}</th>
-                <th>{activeSection.tableHeaders.clientCode}</th>
-                <th>{activeSection.tableHeaders.total}</th>
+                {columns.filter((column) => isColumnVisible(column.id)).map((column) => (
+                  <th key={column.id}>{column.label}</th>
+                ))}
                 <th>Acciones</th>
               </tr>
             </thead>
             <tbody>
-              {rows.length > 0 ? rows.map((row) => (
+              {visibleRows.length > 0 ? visibleRows.map((row) => (
                 <tr key={row.id}>
-                  <td><span className="closed-badge">{row.status}</span></td>
-                  <td>{row.date}</td>
-                  <td>{row.number}</td>
-                  <td>{row.client}</td>
-                  <td>{row.clientCode}</td>
-                  <td>{formatMoney(row.total)}</td>
+                  {isColumnVisible("status") ? <td><span className="closed-badge">{row.status}</span></td> : null}
+                  {isColumnVisible("date") ? <td>{row.date}</td> : null}
+                  {isColumnVisible("number") ? <td>{row.number}</td> : null}
+                  {isColumnVisible("client") ? <td>{row.client}</td> : null}
+                  {isColumnVisible("clientCode") ? <td>{row.clientCode}</td> : null}
+                  {isColumnVisible("total") ? <td>{formatMoney(row.total)}</td> : null}
                   <td className="sales-row-actions-cell">
                     <button
                       className="sage-table-button"
@@ -779,7 +812,7 @@ function DocumentList({
                 </tr>
               )) : (
                 <tr>
-                  <td colSpan={7}>
+                  <td colSpan={visibleColumnCount}>
                     <div className="sales-empty-list">
                       <FileText aria-hidden="true" size={64} />
                       <strong>{activeSection.emptyTitle}</strong>
@@ -791,7 +824,7 @@ function DocumentList({
             </tbody>
             <tfoot>
               <tr>
-                <td colSpan={7}>Elementos: {rows.length}</td>
+                <td colSpan={visibleColumnCount}>Elementos: {visibleRows.length}</td>
               </tr>
             </tfoot>
           </table>
@@ -912,34 +945,6 @@ function SalesSectionTabs({
         </button>
       ))}
     </div>
-  );
-}
-
-function SalesAssistantPanel({
-  activeSection,
-  rows
-}: {
-  activeSection: SalesSection;
-  rows: SalesDocumentRow[];
-}) {
-  const total = rows.reduce((sum, row) => sum + row.total, 0);
-  const topClient = rows[0]?.client ?? "Sin cliente destacado";
-
-  return (
-    <section className="sales-action-panel insights-panel" aria-label="Asistente de ventas">
-      <div>
-        <Sparkles aria-hidden="true" size={22} fill="currentColor" />
-        <h2>Resumen inteligente de {activeSection.label.toLowerCase()}</h2>
-      </div>
-      <p>
-        Hay {rows.length} documento{rows.length === 1 ? "" : "s"} en la vista por {formatMoney(total)}.
-        Cliente con mas actividad: {topClient}.
-      </p>
-      <div className="sales-action-grid">
-        <span>Proxima accion</span>
-        <strong>{rows.length > 0 ? "Revisar vencimiento y preparar envio" : "Crear el primer documento de la seccion"}</strong>
-      </div>
-    </section>
   );
 }
 
@@ -1259,6 +1264,7 @@ function QuoteForm({
   const clientPhoneInputRef = useRef<HTMLInputElement>(null);
   const isQuote = section.id === "quotes";
   const defaultPrefix = isQuote ? "PRES" : "VENTA";
+  const [prefix, setPrefix] = useState(defaultPrefix);
   const subtotal = lines.reduce((total, line) => {
     const rawLineTotal = line.quantity * line.unitPrice;
     const discountAmount = rawLineTotal * (line.discount / 100);
@@ -1340,7 +1346,6 @@ function QuoteForm({
 
   const submitDocument = async () => {
     const formData = new FormData();
-    const documentNumber = `${defaultPrefix}-${new Date().toISOString().slice(0, 10).replace(/-/g, "")}-${Date.now().toString().slice(-5)}`;
     const clientNameValue = clientInputRef.current?.value.trim() || client.trim();
     const clientEmailValue = clientEmailInputRef.current?.value.trim() || clientEmail.trim();
     const clientPhoneValue = clientPhoneInputRef.current?.value.trim() || clientPhone.trim();
@@ -1350,7 +1355,7 @@ function QuoteForm({
     formData.set("client_name", clientNameValue);
     formData.set("client_email", clientEmailValue);
     formData.set("client_phone", clientPhoneValue);
-    formData.set(isQuote ? "quote_number" : "invoice_number", documentNumber);
+    formData.set("number_prefix", prefix);
     formData.set("reference", reference);
     formData.set(isQuote ? "quote_date" : "issue_date", quoteDate);
     formData.set("retention_rate", String(retentionRate));
@@ -1416,8 +1421,7 @@ function QuoteForm({
           </label>
           <label className="sage-field">
             <span>Prefijo</span>
-            <select defaultValue={defaultPrefix}>
-              <option>N/A</option>
+            <select value={prefix} onChange={(event) => setPrefix(event.target.value)}>
               <option>PRES</option>
               <option>VENTA</option>
               <option>2026</option>
@@ -1447,10 +1451,6 @@ function QuoteForm({
           <label className="sage-field">
             <span>Razon social o nombre</span>
             <input ref={clientInputRef} value={client} onChange={(event) => setClient(event.target.value)} />
-          </label>
-          <label className="sage-field">
-            <span>Nombre</span>
-            <input />
           </label>
           <label className="sage-field">
             <span>E-mail</span>
@@ -1860,10 +1860,6 @@ function ClientInfoTab({
           <span>Nombre de grupo de descuentos</span>
           <input disabled />
         </label>
-        <div className="sage-toggle-row">
-          <span>Recargo de equivalencia</span>
-          <button type="button">OFF</button>
-        </div>
         <label className="sage-field">
           <span>Plantilla PDF</span>
           <select value={pdfTemplate} onChange={(event) => onPdfTemplateChange(event.target.value)}>
@@ -1894,13 +1890,8 @@ function AddressBox({ title }: { title: string }) {
   return (
     <div className="address-box">
       <span>{title}</span>
-      <div className="address-box-body" />
-      <div className="address-box-actions">
-        <button type="button">
-          <PenLine aria-hidden="true" size={22} fill="currentColor" />
-          Editar
-        </button>
-        <button type="button">Cambiar</button>
+      <div className="address-box-body">
+        <em>Se utiliza la direccion guardada en la ficha del cliente.</em>
       </div>
     </div>
   );
@@ -1937,9 +1928,6 @@ function QuoteStickyBar({
       <button className="quote-cancel-action" onClick={onCancel} type="button">Cancelar</button>
       <button className="quote-create-action" disabled={!canCreate} onClick={onCreate} type="button">
         {isPending ? "Creando..." : "Crear"}
-      </button>
-      <button className="quote-create-more" disabled={!canCreate} type="button" aria-label="Mas opciones de creacion">
-        <ChevronDown aria-hidden="true" size={18} />
       </button>
     </footer>
   );
