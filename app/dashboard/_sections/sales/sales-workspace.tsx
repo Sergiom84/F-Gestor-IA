@@ -8,7 +8,6 @@ import {
   Copy,
   CreditCard,
   ExternalLink,
-  Eye,
   FileText,
   Filter,
   FileCog,
@@ -27,8 +26,16 @@ import {
 } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { createSalesInvoice, createSalesQuote } from "../../commercial-actions";
-import { artificialSalesDefaults, artificialSalesDocuments } from "../../_data/artificial-business-data";
+import {
+  createSalesInvoice,
+  createSalesQuote,
+  duplicateSalesDocument,
+  saveSalesConfigSection,
+  softDeleteSalesDocument,
+  updateSalesDocumentStatus
+} from "../../commercial-actions";
+import type { SalesConfigPayload, SalesDocumentKind } from "../../commercial-actions";
+import { artificialSalesDocuments } from "../../_data/artificial-business-data";
 import type { ArtificialContactListItem, SalesSectionId } from "../../_data/artificial-business-data";
 import type { SalesDocRow } from "../../_lib/types";
 import { formatMoney } from "../../_lib/formatters";
@@ -278,6 +285,42 @@ const salesSectionIds = new Set<SalesSectionId>(salesSections.map((section) => s
 
 const creatableSectionIds = new Set<SalesSectionId>(["quotes", "invoices"]);
 
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+const statusOptionsByKind: Record<SalesDocumentKind, Array<{ value: string; label: string }>> = {
+  invoice: [
+    { value: "draft", label: "Borrador" },
+    { value: "open", label: "Abierta" },
+    { value: "sent", label: "Enviada" },
+    { value: "booked", label: "Contabilizada" },
+    { value: "overdue", label: "Vencida" },
+    { value: "paid", label: "Pagada" },
+    { value: "cancelled", label: "Cancelada" }
+  ],
+  quote: [
+    { value: "draft", label: "Borrador" },
+    { value: "open", label: "Abierta" },
+    { value: "sent", label: "Enviada" },
+    { value: "accepted", label: "Aceptada" },
+    { value: "rejected", label: "Rechazada" },
+    { value: "cancelled", label: "Cancelada" }
+  ]
+};
+
+function statusLabel(kind: SalesDocumentKind, dbStatus: string): string {
+  return statusOptionsByKind[kind].find((option) => option.value === dbStatus)?.label ?? dbStatus;
+}
+
+function statusValueFromLabel(kind: SalesDocumentKind, label: string): string {
+  return statusOptionsByKind[kind].find((option) => option.label === label)?.value ?? "draft";
+}
+
+function sectionDocumentKind(sectionId: SalesSectionId): SalesDocumentKind | null {
+  if (sectionId === "quotes") return "quote";
+  if (sectionId === "invoices") return "invoice";
+  return null;
+}
+
 function resolveSalesSectionId(value: string | null): SalesSectionId | null {
   return value && salesSectionIds.has(value as SalesSectionId) ? value as SalesSectionId : null;
 }
@@ -288,9 +331,10 @@ type SalesWorkspaceProps = {
   organizationId: string;
   organizationName: string;
   initialDocuments?: Record<SalesSectionId, SalesDocumentRow[]>;
+  initialConfig?: SalesConfigPayload;
 };
 
-export function SalesWorkspace({ clients, fiscalEntities, organizationId, organizationName, initialDocuments }: SalesWorkspaceProps) {
+export function SalesWorkspace({ clients, fiscalEntities, organizationId, organizationName, initialDocuments, initialConfig }: SalesWorkspaceProps) {
   const searchParams = useSearchParams();
   const sectionFromUrl = resolveSalesSectionId(searchParams.get("salesSection"));
   const [activeSectionId, setActiveSectionId] = useState<SalesSectionId>(sectionFromUrl ?? "invoices");
@@ -350,39 +394,81 @@ export function SalesWorkspace({ clients, fiscalEntities, organizationId, organi
     window.location.assign(`/dashboard?${nextParams.toString()}`);
   };
 
-  const deleteDocument = (rowId: string) => {
+  const activeKind = sectionDocumentKind(activeSectionId);
+
+  const deleteDocument = async (row: SalesDocumentRow) => {
+    if (!activeKind || !UUID_PATTERN.test(row.id)) {
+      setNotice({ tone: "warning", text: "Este documento no esta conectado al modelo real y no se puede eliminar." });
+      return;
+    }
+
+    const result = await softDeleteSalesDocument(activeKind, row.id);
+
+    if (result.error) {
+      setNotice({ tone: "warning", text: `No se pudo eliminar: ${result.error}` });
+      return;
+    }
+
     setDocumentsBySection((current) => ({
       ...current,
-      [activeSectionId]: current[activeSectionId].filter((row) => row.id !== rowId)
+      [activeSectionId]: current[activeSectionId].filter((item) => item.id !== row.id)
     }));
-    setNotice({ tone: "warning", text: `${activeSection.singularTitle} ${rowId.split("-").at(-1)} eliminado de la vista.` });
+    setNotice({ tone: "success", text: `${activeSection.singularTitle} ${row.number} eliminado.` });
   };
 
-  const duplicateDocument = (row: SalesDocumentRow) => {
-    const copyNumber = `${row.number}-C`;
+  const duplicateDocument = async (row: SalesDocumentRow) => {
+    if (!activeKind || !UUID_PATTERN.test(row.id)) {
+      setNotice({ tone: "warning", text: "Este documento no esta conectado al modelo real y no se puede duplicar." });
+      return;
+    }
+
+    const result = await duplicateSalesDocument(activeKind, row.id);
+
+    if (result.error || !result.document) {
+      setNotice({ tone: "warning", text: `No se pudo duplicar: ${result.error ?? "error desconocido"}` });
+      return;
+    }
+
     const copy: SalesDocumentRow = {
-      ...row,
-      id: `${row.id}-copy-${Date.now()}`,
-      number: copyNumber,
-      reference: row.reference ? `${row.reference} copia` : "Copia",
-      status: "Borrador"
+      id: result.document.id,
+      status: statusLabel(activeKind, result.document.status),
+      date: result.document.date ? new Date(result.document.date).toLocaleDateString("es-ES") : row.date,
+      number: result.document.number,
+      reference: row.reference,
+      clientCode: row.clientCode,
+      client: result.document.client,
+      total: result.document.total
     };
 
     setDocumentsBySection((current) => ({
       ...current,
       [activeSectionId]: [copy, ...current[activeSectionId]]
     }));
-    setNotice({ tone: "success", text: `Duplicado creado como ${copyNumber}.` });
+    setNotice({ tone: "success", text: `Duplicado creado como ${result.document.number}.` });
   };
 
-  const updateDocumentStatus = (rowId: string, status: string) => {
+  const updateDocumentStatus = async (rowId: string, dbStatus: string) => {
+    if (!activeKind || !UUID_PATTERN.test(rowId)) {
+      setNotice({ tone: "warning", text: "Este documento no esta conectado al modelo real y no se puede actualizar." });
+      return;
+    }
+
+    const result = await updateSalesDocumentStatus(activeKind, rowId, dbStatus);
+
+    if (result.error) {
+      setNotice({ tone: "warning", text: `No se pudo actualizar el estado: ${result.error}` });
+      return;
+    }
+
+    const label = statusLabel(activeKind, dbStatus);
+
     setDocumentsBySection((current) => ({
       ...current,
       [activeSectionId]: current[activeSectionId].map((row) => (
-        row.id === rowId ? { ...row, status } : row
+        row.id === rowId ? { ...row, status: label } : row
       ))
     }));
-    setNotice({ tone: "success", text: `Estado actualizado a ${status}.` });
+    setNotice({ tone: "success", text: `Estado actualizado a ${label}.` });
   };
 
   return (
@@ -411,6 +497,9 @@ export function SalesWorkspace({ clients, fiscalEntities, organizationId, organi
           <DocumentList
             activeSection={activeSection}
             activeSectionId={activeSectionId}
+            activeKind={activeKind}
+            config={initialConfig ?? {}}
+            organizationId={organizationId}
             organizationName={organizationName}
             rows={rows}
             sections={salesSections}
@@ -460,6 +549,9 @@ export function SalesWorkspace({ clients, fiscalEntities, organizationId, organi
 function DocumentList({
   activeSection,
   activeSectionId,
+  activeKind,
+  config,
+  organizationId,
   activeSettingsPanel,
   notice,
   organizationName,
@@ -483,6 +575,9 @@ function DocumentList({
 }: {
   activeSection: SalesSection;
   activeSectionId: SalesSectionId;
+  activeKind: SalesDocumentKind | null;
+  config: SalesConfigPayload;
+  organizationId: string;
   activeSettingsPanel: SalesSettingsPanelId | null;
   notice: SalesNotice | null;
   organizationName: string;
@@ -493,7 +588,7 @@ function DocumentList({
   showFilters: boolean;
   showSettings: boolean;
   onHeroAction: (kind: SalesSection["hero"]["actions"][number]["kind"]) => void;
-  onDeleteDocument: (rowId: string) => void;
+  onDeleteDocument: (row: SalesDocumentRow) => void;
   onDuplicateDocument: (row: SalesDocumentRow) => void;
   onQueryChange: (value: string) => void;
   onSectionChange: (sectionId: SalesSectionId) => void;
@@ -502,7 +597,7 @@ function DocumentList({
   onToggleColumns: () => void;
   onToggleFilters: () => void;
   onToggleSettings: () => void;
-  onUpdateDocumentStatus: (rowId: string, status: string) => void;
+  onUpdateDocumentStatus: (rowId: string, dbStatus: string) => void;
 }) {
   const [selectedRow, setSelectedRow] = useState<SalesDocumentRow | null>(null);
   const [rowPendingDelete, setRowPendingDelete] = useState<SalesDocumentRow | null>(null);
@@ -568,8 +663,11 @@ function DocumentList({
         <SalesSettingsPanel
           activePanel={activeSettingsPanel}
           activeSection={activeSection}
+          config={config}
+          organizationId={organizationId}
           organizationName={organizationName}
           onClose={() => onSettingsPanelChange(null)}
+          onError={(message) => onShowNotice({ tone: "warning", text: message })}
           onSave={(message) => {
             onSettingsPanelChange(null);
             onShowNotice({ tone: "success", text: message });
@@ -700,14 +798,19 @@ function DocumentList({
       {selectedRow ? (
         <SalesDocumentPanel
           activeSection={activeSection}
+          kind={activeKind ?? "invoice"}
           row={selectedRow}
           onClose={() => setSelectedRow(null)}
+          onDelete={() => {
+            setRowPendingDelete(selectedRow);
+            setSelectedRow(null);
+          }}
           onDuplicate={() => {
             onDuplicateDocument(selectedRow);
             setSelectedRow(null);
           }}
-          onSave={() => {
-            onUpdateDocumentStatus(selectedRow.id, "Revisado");
+          onSave={(dbStatus) => {
+            onUpdateDocumentStatus(selectedRow.id, dbStatus);
             setSelectedRow(null);
           }}
         />
@@ -719,7 +822,7 @@ function DocumentList({
           row={rowPendingDelete}
           onCancel={() => setRowPendingDelete(null)}
           onConfirm={() => {
-            onDeleteDocument(rowPendingDelete.id);
+            onDeleteDocument(rowPendingDelete);
             setRowPendingDelete(null);
           }}
         />
@@ -840,14 +943,20 @@ function SalesAssistantPanel({
 function SalesSettingsPanel({
   activePanel,
   activeSection,
+  config,
+  organizationId,
   organizationName,
   onClose,
+  onError,
   onSave
 }: {
   activePanel: SalesSettingsPanelId;
   activeSection: SalesSection;
+  config: SalesConfigPayload;
+  organizationId: string;
   organizationName: string;
   onClose: () => void;
+  onError: (message: string) => void;
   onSave: (message: string) => void;
 }) {
   const panelTitle = {
@@ -855,6 +964,50 @@ function SalesSettingsPanel({
     payments: "Condiciones de pago",
     preferences: `Preferencias de ${organizationName}`
   }[activePanel];
+  const [isSaving, setIsSaving] = useState(false);
+  const [values, setValues] = useState<Record<string, string>>(() => {
+    if (activePanel === "numbering") {
+      return {
+        series: config.numbering?.series ?? "VENTA-2026",
+        nextNumber: config.numbering?.nextNumber ?? "",
+        format: config.numbering?.format ?? "",
+        reset: config.numbering?.reset ?? "Anual"
+      };
+    }
+
+    if (activePanel === "payments") {
+      return {
+        term: config.payments?.term ?? "30 dias",
+        method: config.payments?.method ?? "Transferencia",
+        bankAccount: config.payments?.bankAccount ?? "",
+        reminder: config.payments?.reminder ?? "3 dias antes"
+      };
+    }
+
+    return {
+      email: config.preferences?.email ?? "",
+      pdfTemplate: config.preferences?.pdfTemplate ?? "Profesional",
+      message: config.preferences?.message ?? ""
+    };
+  });
+
+  const setValue = (key: string) => (event: { target: { value: string } }) => {
+    setValues((current) => ({ ...current, [key]: event.target.value }));
+  };
+
+  const handleSave = async () => {
+    setIsSaving(true);
+    const result = await saveSalesConfigSection(organizationId, activePanel, values);
+
+    setIsSaving(false);
+
+    if (result.error) {
+      onError(`No se pudo guardar la configuracion: ${result.error}`);
+      return;
+    }
+
+    onSave(`${panelTitle} guardado.`);
+  };
 
   return (
     <section className="sales-action-panel settings-detail-panel" aria-label={panelTitle}>
@@ -874,23 +1027,23 @@ function SalesSettingsPanel({
         <div className="settings-panel-grid">
           <label className="sage-field">
             <span>Serie activa</span>
-            <select defaultValue={activeSection.id.toUpperCase()}>
-              <option>{activeSection.id.toUpperCase()}</option>
-              <option>VENTA-2026</option>
-              <option>RECT-2026</option>
+            <select value={values.series} onChange={setValue("series")}>
+              {[...new Set([values.series, activeSection.id.toUpperCase(), "VENTA-2026", "RECT-2026"])].map((option) => (
+                <option key={option} value={option}>{option}</option>
+              ))}
             </select>
           </label>
           <label className="sage-field">
             <span>Siguiente numero</span>
-            <input defaultValue={artificialSalesDefaults.nextNumber} />
+            <input value={values.nextNumber} onChange={setValue("nextNumber")} />
           </label>
           <label className="sage-field">
             <span>Formato visible</span>
-            <input defaultValue={`${activeSection.label.slice(0, 3).toUpperCase()}-2026-${artificialSalesDefaults.nextNumber}`} />
+            <input value={values.format} onChange={setValue("format")} placeholder={`${activeSection.label.slice(0, 3).toUpperCase()}-2026-0001`} />
           </label>
           <label className="sage-field">
             <span>Reinicio</span>
-            <select defaultValue="Anual">
+            <select value={values.reset} onChange={setValue("reset")}>
               <option>Anual</option>
               <option>Mensual</option>
               <option>Nunca</option>
@@ -903,7 +1056,7 @@ function SalesSettingsPanel({
         <div className="settings-panel-grid">
           <label className="sage-field">
             <span>Condicion por defecto</span>
-            <select defaultValue="30 dias">
+            <select value={values.term} onChange={setValue("term")}>
               <option>Contado</option>
               <option>15 dias</option>
               <option>30 dias</option>
@@ -912,7 +1065,7 @@ function SalesSettingsPanel({
           </label>
           <label className="sage-field">
             <span>Metodo preferido</span>
-            <select defaultValue="Transferencia">
+            <select value={values.method} onChange={setValue("method")}>
               <option>Transferencia</option>
               <option>Domiciliacion</option>
               <option>Tarjeta</option>
@@ -920,11 +1073,11 @@ function SalesSettingsPanel({
           </label>
           <label className="sage-field">
             <span>Cuenta bancaria</span>
-            <input defaultValue="ES** **** **** **** 4210" />
+            <input value={values.bankAccount} onChange={setValue("bankAccount")} placeholder="ES00 0000 0000 0000 0000 0000" />
           </label>
           <label className="sage-field">
             <span>Recordatorio</span>
-            <select defaultValue="3 dias antes">
+            <select value={values.reminder} onChange={setValue("reminder")}>
               <option>Sin recordatorio</option>
               <option>3 dias antes</option>
               <option>En vencimiento</option>
@@ -937,11 +1090,11 @@ function SalesSettingsPanel({
         <div className="settings-panel-grid">
           <label className="sage-field">
             <span>Email de envio</span>
-            <input defaultValue={artificialSalesDefaults.settingsEmail} type="email" />
+            <input value={values.email} onChange={setValue("email")} type="email" />
           </label>
           <label className="sage-field">
             <span>Plantilla PDF</span>
-            <select defaultValue="Profesional">
+            <select value={values.pdfTemplate} onChange={setValue("pdfTemplate")}>
               <option>Profesional</option>
               <option>Compacta</option>
               <option>Detallada</option>
@@ -949,15 +1102,15 @@ function SalesSettingsPanel({
           </label>
           <label className="sage-field span-2">
             <span>Mensaje por defecto</span>
-            <input defaultValue={`Adjuntamos ${activeSection.singularTitle.toLowerCase()} para su revision.`} />
+            <input value={values.message} onChange={setValue("message")} placeholder={`Adjuntamos ${activeSection.singularTitle.toLowerCase()} para su revision.`} />
           </label>
         </div>
       ) : null}
 
       <footer>
         <button className="sage-outline-button" onClick={onClose} type="button">Cancelar</button>
-        <button className="sage-primary-button" onClick={() => onSave(`${panelTitle} guardado para ${activeSection.label}.`)} type="button">
-          Guardar cambios
+        <button className="sage-primary-button" disabled={isSaving} onClick={handleSave} type="button">
+          {isSaving ? "Guardando..." : "Guardar cambios"}
         </button>
       </footer>
     </section>
@@ -966,17 +1119,23 @@ function SalesSettingsPanel({
 
 function SalesDocumentPanel({
   activeSection,
+  kind,
   row,
   onClose,
+  onDelete,
   onDuplicate,
   onSave
 }: {
   activeSection: SalesSection;
+  kind: SalesDocumentKind;
   row: SalesDocumentRow;
   onClose: () => void;
+  onDelete: () => void;
   onDuplicate: () => void;
-  onSave: () => void;
+  onSave: (dbStatus: string) => void;
 }) {
+  const [statusValue, setStatusValue] = useState(() => statusValueFromLabel(kind, row.status));
+
   return (
     <section className="sales-action-panel document-detail-panel" aria-label={`Editar ${row.number}`}>
       <header>
@@ -992,26 +1151,23 @@ function SalesDocumentPanel({
       <div className="document-detail-grid">
         <label className="sage-field">
           <span>Estado</span>
-          <select defaultValue={row.status}>
-            <option>Borrador</option>
-            <option>Pendiente</option>
-            <option>Preparado</option>
-            <option>Revisado</option>
-            <option>Cerrado</option>
-            <option>Emitida</option>
+          <select value={statusValue} onChange={(event) => setStatusValue(event.target.value)}>
+            {statusOptionsByKind[kind].map((option) => (
+              <option key={option.value} value={option.value}>{option.label}</option>
+            ))}
           </select>
         </label>
         <label className="sage-field">
           <span>Fecha</span>
-          <input defaultValue={row.date} />
+          <input disabled value={row.date} />
         </label>
         <label className="sage-field">
           <span>Cliente</span>
-          <input defaultValue={row.client} />
+          <input disabled value={row.client} />
         </label>
         <label className="sage-field">
           <span>Total</span>
-          <input defaultValue={formatMoney(row.total)} />
+          <input disabled value={formatMoney(row.total)} />
         </label>
       </div>
 
@@ -1020,12 +1176,12 @@ function SalesDocumentPanel({
           <Copy aria-hidden="true" size={18} />
           Duplicar
         </button>
-        <button className="sage-outline-button" type="button">
-          <Eye aria-hidden="true" size={18} />
-          Vista previa
+        <button className="sage-danger-button" onClick={onDelete} type="button">
+          <Trash2 aria-hidden="true" size={18} />
+          Eliminar
         </button>
-        <button className="sage-primary-button" onClick={onSave} type="button">
-          Guardar revision
+        <button className="sage-primary-button" onClick={() => onSave(statusValue)} type="button">
+          Guardar cambios
         </button>
       </div>
     </section>
@@ -1051,7 +1207,7 @@ function DeleteDocumentPanel({
           <h2>Eliminar {activeSection.singularTitle.toLowerCase()} {row.number}</h2>
         </div>
       </header>
-      <p>Se quitara de la lista local de trabajo. En produccion esta accion deberia pedir confirmacion persistente.</p>
+      <p>El documento se marcara como eliminado en la base de datos y dejara de aparecer en la lista.</p>
       <footer>
         <button className="sage-outline-button" onClick={onCancel} type="button">Cancelar</button>
         <button className="sage-danger-button" onClick={onConfirm} type="button">Eliminar</button>

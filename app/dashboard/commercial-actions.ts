@@ -716,3 +716,231 @@ function clampPercent(value: number): number {
 function roundMoney(value: number): number {
   return Math.round((value + Number.EPSILON) * 100) / 100;
 }
+
+export type SalesDocumentKind = "invoice" | "quote";
+
+export type SalesConfigPayload = {
+  numbering?: { series?: string; nextNumber?: string; format?: string; reset?: string };
+  payments?: { term?: string; method?: string; bankAccount?: string; reminder?: string };
+  preferences?: { email?: string; pdfTemplate?: string; message?: string };
+};
+
+const SALES_DOCUMENT_STATUSES = new Set([
+  "draft",
+  "open",
+  "booked",
+  "sent",
+  "accepted",
+  "rejected",
+  "overdue",
+  "paid",
+  "cancelled"
+]);
+
+function salesDocumentTable(kind: SalesDocumentKind): "sales_invoices" | "sales_quotes" {
+  return kind === "quote" ? "sales_quotes" : "sales_invoices";
+}
+
+export async function updateSalesDocumentStatus(
+  kind: SalesDocumentKind,
+  documentId: string,
+  status: string
+): Promise<{ error?: string }> {
+  if (!isUuid(documentId)) {
+    return { error: "Documento inválido." };
+  }
+
+  if (!SALES_DOCUMENT_STATUSES.has(status)) {
+    return { error: "Estado inválido." };
+  }
+
+  const { supabase } = await getAuthenticatedUser();
+  const { error } = await supabase
+    .from(salesDocumentTable(kind))
+    .update({ status })
+    .eq("id", documentId);
+
+  if (error) {
+    return { error: error.message };
+  }
+
+  revalidatePath("/dashboard");
+  return {};
+}
+
+export async function softDeleteSalesDocument(
+  kind: SalesDocumentKind,
+  documentId: string
+): Promise<{ error?: string }> {
+  if (!isUuid(documentId)) {
+    return { error: "Documento inválido." };
+  }
+
+  const { supabase } = await getAuthenticatedUser();
+  const { error } = await supabase
+    .from(salesDocumentTable(kind))
+    .update({ deleted_at: new Date().toISOString() })
+    .eq("id", documentId);
+
+  if (error) {
+    return { error: error.message };
+  }
+
+  revalidatePath("/dashboard");
+  return {};
+}
+
+export async function duplicateSalesDocument(
+  kind: SalesDocumentKind,
+  documentId: string
+): Promise<{
+  error?: string;
+  document?: { id: string; number: string; date: string; client: string; total: number; status: string };
+}> {
+  if (!isUuid(documentId)) {
+    return { error: "Documento inválido." };
+  }
+
+  const { supabase, user } = await getAuthenticatedUser();
+
+  if (kind === "quote") {
+    const { data: original, error: readError } = await supabase
+      .from("sales_quotes")
+      .select("organization_id, fiscal_entity_id, client_id, quote_number, quote_date, currency, total_amount, notes, clients!client_id(name)")
+      .eq("id", documentId)
+      .single();
+
+    if (readError || !original) {
+      return { error: readError?.message ?? "Presupuesto no encontrado." };
+    }
+
+    const copyNumber = `${original.quote_number ?? documentId.slice(0, 8)}-C`;
+    const { data: copy, error: insertError } = await supabase
+      .from("sales_quotes")
+      .insert({
+        organization_id: original.organization_id,
+        fiscal_entity_id: original.fiscal_entity_id,
+        client_id: original.client_id,
+        quote_number: copyNumber,
+        quote_date: original.quote_date,
+        currency: original.currency,
+        status: "draft",
+        total_amount: original.total_amount,
+        notes: original.notes,
+        created_by: user.id
+      })
+      .select("id, quote_number, quote_date, total_amount")
+      .single();
+
+    if (insertError || !copy) {
+      return { error: insertError?.message ?? "No se pudo duplicar el presupuesto." };
+    }
+
+    revalidatePath("/dashboard");
+    return {
+      document: {
+        id: copy.id as string,
+        number: String(copy.quote_number ?? copyNumber),
+        date: String(copy.quote_date ?? ""),
+        client: (original.clients as { name?: string } | null)?.name ?? "—",
+        total: Number(copy.total_amount),
+        status: "draft"
+      }
+    };
+  }
+
+  const { data: original, error: readError } = await supabase
+    .from("sales_invoices")
+    .select("organization_id, fiscal_entity_id, client_id, invoice_number, issue_date, currency, subtotal_amount, tax_amount, retention_rate, retention_amount, suplido_amount, pdf_template, total_amount, notes, clients!client_id(name)")
+    .eq("id", documentId)
+    .single();
+
+  if (readError || !original) {
+    return { error: readError?.message ?? "Factura no encontrada." };
+  }
+
+  const copyNumber = `${original.invoice_number ?? documentId.slice(0, 8)}-C`;
+  const { data: copy, error: insertError } = await supabase
+    .from("sales_invoices")
+    .insert({
+      organization_id: original.organization_id,
+      fiscal_entity_id: original.fiscal_entity_id,
+      client_id: original.client_id,
+      invoice_number: copyNumber,
+      issue_date: original.issue_date,
+      currency: original.currency,
+      status: "draft",
+      subtotal_amount: original.subtotal_amount,
+      tax_amount: original.tax_amount,
+      retention_rate: original.retention_rate,
+      retention_amount: original.retention_amount,
+      suplido_amount: original.suplido_amount,
+      pdf_template: original.pdf_template,
+      total_amount: original.total_amount,
+      notes: original.notes,
+      created_by: user.id
+    })
+    .select("id, invoice_number, issue_date, total_amount")
+    .single();
+
+  if (insertError || !copy) {
+    return { error: insertError?.message ?? "No se pudo duplicar la factura." };
+  }
+
+  const { data: originalLines } = await supabase
+    .from("sales_invoice_lines")
+    .select("organization_id, line_index, description, quantity, unit_price, tax_rate, line_total")
+    .eq("sales_invoice_id", documentId)
+    .order("line_index", { ascending: true });
+
+  if (originalLines && originalLines.length > 0) {
+    await supabase
+      .from("sales_invoice_lines")
+      .insert(originalLines.map((line) => ({ ...line, sales_invoice_id: copy.id })));
+  }
+
+  revalidatePath("/dashboard");
+  return {
+    document: {
+      id: copy.id as string,
+      number: String(copy.invoice_number ?? copyNumber),
+      date: String(copy.issue_date ?? ""),
+      client: (original.clients as { name?: string } | null)?.name ?? "—",
+      total: Number(copy.total_amount),
+      status: "draft"
+    }
+  };
+}
+
+export async function saveSalesConfigSection(
+  organizationId: string,
+  section: "numbering" | "payments" | "preferences",
+  values: Record<string, string>
+): Promise<{ error?: string }> {
+  if (!isUuid(organizationId)) {
+    return { error: "Organización inválida." };
+  }
+
+  const { supabase } = await getAuthenticatedUser();
+  const { data: existing } = await supabase
+    .from("sales_config")
+    .select("payload")
+    .eq("organization_id", organizationId)
+    .maybeSingle();
+
+  const payload = {
+    ...((existing?.payload as SalesConfigPayload | null) ?? {}),
+    [section]: values
+  };
+
+  const { error } = await supabase
+    .from("sales_config")
+    .upsert({ organization_id: organizationId, payload }, { onConflict: "organization_id" });
+
+  if (error) {
+    return { error: error.message };
+  }
+
+  revalidatePath("/dashboard");
+  return {};
+}

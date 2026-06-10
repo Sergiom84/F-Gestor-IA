@@ -11,6 +11,7 @@ export async function SalesSection({ organizationId, organizationName }: { organ
       organizationName={organizationName}
       organizationId={organizationId}
       initialDocuments={data.documents}
+      initialConfig={data.config}
     />
   );
 }

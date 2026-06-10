@@ -234,16 +234,23 @@ export async function readPurchasesData(organizationId: string): Promise<Purchas
   return { invoices };
 }
 
+export type SalesConfigPayload = {
+  numbering?: { series?: string; nextNumber?: string; format?: string; reset?: string };
+  payments?: { term?: string; method?: string; bankAccount?: string; reminder?: string };
+  preferences?: { email?: string; pdfTemplate?: string; message?: string };
+};
+
 export type SalesData = {
   clients: ArtificialContactListItem[];
   documents: Record<SalesSectionId, ArtificialSalesDocumentRow[]>;
   fiscalEntities: Array<{ id: string; name: string }>;
+  config: SalesConfigPayload;
 };
 
 export async function readSalesData(organizationId: string): Promise<SalesData> {
   const supabase = await createClient();
 
-  const [invoicesResult, quotesResult, clientRows, fiscalEntitiesResult] = await Promise.all([
+  const [invoicesResult, quotesResult, clientRows, fiscalEntitiesResult, configResult] = await Promise.all([
     supabase
       .from("sales_invoices")
       .select("id, invoice_number, issue_date, status, total_amount, clients!client_id(name)")
@@ -267,7 +274,12 @@ export async function readSalesData(organizationId: string): Promise<SalesData> 
       .eq("organization_id", organizationId)
       .is("deleted_at", null)
       .order("created_at", { ascending: true })
-      .returns<DbFiscalEntityOptionRow[]>()
+      .returns<DbFiscalEntityOptionRow[]>(),
+    supabase
+      .from("sales_config")
+      .select("payload")
+      .eq("organization_id", organizationId)
+      .maybeSingle()
   ]);
 
   const invoices: ArtificialSalesDocumentRow[] = (invoicesResult.data ?? []).map((row) => ({
@@ -316,7 +328,8 @@ export async function readSalesData(organizationId: string): Promise<SalesData> 
     fiscalEntities: (fiscalEntitiesResult.data ?? []).map((entity) => ({
       id: entity.id,
       name: entity.legal_name
-    }))
+    })),
+    config: (configResult.data?.payload as SalesConfigPayload | null) ?? {}
   };
 }
 
