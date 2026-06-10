@@ -6,7 +6,9 @@ export async function PurchasesSection({ organizationId, organizationName }: { o
 
   return (
     <PurchasesWorkspace
+      organizationId={organizationId}
       organizationName={organizationName}
+      fiscalEntityId={data.fiscalEntityId}
       initialInvoices={data.invoices}
     />
   );

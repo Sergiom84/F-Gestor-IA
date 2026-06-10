@@ -86,9 +86,13 @@ export async function uploadDocument(formData: FormData) {
     redirect(`/dashboard?org=${organizationId}&error=upload_scope`);
   }
 
-  const { data: documentRow, error: documentError } = await supabase
+  // Sin RETURNING: la politica SELECT (can_access_document) no ve la fila
+  // recien insertada dentro del mismo statement y el insert fallaria con RLS.
+  const documentId = randomUUID();
+  const { error: documentError } = await supabase
     .from("documents")
     .insert({
+      id: documentId,
       organization_id: organizationId,
       fiscal_entity_id: fiscalEntity.id,
       client_id: fiscalEntity.client_id,
@@ -97,14 +101,14 @@ export async function uploadDocument(formData: FormData) {
       source: "manual_upload",
       title: uploads[0]?.name || `Factura ${new Date().toISOString().slice(0, 10)}`,
       uploaded_by: user.id
-    })
-    .select("id")
-    .single()
-    .returns<DocumentInsertRow>();
+    });
 
-  if (documentError || !documentRow) {
+  if (documentError) {
+    console.error("uploadDocument: documents insert failed", documentError);
     redirect(`/dashboard?org=${organizationId}&error=document_create`);
   }
+
+  const documentRow: DocumentInsertRow = { id: documentId };
 
   const uploadedStoragePaths: string[] = [];
 

@@ -199,19 +199,30 @@ export async function readContactsData(organizationId: string): Promise<Contacts
 
 export type PurchasesData = {
   invoices: ArtificialPurchaseInvoiceRow[];
+  fiscalEntityId: string | null;
 };
 
 export async function readPurchasesData(organizationId: string): Promise<PurchasesData> {
   const supabase = await createClient();
 
-  const { data } = await supabase
-    .from("purchase_invoices")
-    .select("id, invoice_number, issue_date, due_date, status, total_amount, notes, created_at, suppliers!supplier_id(name)")
-    .eq("organization_id", organizationId)
-    .is("deleted_at", null)
-    .order("created_at", { ascending: false })
-    .limit(100)
-    .returns<DbPurchaseInvoiceRow[]>();
+  const [{ data }, fiscalEntityResult] = await Promise.all([
+    supabase
+      .from("purchase_invoices")
+      .select("id, invoice_number, issue_date, due_date, status, total_amount, notes, created_at, suppliers!supplier_id(name)")
+      .eq("organization_id", organizationId)
+      .is("deleted_at", null)
+      .order("created_at", { ascending: false })
+      .limit(100)
+      .returns<DbPurchaseInvoiceRow[]>(),
+    supabase
+      .from("fiscal_entities")
+      .select("id")
+      .eq("organization_id", organizationId)
+      .is("deleted_at", null)
+      .order("created_at", { ascending: true })
+      .limit(1)
+      .maybeSingle()
+  ]);
 
   const invoices: ArtificialPurchaseInvoiceRow[] = (data ?? []).map((row) => {
     const { display, tab } = mapPurchaseStatus(row.status);
@@ -231,7 +242,10 @@ export async function readPurchasesData(organizationId: string): Promise<Purchas
     };
   });
 
-  return { invoices };
+  return {
+    invoices,
+    fiscalEntityId: (fiscalEntityResult.data?.id as string | undefined) ?? null
+  };
 }
 
 export type SalesConfigPayload = {

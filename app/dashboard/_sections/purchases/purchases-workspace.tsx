@@ -19,7 +19,8 @@ import {
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { useTransition, useMemo, useRef, useState } from "react";
-import { markPurchaseInvoicePaid, softDeletePurchaseInvoice } from "../../commercial-actions";
+import { createPurchaseInvoice, markPurchaseInvoicePaid, softDeletePurchaseInvoice } from "../../commercial-actions";
+import { uploadDocument } from "../../actions";
 import { artificialPurchaseRows } from "../../_data/artificial-business-data";
 import type {
   ArtificialPurchaseInvoiceRow,
@@ -47,17 +48,20 @@ const purchaseTabs: Array<{ id: PurchaseTabId; label: string }> = [
 ];
 
 type PurchasesWorkspaceProps = {
+  organizationId: string;
   organizationName: string;
+  fiscalEntityId: string | null;
   initialInvoices?: PurchaseInvoiceRow[];
 };
 
-export function PurchasesWorkspace({ organizationName, initialInvoices }: PurchasesWorkspaceProps) {
+export function PurchasesWorkspace({ organizationId, organizationName, fiscalEntityId, initialInvoices }: PurchasesWorkspaceProps) {
   const [activeTab, setActiveTab] = useState<PurchaseTabId>("all");
   const [query, setQuery] = useState("");
   const [showFilters, setShowFilters] = useState(false);
   const [showColumns, setShowColumns] = useState(false);
   const [showEmailPanel, setShowEmailPanel] = useState(true);
   const [uploadedFiles, setUploadedFiles] = useState<string[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
   const [invoices, setInvoices] = useState<PurchaseInvoiceRow[]>(initialInvoices ?? artificialPurchaseRows);
   const [showAssistant, setShowAssistant] = useState(false);
   const [showEmailAddress, setShowEmailAddress] = useState(false);
@@ -94,14 +98,30 @@ export function PurchasesWorkspace({ organizationName, initialInvoices }: Purcha
     setShowCreateForm(true);
   };
 
-  const createManualInvoice = (values: PurchaseInvoiceFormValues) => {
+  const createManualInvoice = async (values: PurchaseInvoiceFormValues) => {
     const totalValue = parseSpanishAmount(values.total);
+    const formData = new FormData();
+
+    formData.set("organization_id", organizationId);
+    formData.set("supplier_name", values.supplier.trim());
+    formData.set("invoice_number", values.invoiceNumber.trim());
+    formData.set("issue_date", values.invoiceDate);
+    formData.set("total_amount", String(totalValue));
+    formData.set("notes", values.description.trim() || "Factura creada manualmente");
+
+    const result = await createPurchaseInvoice(formData);
+
+    if (result.error || !result.invoice) {
+      setNotice({ tone: "warning", text: `No se pudo crear la factura de compra: ${result.error ?? "error desconocido"}` });
+      return;
+    }
+
     const invoice: PurchaseInvoiceRow = {
-      id: `manual-${Date.now()}`,
+      id: result.invoice.id,
       importDate: new Date().toLocaleDateString("es-ES"),
       fileName: "Alta manual",
       status: "Pendiente",
-      tab: "review",
+      tab: "pay",
       description: values.description.trim() || "Factura creada manualmente",
       supplier: values.supplier.trim(),
       invoiceDate: values.invoiceDate ? formatDateForDisplay(values.invoiceDate) : "",
@@ -110,19 +130,45 @@ export function PurchasesWorkspace({ organizationName, initialInvoices }: Purcha
     };
 
     setInvoices((current) => [invoice, ...current]);
-    setActiveTab("review");
+    setActiveTab("pay");
     setQuery("");
     setShowCreateForm(false);
-    setNotice({ tone: "success", text: "Factura de compra creada." });
+    setNotice({ tone: "success", text: "Factura de compra creada y guardada." });
   };
 
-  const registerFiles = (files: FileList | null) => {
-    if (!files?.length) {
+  const registerFiles = async (files: FileList | null) => {
+    if (!files?.length || isUploading) {
       return;
     }
 
-    setUploadedFiles(Array.from(files).map((file) => file.name));
-    setActiveTab("review");
+    const pdfFiles = Array.from(files).filter((file) => (file.type || "application/pdf") === "application/pdf");
+
+    if (pdfFiles.length === 0) {
+      setNotice({ tone: "warning", text: "El procesamiento automatico solo admite ficheros PDF." });
+      return;
+    }
+
+    if (!fiscalEntityId) {
+      setNotice({ tone: "warning", text: "No hay entidad fiscal configurada para subir documentos." });
+      return;
+    }
+
+    setUploadedFiles(pdfFiles.map((file) => file.name));
+    setIsUploading(true);
+
+    try {
+      const formData = new FormData();
+
+      formData.set("organization_id", organizationId);
+      formData.set("fiscal_entity_id", fiscalEntityId);
+      for (const file of pdfFiles) {
+        formData.append("files", file);
+      }
+
+      await uploadDocument(formData);
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   const markAsPaid = (rowId: string) => {
@@ -242,20 +288,20 @@ export function PurchasesWorkspace({ organizationName, initialInvoices }: Purcha
           onDragOver={(event) => event.preventDefault()}
           onDrop={(event) => {
             event.preventDefault();
-            registerFiles(event.dataTransfer.files);
+            void registerFiles(event.dataTransfer.files);
           }}
         >
           <input
-            accept="application/pdf,image/*"
+            accept="application/pdf"
             multiple
-            onChange={(event) => registerFiles(event.target.files)}
+            onChange={(event) => void registerFiles(event.target.files)}
             ref={fileInputRef}
             type="file"
           />
           <UploadCloud aria-hidden="true" size={96} />
           <span>
-            <strong>Arrastra los ficheros hasta aqui</strong>
-            <small>O abre el explorador de ficheros</small>
+            <strong>{isUploading ? "Subiendo ficheros..." : "Arrastra los ficheros hasta aqui"}</strong>
+            <small>{isUploading ? "Se enviaran al procesamiento automatico" : "Solo PDF. O abre el explorador de ficheros"}</small>
           </span>
         </label>
 
@@ -283,7 +329,7 @@ export function PurchasesWorkspace({ organizationName, initialInvoices }: Purcha
 
       {uploadedFiles.length > 0 ? (
         <div className="purchase-upload-strip">
-          <strong>{uploadedFiles.length} fichero(s) listo(s) para revisar</strong>
+          <strong>{uploadedFiles.length} fichero(s) {isUploading ? "subiendo" : "enviado(s) a procesamiento"}</strong>
           <span>{uploadedFiles.join(", ")}</span>
         </div>
       ) : null}

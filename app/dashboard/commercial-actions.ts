@@ -50,18 +50,41 @@ export async function softDeletePurchaseInvoice(invoiceId: string): Promise<void
   revalidatePath("/dashboard");
 }
 
-export async function createPurchaseInvoice(formData: FormData): Promise<{ error?: string }> {
+export async function createPurchaseInvoice(formData: FormData): Promise<{ error?: string; invoice?: { id: string } }> {
   const organizationId = String(formData.get("organization_id") ?? "").trim();
-  const fiscalEntityId = String(formData.get("fiscal_entity_id") ?? "").trim();
 
-  if (!isUuid(organizationId) || !isUuid(fiscalEntityId)) {
-    return { error: "Organización o entidad fiscal inválida." };
+  if (!isUuid(organizationId)) {
+    return { error: "Organización inválida." };
   }
 
   const { supabase, user } = await getAuthenticatedUser();
 
+  const fiscalEntityIdRaw = String(formData.get("fiscal_entity_id") ?? "").trim();
+  let fiscalEntityId = isUuid(fiscalEntityIdRaw) ? fiscalEntityIdRaw : null;
+
+  if (!fiscalEntityId) {
+    const fiscalEntity = await resolveFiscalEntityId(organizationId, user.id);
+
+    if (!fiscalEntity.id) {
+      return { error: fiscalEntity.error ?? "No hay entidad fiscal activa para registrar la compra." };
+    }
+
+    fiscalEntityId = fiscalEntity.id;
+  }
+
   const supplierIdRaw = String(formData.get("supplier_id") ?? "").trim();
-  const supplierId = isUuid(supplierIdRaw) ? supplierIdRaw : null;
+  let supplierId = isUuid(supplierIdRaw) ? supplierIdRaw : null;
+  const supplierName = String(formData.get("supplier_name") ?? "").trim();
+
+  if (!supplierId && supplierName) {
+    const supplierResult = await resolvePurchaseSupplierId(supabase, organizationId, supplierName, user.id);
+
+    if (supplierResult.error) {
+      return { error: supplierResult.error };
+    }
+
+    supplierId = supplierResult.id;
+  }
 
   const invoiceNumber = String(formData.get("invoice_number") ?? "").trim() || null;
   const issueDateRaw = String(formData.get("issue_date") ?? "").trim();
@@ -72,7 +95,7 @@ export async function createPurchaseInvoice(formData: FormData): Promise<{ error
   const totalAmount = Number.isFinite(totalAmountRaw) ? totalAmountRaw : 0;
   const notes = String(formData.get("notes") ?? "").trim() || null;
 
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("purchase_invoices")
     .insert({
       organization_id: organizationId,
@@ -85,14 +108,52 @@ export async function createPurchaseInvoice(formData: FormData): Promise<{ error
       notes,
       status: "open",
       created_by: user.id
-    });
+    })
+    .select("id")
+    .single();
 
-  if (error) {
-    return { error: error.message };
+  if (error || !data) {
+    return { error: error?.message ?? "No se pudo crear la factura de compra." };
   }
 
   revalidatePath("/dashboard");
-  return {};
+  return { invoice: { id: data.id as string } };
+}
+
+async function resolvePurchaseSupplierId(
+  supabase: Awaited<ReturnType<typeof createSupabaseClient>>,
+  organizationId: string,
+  supplierName: string,
+  userId: string
+): Promise<{ error?: string; id: string | null }> {
+  const { data: existing } = await supabase
+    .from("suppliers")
+    .select("id")
+    .eq("organization_id", organizationId)
+    .ilike("name", supplierName)
+    .is("deleted_at", null)
+    .limit(1)
+    .maybeSingle();
+
+  if (typeof existing?.id === "string") {
+    return { id: existing.id };
+  }
+
+  const { data: created, error } = await supabase
+    .from("suppliers")
+    .insert({
+      organization_id: organizationId,
+      name: supplierName,
+      created_by: userId
+    })
+    .select("id")
+    .single();
+
+  if (error || !created) {
+    return { error: error?.message ?? "No se pudo crear el proveedor.", id: null };
+  }
+
+  return { id: created.id as string };
 }
 
 export async function createContactClient(formData: FormData): Promise<{
