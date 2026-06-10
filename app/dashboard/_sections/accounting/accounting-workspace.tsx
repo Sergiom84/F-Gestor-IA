@@ -820,7 +820,9 @@ function MatchingWorkspace({
         </label>
         <div className="matching-subject-list">
           {filteredGroups.length === 0 ? (
-            <p style={{ padding: "1rem", opacity: 0.6 }}>Sin apuntes sin marcar.</p>
+            <p className="matching-empty-hint">
+              {query ? "Sin resultados." : "Sin apuntes sin marcar. Crea asientos para que aparezcan aquí."}
+            </p>
           ) : (
             filteredGroups.map((g) => (
               <button
@@ -829,11 +831,11 @@ function MatchingWorkspace({
                 onClick={() => { setSelectedAccount(g.code); setSelectedIds(new Set()); }}
                 type="button"
               >
-                <span>
+                <div>
                   <strong>{g.code}</strong>
-                  <small>{g.lines.length}</small>
-                  <small>{formatMoney(g.balance)}</small>
-                </span>
+                  <small>{g.lines.length} apunte{g.lines.length !== 1 ? "s" : ""}</small>
+                </div>
+                <em>{formatMoney(g.balance)}</em>
               </button>
             ))
           )}
@@ -842,12 +844,12 @@ function MatchingWorkspace({
       </aside>
 
       <section className="matching-main-pane">
-        <h1>{activeGroup?.code ?? "—"}</h1>
+        {activeGroup && <h1>{activeGroup.code}</h1>}
 
         <section className="matching-table-shell" aria-label="Apuntes para marcar">
           <AccountingTable
-            columns={["", "Diario", "Fecha", "Num.", "Doc.", "Tercero", "Descripcion", "Debe", "Haber"]}
-            minWidth={1100}
+            columns={["", "Diario", "Fecha", "Núm.", "Doc.", "Tercero", "Descripción", "Debe", "Haber"]}
+            minWidth={800}
           >
             {activeLines.length === 0 ? (
               <tr>
