@@ -1196,11 +1196,11 @@
 
 .quotes-shell .pdf-invoice-page {
   gap: 0;
-  padding: clamp(18px, 8.3cqw, 18mm);
+  padding: clamp(14px, 5.6cqw, 12mm);
   background: #fff;
   color: #050505;
   font-family: Arial, Helvetica, sans-serif;
-  font-size: clamp(0.45rem, 1.25cqw, 0.82rem);
+  font-size: clamp(0.45rem, 1.08cqw, 0.76rem);
   box-shadow: 0 26px 70px rgba(34, 27, 20, 0.18);
 }
 
@@ -1208,8 +1208,8 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr) 46%;
   align-items: start;
-  gap: 8mm;
-  margin: 8mm 0 10mm;
+  gap: 6mm;
+  margin: 3mm 0 6mm;
 }
 
 .quotes-shell .pdf-issuer {
@@ -1254,7 +1254,7 @@
 .quotes-shell .pdf-description-table {
   display: grid;
   border: 2px solid #070707;
-  min-height: 28mm;
+  min-height: 22mm;
 }
 
 .quotes-shell .pdf-description-table h2,
@@ -1272,17 +1272,18 @@
 
 .quotes-shell .pdf-description-body {
   display: grid;
-  min-height: 22mm;
-  padding-top: 3mm;
-  padding-bottom: 3mm;
+  row-gap: 0.6mm;
+  min-height: 16mm;
+  padding-top: 1.8mm;
+  padding-bottom: 2.6mm;
 }
 
 .quotes-shell .pdf-description-line {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 13.5%;
   align-items: start;
-  font-size: 1.22em;
-  line-height: 1.15;
+  font-size: 1.12em;
+  line-height: 1.12;
 }
 
 .quotes-shell .pdf-description-line > div {
@@ -1306,7 +1307,7 @@
 .quotes-shell .pdf-invoice-total-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 14%;
-  margin-top: 7mm;
+  margin-top: 5mm;
   border: 2px solid #070707;
   font-size: 1.12em;
 }
@@ -1321,7 +1322,7 @@
 
 .quotes-shell .pdf-taxes-section {
   display: grid;
-  margin-top: 5mm;
+  margin-top: 4mm;
 }
 
 .quotes-shell .pdf-taxes-section h2 {
@@ -1345,7 +1346,7 @@
 }
 
 .quotes-shell .pdf-tax-head {
-  min-height: 3.2em;
+  min-height: 2.45em;
   align-content: center;
   font-size: 1.12em;
   font-weight: 900;
@@ -1376,7 +1377,7 @@
   grid-template-columns: 40% 60%;
   justify-self: end;
   width: 30%;
-  margin-top: 2mm;
+  margin-top: 1.4mm;
   border: 2px solid #070707;
   font-size: 1.06em;
 }
@@ -1393,16 +1394,16 @@
 
 .quotes-shell .pdf-invoice-footer {
   display: grid;
-  gap: 3mm;
-  margin-top: 12mm;
+  gap: 1.8mm;
+  margin-top: 6mm;
 }
 
 .quotes-shell .pdf-client-block {
   display: grid;
-  gap: 0.35em;
+  gap: 0.2em;
   width: 45%;
   font-size: 1.05em;
-  line-height: 1.35;
+  line-height: 1.2;
 }
 
 .quotes-shell .pdf-client-block strong {
@@ -1415,7 +1416,7 @@
 }
 
 .quotes-shell .pdf-payment-heading {
-  margin-top: 2mm;
+  margin-top: 1mm;
   font-size: 1.02em;
   font-weight: 900;
 }
@@ -1428,7 +1429,7 @@
 }
 
 .quotes-shell .pdf-payment-table div {
-  min-height: 1.45em;
+  min-height: 1.28em;
   border-bottom: 2px solid #070707;
   padding: 0.1em 0.32em;
 }
@@ -1529,6 +1530,10 @@
     color-adjust: exact;
     print-color-adjust: exact;
     -webkit-print-color-adjust: exact;
+  }
+.quotes-shell .quote-page.pdf-invoice-page {
+    padding: 12mm;
+    font-size: 0.86rem;
   }
 .quotes-shell .quote-footer,
 .quotes-shell .quote-notes,

@@ -24,6 +24,7 @@ export function ModuleWorkspace({
   memberCount?: number;
 }) {
   const [activeAction, setActiveAction] = useState<string | null>(null);
+  const [actionNotice, setActionNotice] = useState<string | null>(null);
   const definition = moduleCatalog[module];
   const stats = applyModuleLiveValues(module, definition.stats, {
     clientCount,
@@ -36,6 +37,12 @@ export function ModuleWorkspace({
 
   const handleAction = (action: string) => {
     setActiveAction((current) => (current === action ? null : action));
+    setActionNotice(null);
+  };
+
+  const completeAction = (message: string) => {
+    setActionNotice(message);
+    setActiveAction(null);
   };
 
   return (
@@ -65,7 +72,17 @@ export function ModuleWorkspace({
           action={activeAction}
           module={module}
           onClose={() => setActiveAction(null)}
+          onComplete={completeAction}
         />
+      ) : null}
+
+      {actionNotice ? (
+        <div className="sales-live-notice success module-action-notice" role="status">
+          <span>{actionNotice}</span>
+          <button onClick={() => setActionNotice(null)} type="button" aria-label="Cerrar aviso">
+            <X aria-hidden="true" size={16} />
+          </button>
+        </div>
       ) : null}
 
       <div className="module-stats-grid">
@@ -146,11 +163,13 @@ export function ModuleWorkspace({
 function ActionPanel({
   action,
   module,
-  onClose
+  onClose,
+  onComplete
 }: {
   action: string;
   module: AppModule;
   onClose: () => void;
+  onComplete: (message: string) => void;
 }) {
   const isImport = action.toLowerCase().includes("importar") || action.toLowerCase().includes("subir") || action.toLowerCase().includes("ejecutar");
   const isCreate = action.toLowerCase().includes("crear") || action.toLowerCase().includes("anadir");
@@ -165,17 +184,17 @@ function ActionPanel({
       </div>
 
       {isImport ? (
-        <ImportActionBody action={action} onClose={onClose} />
+        <ImportActionBody action={action} onClose={onClose} onComplete={onComplete} />
       ) : isCreate ? (
-        <CreateActionBody action={action} module={module} onClose={onClose} />
+        <CreateActionBody action={action} module={module} onClose={onClose} onComplete={onComplete} />
       ) : (
-        <ComingSoonBody action={action} />
+        <ComingSoonBody action={action} module={module} onComplete={onComplete} />
       )}
     </div>
   );
 }
 
-function ImportActionBody({ action, onClose }: { action: string; onClose: () => void }) {
+function ImportActionBody({ action, onClose, onComplete }: { action: string; onClose: () => void; onComplete: (message: string) => void }) {
   const [files, setFiles] = useState<string[]>([]);
 
   const registerFiles = (fileList: FileList | null) => {
@@ -210,7 +229,12 @@ function ImportActionBody({ action, onClose }: { action: string; onClose: () => 
       ) : null}
       <div className="module-action-footer">
         <button className="quote-cancel-action" onClick={onClose} type="button">Cancelar</button>
-        <button className="sage-primary-button" disabled={files.length === 0} type="button">
+        <button
+          className="sage-primary-button"
+          disabled={files.length === 0}
+          onClick={() => onComplete(`${action}: ${files.length} fichero(s) preparado(s) para procesar.`)}
+          type="button"
+        >
           Importar
         </button>
       </div>
@@ -218,7 +242,7 @@ function ImportActionBody({ action, onClose }: { action: string; onClose: () => 
   );
 }
 
-function CreateActionBody({ action, module, onClose }: { action: string; module: AppModule; onClose: () => void }) {
+function CreateActionBody({ action, module, onClose, onComplete }: { action: string; module: AppModule; onClose: () => void; onComplete: (message: string) => void }) {
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
   const canCreate = name.trim().length > 0;
@@ -246,19 +270,35 @@ function CreateActionBody({ action, module, onClose }: { action: string; module:
       </div>
       <div className="module-action-footer">
         <button className="quote-cancel-action" onClick={onClose} type="button">Cancelar</button>
-        <button className="sage-primary-button" disabled={!canCreate} type="button">Crear</button>
+        <button
+          className="sage-primary-button"
+          disabled={!canCreate}
+          onClick={() => onComplete(`${action}: ${name.trim()} queda preparado en la vista local.`)}
+          type="button"
+        >
+          Crear
+        </button>
       </div>
     </div>
   );
 }
 
-function ComingSoonBody({ action }: { action: string }) {
+function ComingSoonBody({ action, module, onComplete }: { action: string; module: AppModule; onComplete: (message: string) => void }) {
+  const isBanks = module === "banks";
+
   return (
     <div className="module-action-body module-coming-soon">
       <p>
-        <strong>{action}</strong> estara disponible cuando esta seccion se conecte al modelo real de datos.
+        <strong>{action}</strong> {isBanks ? "abre un flujo preparado para la conexion bancaria real." : "estara disponible cuando esta seccion se conecte al modelo real de datos."}
       </p>
       <p className="module-coming-soon-sub">Esta superficie tiene la estructura y logica visual preparada.</p>
+      {isBanks ? (
+        <div className="module-action-footer">
+          <button className="sage-primary-button" onClick={() => onComplete(`${action}: revision registrada en la vista local.`)} type="button">
+            Registrar revision
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }
