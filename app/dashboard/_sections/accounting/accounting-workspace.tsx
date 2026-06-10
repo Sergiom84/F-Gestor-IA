@@ -628,8 +628,8 @@ function EntryForm({
           </button>
         </div>
         <AccountingTable
-          columns={["Cuenta", "Descripcion cuenta", "Tercero", "Descripcion", "Debe", "Haber", ""]}
-          minWidth={960}
+          columns={["Cuenta", "Desc. cuenta", "Tercero", "Descripcion", "Debe", "Haber", ""]}
+          minWidth={640}
         >
           {lines.map((line) => (
             <tr key={line.key}>
