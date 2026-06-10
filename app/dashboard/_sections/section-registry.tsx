@@ -65,23 +65,7 @@ export function DashboardSection({ data }: { data: DashboardData }) {
 function DashboardHomeSection({ data }: { data: DashboardData }) {
   if (data.activeTab === "accounting") {
     return (
-      <AccountingDashboard
-        activeOrganization={data.activeOrganization}
-        activeMembership={data.activeMembership}
-        documents={data.documents}
-        reviewTasks={data.reviewTasks}
-        fiscalEntities={data.fiscalEntities}
-        documentCount={data.documentCount}
-        needsReviewCount={data.needsReviewCount}
-        ocrRequiredCount={data.ocrRequiredCount}
-        clientCount={data.clientCount}
-        fiscalEntityCount={data.fiscalEntityCount}
-        cleanDocumentCount={data.cleanDocumentCount}
-        automationRate={data.automationRate}
-        reviewRate={data.reviewRate}
-        uploadCoverage={data.uploadCoverage}
-        aiBudget={data.aiBudget}
-      />
+      <AccountingDashboard organizationId={data.activeOrganization.id} />
     );
   }
 

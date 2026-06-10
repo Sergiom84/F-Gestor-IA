@@ -1,13 +1,6 @@
-import type {
-  Organization,
-  OrganizationMember
-} from "../../_lib/types";
-import {
-  BarChart3,
-  LineChart
-} from "lucide-react";
 import type { ReactNode } from "react";
-import { artificialAccountingValues } from "../../_data/artificial-business-data";
+import { BarChart3, LineChart } from "lucide-react";
+import { readAccountingDashboardData } from "../../_data/accounting-dashboard-data";
 import { formatMoney } from "../../_lib/formatters";
 
 type AccountingDashboardMetric = {
@@ -15,68 +8,60 @@ type AccountingDashboardMetric = {
   value: number;
 };
 
-const accountingValues = artificialAccountingValues;
+function ratio(numerator: number, denominator: number): string {
+  if (denominator === 0) return "—";
+  return `${((numerator / denominator) * 100).toFixed(1)}%`;
+}
 
-const additionalIndicators = [
-  {
-    title: "Saldo de tesorería",
-    value: accountingValues.treasury,
-    description: "Saldo de cuentas bancarias y efectivo (ejercicio en curso hasta la fecha)"
-  },
-  {
-    title: "Capital circulante",
-    value: accountingValues.workingCapital,
-    description: "Suma de activo corriente, existencias y trabajos en curso menos deudas no financieras e ingresos diferidos"
-  },
-  {
-    title: "Gastos de personal",
-    value: accountingValues.staffCosts,
-    description: "Gastos de personal (ejercicio en curso hasta la fecha)"
-  }
-];
-
-export function AccountingDashboard({
-  activeOrganization
+export async function AccountingDashboard({
+  organizationId
 }: {
-  activeOrganization: Organization;
-  activeMembership: OrganizationMember | null | undefined;
-  documents: unknown[];
-  reviewTasks: unknown[];
-  fiscalEntities: unknown[];
-  documentCount: number;
-  needsReviewCount: number;
-  ocrRequiredCount: number;
-  clientCount: number;
-  fiscalEntityCount: number;
-  cleanDocumentCount: number;
-  automationRate: number;
-  reviewRate: number;
-  uploadCoverage: number;
-  aiBudget: string;
+  organizationId: string;
 }) {
+  const d = await readAccountingDashboardData(organizationId);
+
+  const additionalIndicators = [
+    {
+      title: "Saldo de tesorería",
+      value: d.treasury,
+      description: "Saldo de cuentas bancarias y efectivo (ejercicio en curso hasta la fecha)"
+    },
+    {
+      title: "Capital circulante",
+      value: d.workingCapital,
+      description:
+        "Suma de activo corriente, existencias y trabajos en curso menos deudas no financieras e ingresos diferidos"
+    },
+    {
+      title: "Gastos de personal",
+      value: d.staffCosts,
+      description: "Gastos de personal (ejercicio en curso hasta la fecha)"
+    }
+  ];
+
   return (
-    <section className="accounting-dashboard-view" aria-label={`Cuadro de mando contable de ${activeOrganization.name}`}>
+    <section className="accounting-dashboard-view">
       <DashboardSection title="Indicadores de pérdidas y ganancias">
         <div className="accounting-profit-grid">
           <AccountingWideCard
             icon={<BarChart3 aria-hidden="true" size={28} strokeWidth={3} />}
             title="Beneficio bruto"
             description="Ventas menos compras (ejercicio en curso hasta la fecha)"
-            value={accountingValues.grossProfit}
+            value={d.grossProfit}
             metrics={[
-              { label: "Ventas", value: accountingValues.sales },
-              { label: "Compras", value: accountingValues.purchases }
+              { label: "Ventas", value: d.sales },
+              { label: "Compras", value: d.purchases }
             ]}
           />
           <AccountingWideCard
             icon={<LineChart aria-hidden="true" size={28} strokeWidth={3} />}
             title="Resultado antes de impuestos sobre beneficios"
             description="Suma de resultado de explotación, resultado financiero y resultados excepcionales antes de impuestos sobre beneficios (ejercicio en curso hasta la fecha)"
-            value={accountingValues.profitBeforeTax}
+            value={d.profitBeforeTax}
             metrics={[
-              { label: "Resultado de explotación", value: accountingValues.operatingResult },
-              { label: "Resultado financiero", value: accountingValues.financialResult },
-              { label: "Resultados excepcionales", value: accountingValues.exceptionalResult }
+              { label: "Resultado de explotación", value: d.operatingResult },
+              { label: "Resultado financiero", value: d.financialResult },
+              { label: "Resultados excepcionales", value: d.exceptionalResult }
             ]}
           />
         </div>
@@ -87,28 +72,28 @@ export function AccountingDashboard({
           <AccountingRatioCard
             title="Rendimiento sobre ventas"
             description="Resultado de explotación dividido entre ventas por 100 (ejercicio en curso hasta la fecha)"
-            ratio="0%"
+            ratio={ratio(d.operatingResult, d.sales)}
             metrics={[
-              { label: "Resultado de explotación", value: accountingValues.operatingResult },
-              { label: "Ventas", value: accountingValues.sales }
+              { label: "Resultado de explotación", value: d.operatingResult },
+              { label: "Ventas", value: d.sales }
             ]}
           />
           <AccountingRatioCard
             title="Rendimiento sobre activos"
             description="Resultado de explotación dividido entre activos por 100 (ejercicio en curso hasta la fecha)"
-            ratio="0%"
+            ratio={ratio(d.operatingResult, d.assets)}
             metrics={[
-              { label: "Resultado de explotación", value: accountingValues.operatingResult },
-              { label: "Activos", value: accountingValues.assets }
+              { label: "Resultado de explotación", value: d.operatingResult },
+              { label: "Activos", value: d.assets }
             ]}
           />
           <AccountingRatioCard
             title="Rendimiento sobre patrimonio neto"
             description="Resultado neto dividido entre patrimonio neto por 100 (ejercicio en curso hasta la fecha)"
-            ratio="0%"
+            ratio={ratio(d.profitBeforeTax, d.netWorth)}
             metrics={[
-              { label: "Resultado neto", value: accountingValues.profitBeforeTax },
-              { label: "Patrimonio neto", value: accountingValues.netWorth }
+              { label: "Resultado neto", value: d.profitBeforeTax },
+              { label: "Patrimonio neto", value: d.netWorth }
             ]}
           />
         </div>
@@ -131,9 +116,21 @@ export function AccountingDashboard({
         <aside className="accounting-quick-panel" aria-label="Accesos rápidos">
           <h2>Accesos rápidos</h2>
           <div className="accounting-quick-card">
-            <a href={`/dashboard?org=${activeOrganization.id}&module=accounting`}>Crear asientos</a>
-            <a href={`/dashboard?org=${activeOrganization.id}&module=accounting`}>Marcar apuntes</a>
-            <a href={`/dashboard?org=${activeOrganization.id}&module=accounting`}>Consultar libro mayor</a>
+            <a
+              href={`/dashboard?org=${organizationId}&module=accounting&section=entries`}
+            >
+              Crear asientos
+            </a>
+            <a
+              href={`/dashboard?org=${organizationId}&module=accounting&section=matching`}
+            >
+              Marcar apuntes
+            </a>
+            <a
+              href={`/dashboard?org=${organizationId}&module=accounting&section=entries`}
+            >
+              Consultar libro mayor
+            </a>
           </div>
         </aside>
       </section>
@@ -187,7 +184,7 @@ function AccountingWideCard({
 function AccountingRatioCard({
   description,
   metrics,
-  ratio,
+  ratio: ratioValue,
   title
 }: {
   description: string;
@@ -199,7 +196,7 @@ function AccountingRatioCard({
     <article className="accounting-ratio-card">
       <h3>{title}</h3>
       <p>{description}</p>
-      <strong className="accounting-ratio-value">{ratio}</strong>
+      <strong className="accounting-ratio-value">{ratioValue}</strong>
       <MetricRow metrics={metrics} />
     </article>
   );
