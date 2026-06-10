@@ -225,13 +225,20 @@ begin
   end if;
 
   insert into public.accounting_journals (organization_id, code, name)
-  values
-    (target_organization_id, 'GEN', 'Operaciones generales'),
-    (target_organization_id, 'VEN', 'Facturas emitidas'),
-    (target_organization_id, 'COM', 'Facturas recibidas'),
-    (target_organization_id, 'BAN', 'Banco'),
-    (target_organization_id, 'CAJ', 'Caja')
-  on conflict (organization_id, upper(code)) do nothing;
+  select target_organization_id, j.code, j.name
+  from (values
+    ('GEN', 'Operaciones generales'),
+    ('VEN', 'Facturas emitidas'),
+    ('COM', 'Facturas recibidas'),
+    ('BAN', 'Banco'),
+    ('CAJ', 'Caja')
+  ) as j(code, name)
+  where not exists (
+    select 1 from public.accounting_journals aj
+    where aj.organization_id = target_organization_id
+      and upper(aj.code) = upper(j.code)
+      and aj.deleted_at is null
+  );
 end;
 $$;
 
