@@ -45,7 +45,7 @@ export function SalesDashboard({
   const overduePayment = overduePaymentProp ?? artificialSalesDashboardTotals.overduePayment;
   const purchaseInvoicesTotal = purchaseInvoicesTotalProp ?? artificialSalesDashboardTotals.purchaseInvoicesTotal;
   const convertedQuotes = artificialSalesDocuments.quotes.filter((q) => q.status === "Cerrado").length;
-  const activeClients = clientCount > 0 ? clientCount : 45;
+  const activeClients = clientCount;
 
   return (
     <div className="sales-dashboard-view">

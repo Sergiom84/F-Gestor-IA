@@ -20,10 +20,7 @@ import {
 import type { ReactNode } from "react";
 import { useTransition, useMemo, useRef, useState } from "react";
 import { markPurchaseInvoicePaid, softDeletePurchaseInvoice } from "../../commercial-actions";
-import {
-  artificialPurchaseRows,
-  artificialPurchaseTabs
-} from "../../_data/artificial-business-data";
+import { artificialPurchaseRows } from "../../_data/artificial-business-data";
 import type {
   ArtificialPurchaseInvoiceRow,
   ArtificialPurchaseTabId
@@ -42,7 +39,12 @@ type PurchaseInvoiceFormValues = {
   total: string;
 };
 
-const purchaseTabs = artificialPurchaseTabs;
+const purchaseTabs: Array<{ id: PurchaseTabId; label: string }> = [
+  { id: "all", label: "Todas" },
+  { id: "review", label: "Por revisar" },
+  { id: "pay", label: "Por pagar" },
+  { id: "paid", label: "Pagadas" }
+];
 
 type PurchasesWorkspaceProps = {
   organizationName: string;
@@ -315,19 +317,23 @@ export function PurchasesWorkspace({ organizationName, initialInvoices }: Purcha
       ) : null}
 
       <div className="purchase-tabs" role="tablist" aria-label="Estado de facturas de compra">
-        {purchaseTabs.map((tab) => (
-          <button
-            aria-selected={activeTab === tab.id}
-            className={`purchase-tab${activeTab === tab.id ? " active" : ""}`}
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            role="tab"
-            type="button"
-          >
-            {tab.label}
-            {tab.count ? <span>{tab.count}</span> : null}
-          </button>
-        ))}
+        {purchaseTabs.map((tab) => {
+          const tabCount = tab.id === "all" ? 0 : invoices.filter((row) => row.tab === tab.id).length;
+
+          return (
+            <button
+              aria-selected={activeTab === tab.id}
+              className={`purchase-tab${activeTab === tab.id ? " active" : ""}`}
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              role="tab"
+              type="button"
+            >
+              {tab.label}
+              {tabCount > 0 ? <span>{tabCount}</span> : null}
+            </button>
+          );
+        })}
       </div>
 
       <section className="purchase-table-panel" aria-label="Listado de facturas de compra">

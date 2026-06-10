@@ -44,13 +44,6 @@ export type ArtificialPurchaseInvoiceRow = {
   tab: Exclude<ArtificialPurchaseTabId, "all">;
 };
 
-export const artificialPurchaseTabs: Array<{ id: ArtificialPurchaseTabId; label: string; count?: number }> = [
-  { id: "all", label: "Todas" },
-  { id: "review", label: "Por revisar", count: 1 },
-  { id: "pay", label: "Por pagar", count: 4 },
-  { id: "paid", label: "Pagadas" }
-];
-
 export const artificialPurchaseRows: ArtificialPurchaseInvoiceRow[] = [];
 
 export type ArtificialContactListItem = {
@@ -76,11 +69,11 @@ export const artificialEmployeeRows: ArtificialContactListItem[] = [];
 export const artificialSalesDashboardRows: SalesInvoiceRow[] = [];
 
 export const artificialSalesDashboardTotals = {
-  pendingCollection: 46004.88,
-  pendingPayment: 6455.46,
-  purchaseInvoicesTotal: 6134.97,
-  overdueCollection: 18698.81,
-  overduePayment: 80
+  pendingCollection: 0,
+  pendingPayment: 0,
+  purchaseInvoicesTotal: 0,
+  overdueCollection: 0,
+  overduePayment: 0
 };
 
 export const artificialAccountingValues = {

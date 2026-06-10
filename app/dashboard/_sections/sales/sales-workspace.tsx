@@ -72,10 +72,8 @@ type SalesSection = {
     description: string;
     tone: "teal" | "indigo" | "green";
     type: "count" | "amount";
-    fallbackValue?: number;
   }>;
   tableDescription: string;
-  fallbackItemCount?: number;
 };
 
 type SalesDocumentRow = {
@@ -233,12 +231,11 @@ const salesSections: SalesSection[] = [
       ]
     },
     metrics: [
-      { label: "Facturas de venta", description: "", tone: "teal", type: "count", fallbackValue: 13 },
-      { label: "Presupuestos", description: "", tone: "indigo", type: "count", fallbackValue: 4 },
-      { label: "Cobros", description: "", tone: "green", type: "amount", fallbackValue: 46004.88 }
+      { label: "Facturas de venta", description: "", tone: "teal", type: "count" },
+      { label: "Presupuestos", description: "", tone: "indigo", type: "count" },
+      { label: "Cobros", description: "", tone: "green", type: "amount" }
     ],
-    tableDescription: "",
-    fallbackItemCount: 13
+    tableDescription: ""
   },
   {
     id: "recurring-invoices",
@@ -277,42 +274,9 @@ const salesSections: SalesSection[] = [
   }
 ];
 
-const fallbackSalesDocuments: Record<SalesSectionId, SalesDocumentRow[]> = {
-  quotes: [
-    { id: "quote-0013", status: "Pendiente", date: "30/05/2026", number: "0013", reference: "REF-013", clientCode: "47", client: "INTERVENCIONES ORIENTADAS SL", total: 18856.11 },
-    { id: "quote-0012", status: "Pendiente", date: "25/05/2026", number: "0012", reference: "REF-012", clientCode: "24", client: "SANSANO OIL SERVICE SL", total: 1294.70 },
-    { id: "quote-0011", status: "Borrador", date: "25/05/2026", number: "0011", reference: "REF-011", clientCode: "26", client: "FENIX DISTRIBUCIONES SL", total: -1452.00 }
-  ],
-  orders: [
-    { id: "order-0021", status: "Confirmado", date: "31/05/2026", number: "0021", reference: "PED-021", clientCode: "47", client: "INTERVENCIONES ORIENTADAS SL", total: 7450.00 },
-    { id: "order-0020", status: "Preparacion", date: "28/05/2026", number: "0020", reference: "PED-020", clientCode: "18", client: "TALLERES NORTE SL", total: 2380.40 },
-    { id: "order-0019", status: "Pendiente", date: "24/05/2026", number: "0019", reference: "PED-019", clientCode: "33", client: "GRUPO ALMAZARA SL", total: 980.00 }
-  ],
-  "delivery-notes": [
-    { id: "delivery-009", status: "Entregado", date: "30/05/2026", number: "0009", reference: "ALB-009", clientCode: "47", client: "INTERVENCIONES ORIENTADAS SL", total: 4210.25 },
-    { id: "delivery-008", status: "Pendiente", date: "27/05/2026", number: "0008", reference: "ALB-008", clientCode: "24", client: "SANSANO OIL SERVICE SL", total: 1680.90 },
-    { id: "delivery-007", status: "Facturable", date: "21/05/2026", number: "0007", reference: "ALB-007", clientCode: "26", client: "FENIX DISTRIBUCIONES SL", total: 950.00 }
-  ],
-  invoices: [
-    { id: "invoice-0013", status: "Vencida", date: "30/05/2026", number: "0013", reference: "FAC-013", clientCode: "47", client: "INTERVENCIONES ORIENTADAS SL", total: 18856.11 },
-    { id: "invoice-0012", status: "Vencida", date: "25/05/2026", number: "0012", reference: "FAC-012", clientCode: "24", client: "SANSANO OIL SERVICE SL", total: 1294.70 },
-    { id: "invoice-0011", status: "Vencida", date: "25/05/2026", number: "0011", reference: "FAC-011", clientCode: "26", client: "FENIX DISTRIBUCIONES SL", total: -1452.00 }
-  ],
-  "recurring-invoices": [
-    { id: "recurring-006", status: "Activa", date: "01/06/2026", number: "R-0006", reference: "REC-006", clientCode: "47", client: "INTERVENCIONES ORIENTADAS SL", total: 1200.00 },
-    { id: "recurring-005", status: "Activa", date: "05/06/2026", number: "R-0005", reference: "REC-005", clientCode: "24", client: "SANSANO OIL SERVICE SL", total: 850.00 },
-    { id: "recurring-004", status: "Pausada", date: "10/06/2026", number: "R-0004", reference: "REC-004", clientCode: "26", client: "FENIX DISTRIBUCIONES SL", total: 640.00 }
-  ]
-};
-
-function normalizeSalesDocuments(initialDocuments?: Record<SalesSectionId, SalesDocumentRow[]>): Record<SalesSectionId, SalesDocumentRow[]> {
-  const source = initialDocuments ?? artificialSalesDocuments;
-  const hasRows = Object.values(source).some((rows) => rows.length > 0);
-
-  return hasRows ? source : fallbackSalesDocuments;
-}
-
 const salesSectionIds = new Set<SalesSectionId>(salesSections.map((section) => section.id));
+
+const creatableSectionIds = new Set<SalesSectionId>(["quotes", "invoices"]);
 
 function resolveSalesSectionId(value: string | null): SalesSectionId | null {
   return value && salesSectionIds.has(value as SalesSectionId) ? value as SalesSectionId : null;
@@ -330,8 +294,7 @@ export function SalesWorkspace({ clients, fiscalEntities, organizationId, organi
   const searchParams = useSearchParams();
   const sectionFromUrl = resolveSalesSectionId(searchParams.get("salesSection"));
   const [activeSectionId, setActiveSectionId] = useState<SalesSectionId>(sectionFromUrl ?? "invoices");
-  const isFallbackData = !Object.values(initialDocuments ?? artificialSalesDocuments).some((rows) => rows.length > 0);
-  const [documentsBySection, setDocumentsBySection] = useState<Record<SalesSectionId, SalesDocumentRow[]>>(() => normalizeSalesDocuments(initialDocuments));
+  const [documentsBySection, setDocumentsBySection] = useState<Record<SalesSectionId, SalesDocumentRow[]>>(() => initialDocuments ?? artificialSalesDocuments);
   const [isCreating, setIsCreating] = useState(false);
   const [query, setQuery] = useState("");
   const [showFilters, setShowFilters] = useState(false);
@@ -448,7 +411,6 @@ export function SalesWorkspace({ clients, fiscalEntities, organizationId, organi
           <DocumentList
             activeSection={activeSection}
             activeSectionId={activeSectionId}
-            isFallbackData={isFallbackData}
             organizationName={organizationName}
             rows={rows}
             sections={salesSections}
@@ -460,7 +422,14 @@ export function SalesWorkspace({ clients, fiscalEntities, organizationId, organi
             notice={notice}
             onHeroAction={(kind) => {
               if (kind === "create") {
-                setIsCreating(true);
+                if (creatableSectionIds.has(activeSectionId)) {
+                  setIsCreating(true);
+                } else {
+                  setNotice({
+                    tone: "warning",
+                    text: `La creacion de ${activeSection.label.toLowerCase()} aun no esta conectada al modelo real. Disponible proximamente.`
+                  });
+                }
                 return;
               }
 
@@ -491,7 +460,6 @@ export function SalesWorkspace({ clients, fiscalEntities, organizationId, organi
 function DocumentList({
   activeSection,
   activeSectionId,
-  isFallbackData,
   activeSettingsPanel,
   notice,
   organizationName,
@@ -515,7 +483,6 @@ function DocumentList({
 }: {
   activeSection: SalesSection;
   activeSectionId: SalesSectionId;
-  isFallbackData: boolean;
   activeSettingsPanel: SalesSettingsPanelId | null;
   notice: SalesNotice | null;
   organizationName: string;
@@ -611,7 +578,7 @@ function DocumentList({
       ) : null}
 
       <SalesHero activeSection={activeSection} onAction={onHeroAction} />
-      <SalesMetricGrid activeSection={activeSection} isFallbackData={isFallbackData} rows={rows} totalAmount={totalAmount} />
+      <SalesMetricGrid activeSection={activeSection} rows={rows} totalAmount={totalAmount} />
 
       <div className="sales-list-toolbar">
         <span aria-hidden="true" />
@@ -723,7 +690,7 @@ function DocumentList({
             </tbody>
             <tfoot>
               <tr>
-                <td colSpan={7}>Elementos: {isFallbackData && activeSection.fallbackItemCount ? activeSection.fallbackItemCount : rows.length}</td>
+                <td colSpan={7}>Elementos: {rows.length}</td>
               </tr>
             </tfoot>
           </table>
@@ -786,12 +753,10 @@ function SalesHero({
 
 function SalesMetricGrid({
   activeSection,
-  isFallbackData,
   rows,
   totalAmount
 }: {
   activeSection: SalesSection;
-  isFallbackData: boolean;
   rows: SalesDocumentRow[];
   totalAmount: number;
 }) {
@@ -799,9 +764,7 @@ function SalesMetricGrid({
   const pendingCount = rows.filter((row) => /pendiente|vencida|preparacion|borrador|facturable/i.test(row.status)).length;
   const values = activeSection.metrics.map((metric, index) => ({
     ...metric,
-    value: metric.type === "amount"
-      ? formatMoney(isFallbackData && metric.fallbackValue !== undefined ? metric.fallbackValue : totalAmount)
-      : String(isFallbackData && metric.fallbackValue !== undefined ? metric.fallbackValue : index === 1 ? pendingCount : count)
+    value: metric.type === "amount" ? formatMoney(totalAmount) : String(index === 1 ? pendingCount : count)
   }));
 
   return (
