@@ -786,7 +786,7 @@ export function QuotesWorkspace({ initialData }: { initialData: QuotesInitialDat
   );
   const [hasDetectedData, setHasDetectedData] = useState(initialQuoteState.hadStoredQuotes);
   const [configDialogOpen, setConfigDialogOpen] = useState(
-    () => (initialData.config === null && !hasStoredAppConfig()) || !initialQuoteState.hadStoredQuotes
+    () => initialData.config === null && !hasStoredAppConfig()
   );
   const [configDraft, setConfigDraft] = useState<AppConfig>(initialConfig);
   const importFileRef = useRef<HTMLInputElement>(null);
@@ -1245,7 +1245,6 @@ export function QuotesWorkspace({ initialData }: { initialData: QuotesInitialDat
     <main className="app-shell" style={layoutStyle}>
       <aside className="history-panel no-print" aria-label="Historial de documentos">
         <div className="brand-block">
-          <h1>Documentos</h1>
           {appConfig.companyName.trim() && <p>{appConfig.companyName}</p>}
         </div>
 
@@ -1268,7 +1267,6 @@ export function QuotesWorkspace({ initialData }: { initialData: QuotesInitialDat
           <button className="history-category-card template-card" type="button" onClick={() => createNewQuote("pdfInvoice")}>
             <span>Factura editable</span>
             <strong>PDF</strong>
-            <small>Plantilla editable para facturas</small>
           </button>
         </div>
 
@@ -1279,17 +1277,14 @@ export function QuotesWorkspace({ initialData }: { initialData: QuotesInitialDat
           <button className="history-category-card" type="button" onClick={() => openHistoryDialog("quote")}>
             <span>Presupuestos</span>
             <strong>{quoteCount}</strong>
-            <small>{quoteCount === 1 ? "documento guardado" : "documentos guardados"}</small>
           </button>
           <button className="history-category-card" type="button" onClick={() => openHistoryDialog("invoice")}>
             <span>Facturas</span>
             <strong>{invoiceCount}</strong>
-            <small>{invoiceCount === 1 ? "documento guardado" : "documentos guardados"}</small>
           </button>
           <button className="history-category-card" type="button" onClick={() => openHistoryDialog("pdfInvoice")}>
             <span>Facturas PDF</span>
             <strong>{pdfInvoiceCount}</strong>
-            <small>{pdfInvoiceCount === 1 ? "documento guardado" : "documentos guardados"}</small>
           </button>
         </div>
       </aside>

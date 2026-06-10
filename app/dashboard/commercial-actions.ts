@@ -266,42 +266,86 @@ export async function createProductService(formData: FormData): Promise<{ error?
   return {};
 }
 
-export async function createSalesQuote(formData: FormData): Promise<{ error?: string }> {
+export async function createSalesQuote(formData: FormData): Promise<{ error?: string; quote?: { id: string; number: string; total: number } }> {
   const organizationId = String(formData.get("organization_id") ?? "").trim();
-  const fiscalEntityId = String(formData.get("fiscal_entity_id") ?? "").trim();
-  const clientId = String(formData.get("client_id") ?? "").trim();
 
-  if (!isUuid(organizationId) || !isUuid(fiscalEntityId) || !isUuid(clientId)) {
-    return { error: "Organización, entidad fiscal o cliente inválido." };
+  if (!isUuid(organizationId)) {
+    return { error: "Organización inválida." };
   }
 
   const { supabase, user } = await getAuthenticatedUser();
+  const fiscalEntity = await resolveFiscalEntityId(organizationId, user.id);
+
+  if (!fiscalEntity.id) {
+    return { error: fiscalEntity.error ?? "No hay entidad fiscal activa para crear el presupuesto." };
+  }
+
+  const clientResult = await resolveSalesClientId(organizationId, formData);
+
+  if (!clientResult.id) {
+    return { error: clientResult.error ?? "Selecciona o introduce un cliente." };
+  }
+
+  const lines = parseSalesInvoiceLines(formData);
+
+  if (lines.length === 0) {
+    return { error: "Añade al menos una línea de producto o servicio." };
+  }
 
   const quoteDateRaw = String(formData.get("quote_date") ?? "").trim();
-  const totalAmountRaw = Number(String(formData.get("total_amount") ?? "0").replace(",", "."));
-  const totalAmount = Number.isFinite(totalAmountRaw) ? totalAmountRaw : 0;
+  const subtotalAmount = roundMoney(lines.reduce((sum, line) => {
+    const quantity = numberOrDefault(line.quantity, 1);
+    const unitPrice = numberOrDefault(line.unitPrice, 0);
+    const discountRate = numberOrDefault(line.discount, 0);
+    const gross = quantity * unitPrice;
 
-  const { error } = await supabase
+    return sum + gross - (gross * discountRate / 100);
+  }, 0));
+  const taxAmount = roundMoney(subtotalAmount * 0.21);
+  const retentionRate = clampPercent(parseAmount(formData, "retention_rate", 0));
+  const retentionAmount = roundMoney(subtotalAmount * retentionRate / 100);
+  const suplidoAmount = Math.max(parseAmount(formData, "suplido_amount", 0), 0);
+  const totalAmount = roundMoney(subtotalAmount + taxAmount - retentionAmount + suplidoAmount);
+  const quoteNumber = String(formData.get("quote_number") ?? "").trim()
+    || `PRES-${new Date().toISOString().slice(0, 10).replace(/-/g, "")}-${Date.now().toString().slice(-5)}`;
+
+  const { data, error } = await supabase
     .from("sales_quotes")
     .insert({
       organization_id: organizationId,
-      fiscal_entity_id: fiscalEntityId,
-      client_id: clientId,
-      quote_number: String(formData.get("quote_number") ?? "").trim() || null,
+      fiscal_entity_id: fiscalEntity.id,
+      client_id: clientResult.id,
+      quote_number: quoteNumber,
       quote_date: quoteDateRaw || null,
       currency: "EUR",
       status: "open",
       total_amount: totalAmount,
-      notes: String(formData.get("notes") ?? "").trim() || null,
+      notes: [
+        String(formData.get("reference") ?? "").trim() ? `Referencia: ${String(formData.get("reference") ?? "").trim()}` : null,
+        `Base imponible: ${subtotalAmount.toFixed(2)} EUR`,
+        `IVA 21%: ${taxAmount.toFixed(2)} EUR`,
+        retentionRate ? `Retencion IRPF ${retentionRate}%: -${retentionAmount.toFixed(2)} EUR` : null,
+        suplidoAmount ? `Suplido: ${suplidoAmount.toFixed(2)} EUR` : null,
+        `Plantilla PDF: ${String(formData.get("pdf_template") ?? "standard")}`,
+        String(formData.get("notes") ?? "").trim() || null
+      ].filter(Boolean).join("\n"),
       created_by: user.id
-    });
+    })
+    .select("id, quote_number")
+    .single();
 
-  if (error) {
+  if (error || !data) {
     return { error: error.message };
   }
 
   revalidatePath("/dashboard");
-  return {};
+  return {
+    quote: {
+      id: data.id as string,
+      number: String(data.quote_number ?? quoteNumber),
+      total: totalAmount
+    }
+  };
 }
 
 type SalesInvoiceLineInput = {
@@ -320,16 +364,16 @@ export async function createSalesInvoice(formData: FormData): Promise<{ error?: 
   }
 
   const { supabase, user } = await getAuthenticatedUser();
-  const fiscalEntityId = await resolveFiscalEntityId(organizationId, user.id);
+  const fiscalEntity = await resolveFiscalEntityId(organizationId, user.id);
 
-  if (!fiscalEntityId) {
-    return { error: "No hay entidad fiscal activa para emitir la factura." };
+  if (!fiscalEntity.id) {
+    return { error: fiscalEntity.error ?? "No hay entidad fiscal activa para emitir la factura." };
   }
 
-  const clientId = await resolveSalesClientId(organizationId, formData);
+  const clientResult = await resolveSalesClientId(organizationId, formData);
 
-  if (!clientId) {
-    return { error: "Selecciona o introduce un cliente." };
+  if (!clientResult.id) {
+    return { error: clientResult.error ?? "Selecciona o introduce un cliente." };
   }
 
   const lines = parseSalesInvoiceLines(formData);
@@ -358,8 +402,8 @@ export async function createSalesInvoice(formData: FormData): Promise<{ error?: 
     .from("sales_invoices")
     .insert({
       organization_id: organizationId,
-      fiscal_entity_id: fiscalEntityId,
-      client_id: clientId,
+      fiscal_entity_id: fiscalEntity.id,
+      client_id: clientResult.id,
       invoice_number: invoiceNumber,
       reference: String(formData.get("reference") ?? "").trim() || null,
       issue_date: String(formData.get("issue_date") ?? "").trim() || null,
@@ -383,8 +427,8 @@ export async function createSalesInvoice(formData: FormData): Promise<{ error?: 
       .from("sales_invoices")
       .insert({
         organization_id: organizationId,
-        fiscal_entity_id: fiscalEntityId,
-        client_id: clientId,
+        fiscal_entity_id: fiscalEntity.id,
+        client_id: clientResult.id,
         invoice_number: invoiceNumber,
         issue_date: String(formData.get("issue_date") ?? "").trim() || null,
         currency: "EUR",
@@ -456,9 +500,9 @@ export async function createSalesInvoice(formData: FormData): Promise<{ error?: 
   };
 }
 
-async function resolveFiscalEntityId(organizationId: string, userId: string): Promise<string | null> {
+async function resolveFiscalEntityId(organizationId: string, userId: string): Promise<{ error?: string; id: string | null }> {
   const supabase = await createSupabaseClient();
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("fiscal_entities")
     .select("id")
     .eq("organization_id", organizationId)
@@ -468,7 +512,18 @@ async function resolveFiscalEntityId(organizationId: string, userId: string): Pr
     .maybeSingle();
 
   if (typeof data?.id === "string") {
-    return data.id;
+    return { id: data.id };
+  }
+
+  if (error) {
+    return { error: error.message, id: null };
+  }
+
+  const { data: ensuredEntityId, error: ensureError } = await supabase
+    .rpc("ensure_default_fiscal_entity", { p_organization_id: organizationId });
+
+  if (typeof ensuredEntityId === "string") {
+    return { id: ensuredEntityId };
   }
 
   const { data: organization } = await supabase
@@ -493,7 +548,7 @@ async function resolveFiscalEntityId(organizationId: string, userId: string): Pr
     .single();
 
   if (clientError || !client?.id) {
-    return null;
+    return { error: ensureError?.message ?? clientError?.message ?? "No se pudo crear el cliente interno de la entidad fiscal.", id: null };
   }
 
   const { data: createdEntity, error: entityError } = await supabase
@@ -512,7 +567,7 @@ async function resolveFiscalEntityId(organizationId: string, userId: string): Pr
     .single();
 
   if (entityError || !createdEntity?.id) {
-    return null;
+    return { error: ensureError?.message ?? entityError?.message ?? "No se pudo crear la entidad fiscal.", id: null };
   }
 
   await supabase
@@ -527,21 +582,21 @@ async function resolveFiscalEntityId(organizationId: string, userId: string): Pr
       created_by: userId
     });
 
-  return createdEntity.id as string;
+  return { id: createdEntity.id as string };
 }
 
-async function resolveSalesClientId(organizationId: string, formData: FormData): Promise<string | null> {
+async function resolveSalesClientId(organizationId: string, formData: FormData): Promise<{ error?: string; id: string | null }> {
   const supabase = await createSupabaseClient();
   const clientId = String(formData.get("client_id") ?? "").trim();
 
   if (isUuid(clientId)) {
-    return clientId;
+    return { id: clientId };
   }
 
   const name = String(formData.get("client_name") ?? "").trim();
 
   if (!name) {
-    return null;
+    return { id: null };
   }
 
   const { data: existing } = await supabase
@@ -554,7 +609,7 @@ async function resolveSalesClientId(organizationId: string, formData: FormData):
     .maybeSingle();
 
   if (typeof existing?.id === "string") {
-    return existing.id;
+    return { id: existing.id };
   }
 
   let clientInsertResult = await supabase
@@ -591,10 +646,25 @@ async function resolveSalesClientId(organizationId: string, formData: FormData):
   }
 
   if (clientInsertResult.error) {
-    return null;
+    const { data: ensuredClientId, error: ensureClientError } = await supabase
+      .rpc("ensure_sales_client", {
+        p_email: String(formData.get("client_email") ?? "").trim() || null,
+        p_irpf_rate: clampPercent(parseAmount(formData, "retention_rate", 0)),
+        p_name: name,
+        p_organization_id: organizationId,
+        p_phone: String(formData.get("client_phone") ?? "").trim() || null
+      });
+
+    if (typeof ensuredClientId === "string") {
+      return { id: ensuredClientId };
+    }
+
+    return { error: ensureClientError?.message ?? clientInsertResult.error.message, id: null };
   }
 
-  return typeof clientInsertResult.data?.id === "string" ? clientInsertResult.data.id : null;
+  return typeof clientInsertResult.data?.id === "string"
+    ? { id: clientInsertResult.data.id }
+    : { error: "No se pudo crear el cliente.", id: null };
 }
 
 async function buildClientCode(organizationId: string): Promise<string> {

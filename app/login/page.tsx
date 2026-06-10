@@ -28,7 +28,6 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
         <section className="login-panel" aria-labelledby="login-title">
           <BrandLockup />
           <h1 id="login-title">Acceso al panel</h1>
-          <p className="supporting-text">Documentos, revision humana y trazabilidad fiscal.</p>
 
           {params?.error ? (
             <p className="alert" role="alert">
@@ -61,9 +60,6 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
 
         <section className="login-panel" aria-labelledby="signup-title">
           <h1 id="signup-title">Crear cuenta</h1>
-          <p className="supporting-text">
-            Al registrarte se abrira el onboarding para crear la primera organizacion.
-          </p>
 
           <form action={signUpWithPassword} className="form-stack">
             <label className="field">

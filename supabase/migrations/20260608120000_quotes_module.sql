@@ -25,7 +25,10 @@ create policy "org members read own quotes"
   on quotes_documents for select
   using (
     organization_id in (
-      select organization_id from memberships where user_id = auth.uid()
+      select organization_id
+      from organization_members
+      where user_id = auth.uid()
+        and status = 'active'
     )
   );
 
@@ -33,7 +36,10 @@ create policy "org members insert own quotes"
   on quotes_documents for insert
   with check (
     organization_id in (
-      select organization_id from memberships where user_id = auth.uid()
+      select organization_id
+      from organization_members
+      where user_id = auth.uid()
+        and status = 'active'
     )
   );
 
@@ -41,7 +47,10 @@ create policy "org members update own quotes"
   on quotes_documents for update
   using (
     organization_id in (
-      select organization_id from memberships where user_id = auth.uid()
+      select organization_id
+      from organization_members
+      where user_id = auth.uid()
+        and status = 'active'
     )
   );
 
@@ -49,7 +58,10 @@ create policy "org members delete own quotes"
   on quotes_documents for delete
   using (
     organization_id in (
-      select organization_id from memberships where user_id = auth.uid()
+      select organization_id
+      from organization_members
+      where user_id = auth.uid()
+        and status = 'active'
     )
   );
 
@@ -79,7 +91,10 @@ create policy "org members read own config"
   on quotes_config for select
   using (
     organization_id in (
-      select organization_id from memberships where user_id = auth.uid()
+      select organization_id
+      from organization_members
+      where user_id = auth.uid()
+        and status = 'active'
     )
   );
 
@@ -87,7 +102,10 @@ create policy "org members upsert own config"
   on quotes_config for insert
   with check (
     organization_id in (
-      select organization_id from memberships where user_id = auth.uid()
+      select organization_id
+      from organization_members
+      where user_id = auth.uid()
+        and status = 'active'
     )
   );
 
@@ -95,7 +113,10 @@ create policy "org members update own config"
   on quotes_config for update
   using (
     organization_id in (
-      select organization_id from memberships where user_id = auth.uid()
+      select organization_id
+      from organization_members
+      where user_id = auth.uid()
+        and status = 'active'
     )
   );
 

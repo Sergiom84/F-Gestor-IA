@@ -26,8 +26,8 @@ import {
   X
 } from "lucide-react";
 import { useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
-import { createSalesInvoice } from "../../commercial-actions";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { createSalesInvoice, createSalesQuote } from "../../commercial-actions";
 import { artificialSalesDefaults, artificialSalesDocuments } from "../../_data/artificial-business-data";
 import type { ArtificialContactListItem, SalesSectionId } from "../../_data/artificial-business-data";
 import type { SalesDocRow } from "../../_lib/types";
@@ -432,16 +432,16 @@ export function SalesWorkspace({ clients, fiscalEntities, organizationId, organi
             organizationId={organizationId}
             section={activeSection}
             onCancel={() => setIsCreating(false)}
-            onCreated={(invoice) => {
+            onCreated={(document) => {
               setDocumentsBySection((current) => ({
                 ...current,
-                [activeSectionId]: [invoice, ...current[activeSectionId]]
+                [activeSectionId]: [document, ...current[activeSectionId]]
               }));
               setIsCreating(false);
-              setNotice({ tone: "success", text: `Factura ${invoice.number} creada.` });
+              setNotice({ tone: "success", text: `${activeSection.singularTitle} ${document.number} creado.` });
             }}
             onPersistenceError={(message) => {
-              setNotice({ tone: "warning", text: `Factura creada en la vista, pero no se pudo guardar: ${message}` });
+              setNotice({ tone: "warning", text: `${activeSection.singularTitle} creado en la vista, pero no se pudo guardar: ${message}` });
             }}
           />
         ) : (
@@ -1130,6 +1130,11 @@ function QuoteForm({
   const [internalNotes, setInternalNotes] = useState("");
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const clientInputRef = useRef<HTMLInputElement>(null);
+  const clientEmailInputRef = useRef<HTMLInputElement>(null);
+  const clientPhoneInputRef = useRef<HTMLInputElement>(null);
+  const isQuote = section.id === "quotes";
+  const defaultPrefix = isQuote ? "PRES" : "VENTA";
   const subtotal = lines.reduce((total, line) => {
     const rawLineTotal = line.quantity * line.unitPrice;
     const discountAmount = rawLineTotal * (line.discount / 100);
@@ -1192,19 +1197,21 @@ function QuoteForm({
     setLines((current) => current.filter((line) => line.id !== id));
   };
 
-  const submitInvoice = async () => {
+  const submitDocument = async () => {
     const formData = new FormData();
-
-    const invoiceNumber = `VENTA-${new Date().toISOString().slice(0, 10).replace(/-/g, "")}-${Date.now().toString().slice(-5)}`;
+    const documentNumber = `${defaultPrefix}-${new Date().toISOString().slice(0, 10).replace(/-/g, "")}-${Date.now().toString().slice(-5)}`;
+    const clientNameValue = clientInputRef.current?.value.trim() || client.trim();
+    const clientEmailValue = clientEmailInputRef.current?.value.trim() || clientEmail.trim();
+    const clientPhoneValue = clientPhoneInputRef.current?.value.trim() || clientPhone.trim();
 
     formData.set("organization_id", organizationId);
     formData.set("client_id", clientId);
-    formData.set("client_name", client);
-    formData.set("client_email", clientEmail);
-    formData.set("client_phone", clientPhone);
-    formData.set("invoice_number", invoiceNumber);
+    formData.set("client_name", clientNameValue);
+    formData.set("client_email", clientEmailValue);
+    formData.set("client_phone", clientPhoneValue);
+    formData.set(isQuote ? "quote_number" : "invoice_number", documentNumber);
     formData.set("reference", reference);
-    formData.set("issue_date", quoteDate);
+    formData.set(isQuote ? "quote_date" : "issue_date", quoteDate);
     formData.set("retention_rate", String(retentionRate));
     formData.set("suplido_amount", String(suplidoAmount));
     formData.set("pdf_template", pdfTemplate);
@@ -1214,22 +1221,36 @@ function QuoteForm({
     setSubmitError(null);
     setIsSaving(true);
 
-    onCreated({
-      id: `invoice-pending-${Date.now()}`,
-      status: "Borrador",
-      date: new Date(quoteDate).toLocaleDateString("es-ES"),
-      number: invoiceNumber,
-      reference,
-      clientCode: clients.find((item) => item.id === clientId)?.code ?? "",
-      client,
-      total
-    });
+    try {
+      const result = isQuote
+        ? await createSalesQuote(formData)
+        : await createSalesInvoice(formData);
+      const persisted = isQuote
+        ? ("quote" in result ? result.quote : null)
+        : ("invoice" in result ? result.invoice : null);
 
-    void createSalesInvoice(formData).then((result) => {
-      if (result.error || !result.invoice) {
-        onPersistenceError(result.error ?? "No se pudo crear la factura.");
+      if (result.error || !persisted) {
+        setSubmitError(result.error ?? `No se pudo crear ${isQuote ? "el presupuesto" : "la factura"}.`);
+        return;
       }
-    });
+
+      onCreated({
+        id: persisted.id,
+        status: isQuote ? "Abierta" : "Borrador",
+        date: new Date(quoteDate).toLocaleDateString("es-ES"),
+        number: persisted.number,
+        reference,
+        clientCode: clients.find((item) => item.id === clientId)?.code ?? "",
+        client: clientNameValue,
+        total: persisted.total
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : `No se pudo crear ${isQuote ? "el presupuesto" : "la factura"}.`;
+      setSubmitError(message);
+      onPersistenceError(message);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -1254,8 +1275,9 @@ function QuoteForm({
           </label>
           <label className="sage-field">
             <span>Prefijo</span>
-            <select defaultValue="N/A">
+            <select defaultValue={defaultPrefix}>
               <option>N/A</option>
+              <option>PRES</option>
               <option>VENTA</option>
               <option>2026</option>
             </select>
@@ -1283,7 +1305,7 @@ function QuoteForm({
         <div className="quote-contact-grid">
           <label className="sage-field">
             <span>Razon social o nombre</span>
-            <input value={client} onChange={(event) => setClient(event.target.value)} />
+            <input ref={clientInputRef} value={client} onChange={(event) => setClient(event.target.value)} />
           </label>
           <label className="sage-field">
             <span>Nombre</span>
@@ -1291,11 +1313,11 @@ function QuoteForm({
           </label>
           <label className="sage-field">
             <span>E-mail</span>
-            <input onChange={(event) => setClientEmail(event.target.value)} type="email" value={clientEmail} />
+            <input ref={clientEmailInputRef} onChange={(event) => setClientEmail(event.target.value)} type="email" value={clientEmail} />
           </label>
           <label className="sage-field span-2">
             <span>Telefono</span>
-            <input onChange={(event) => setClientPhone(event.target.value)} value={clientPhone} />
+            <input ref={clientPhoneInputRef} onChange={(event) => setClientPhone(event.target.value)} value={clientPhone} />
           </label>
           <label className="sage-field span-2">
             <span>Pais *</span>
@@ -1361,7 +1383,7 @@ function QuoteForm({
         suplidoAmount={suplidoAmount}
         total={total}
         onCancel={onCancel}
-        onCreate={submitInvoice}
+        onCreate={submitDocument}
       />
     </section>
   );
