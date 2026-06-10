@@ -13,7 +13,9 @@ import {
   X
 } from "lucide-react";
 import { useState } from "react";
+import { createProductService } from "../../commercial-actions";
 import { formatMoney } from "../../_lib/formatters";
+import type { ProductItem } from "../../_data/commercial-data";
 
 type ProductsView = "product-list" | "product" | "tariffs" | "tariff-form" | "discount-groups" | "discount-form";
 type ProductsSectionId = "products" | "tariffs" | "discount-groups";
@@ -118,9 +120,18 @@ const productsSections: ProductsSection[] = [
   }
 ];
 
-export function ProductsWorkspace({ organizationName }: { organizationName: string }) {
+export function ProductsWorkspace({
+  organizationId,
+  organizationName,
+  initialProducts
+}: {
+  organizationId: string;
+  organizationName: string;
+  initialProducts?: ProductItem[];
+}) {
   const [view, setView] = useState<ProductsView>("product-list");
   const [notice, setNotice] = useState<string | null>(null);
+  const [products, setProducts] = useState<ProductItem[]>(initialProducts ?? []);
 
   const activeSectionId = resolveProductsSectionId(view);
   const activeSection = productsSections.find((section) => section.id === activeSectionId) ?? productsSections[0]!;
@@ -179,37 +190,45 @@ export function ProductsWorkspace({ organizationName }: { organizationName: stri
           <ProductsTemplateView
             activeSection={activeSection}
             activeSectionId={activeSectionId}
+            productRows={products}
             onHeroAction={handleHeroAction}
             onSectionChange={openSection}
           />
         ) : view === "product" ? (
           <ProductServiceForm
+            organizationId={organizationId}
             onCancel={() => setView("product-list")}
-            onCreate={() => { setView("product-list"); setNotice("Producto guardado en la lista local."); }}
+            onCreated={(product) => {
+              setProducts((current) => [...current, product].sort((a, b) => a.name.localeCompare(b.name)));
+              setView("product-list");
+              setNotice(`${product.kind === "service" ? "Servicio" : "Producto"} ${product.name} guardado.`);
+            }}
           />
         ) : view === "tariffs" ? (
           <ProductsTemplateView
             activeSection={activeSection}
             activeSectionId={activeSectionId}
+            productRows={products}
             onHeroAction={handleHeroAction}
             onSectionChange={openSection}
           />
         ) : view === "tariff-form" ? (
           <TariffForm
             onCancel={openTariffs}
-            onCreate={() => { openTariffs(); setNotice("Tarifa guardada en la lista local."); }}
+            onCreate={() => { openTariffs(); setNotice("Tarifa preparada en la vista. Las tarifas aun no se guardan en el modelo real."); }}
           />
         ) : view === "discount-groups" ? (
           <ProductsTemplateView
             activeSection={activeSection}
             activeSectionId={activeSectionId}
+            productRows={products}
             onHeroAction={handleHeroAction}
             onSectionChange={openSection}
           />
         ) : (
           <DiscountGroupForm
             onCancel={openDiscountGroups}
-            onCreate={() => { openDiscountGroups(); setNotice("Grupo de descuentos guardado en la lista local."); }}
+            onCreate={() => { openDiscountGroups(); setNotice("Grupo de descuentos preparado en la vista. Los descuentos aun no se guardan en el modelo real."); }}
           />
         )}
       </div>
@@ -220,17 +239,35 @@ export function ProductsWorkspace({ organizationName }: { organizationName: stri
 function ProductsTemplateView({
   activeSection,
   activeSectionId,
+  productRows,
   onHeroAction,
   onSectionChange
 }: {
   activeSection: ProductsSection;
   activeSectionId: ProductsSectionId;
+  productRows: ProductItem[];
   onHeroAction: (kind: ProductsHeroAction) => void;
   onSectionChange: (sectionId: ProductsSectionId) => void;
 }) {
   const [query, setQuery] = useState("");
   const [showFilters, setShowFilters] = useState(false);
   const [showColumns, setShowColumns] = useState(false);
+  const isProductsSection = activeSectionId === "products";
+  const normalizedQuery = query.trim().toLowerCase();
+  const visibleProducts = isProductsSection
+    ? productRows.filter((product) => (
+      !normalizedQuery
+      || product.name.toLowerCase().includes(normalizedQuery)
+      || product.code.toLowerCase().includes(normalizedQuery)
+    ))
+    : [];
+  const metrics = isProductsSection
+    ? [
+      { label: "Productos", tone: "teal" as const, value: String(productRows.filter((p) => p.kind === "product").length) },
+      { label: "Servicios", tone: "indigo" as const, value: String(productRows.filter((p) => p.kind === "service").length) },
+      { label: "Valor catalogo", tone: "green" as const, value: formatMoney(productRows.reduce((sum, p) => sum + (p.isActive ? p.unitPrice : 0), 0)) }
+    ]
+    : activeSection.metrics;
 
   return (
     <section className="products-list-view product-template-view" aria-label={activeSection.title}>
@@ -240,7 +277,7 @@ function ProductsTemplateView({
         sections={productsSections}
       />
       <ProductTemplateHero activeSection={activeSection} onAction={onHeroAction} />
-      <ProductMetricGrid activeSection={activeSection} />
+      <ProductMetricGrid activeSection={{ ...activeSection, metrics }} />
       <div className="products-list-toolbar">
         <span aria-hidden="true" />
         <div className="products-toolbar-actions">
@@ -294,12 +331,29 @@ function ProductsTemplateView({
               ))}
             </tr>
           </thead>
+          {visibleProducts.length > 0 ? (
+            <tbody>
+              {visibleProducts.map((product) => (
+                <tr key={product.id}>
+                  <td>{product.code || "—"}</td>
+                  <td>{product.name}</td>
+                  <td>{product.kind === "service" ? "Servicio" : "Producto"}</td>
+                  <td>{product.taxRate === null ? "—" : `${product.taxRate} %`}</td>
+                  <td>{formatMoney(product.unitPrice)}</td>
+                  <td>{product.isActive ? "Activo" : "Inactivo"}</td>
+                  <td>—</td>
+                </tr>
+              ))}
+            </tbody>
+          ) : null}
         </table>
-        <div className="products-empty-state">
-          <SearchX aria-hidden="true" size={94} strokeWidth={2.7} />
-          <strong>{activeSection.emptyTitle}</strong>
-          <p>{activeSection.emptyDescription}</p>
-        </div>
+        {visibleProducts.length === 0 ? (
+          <div className="products-empty-state">
+            <SearchX aria-hidden="true" size={94} strokeWidth={2.7} />
+            <strong>{activeSection.emptyTitle}</strong>
+            <p>{activeSection.emptyDescription}</p>
+          </div>
+        ) : null}
       </div>
     </section>
   );
@@ -380,7 +434,21 @@ function resolveProductsSectionId(view: ProductsView): ProductsSectionId {
   return "products";
 }
 
-function ProductServiceForm({ onCancel, onCreate }: { onCancel: () => void; onCreate: () => void }) {
+const taxGroupOptions = [
+  { label: "General - 21 %", rate: 21 },
+  { label: "Reducido - 10 %", rate: 10 },
+  { label: "Exento - 0 %", rate: 0 }
+];
+
+function ProductServiceForm({
+  organizationId,
+  onCancel,
+  onCreated
+}: {
+  organizationId: string;
+  onCancel: () => void;
+  onCreated: (product: ProductItem) => void;
+}) {
   const [activeTab, setActiveTab] = useState<ProductFormTab>("basic");
   const [category, setCategory] = useState<ProductCategory>("product");
   const [code, setCode] = useState("");
@@ -389,17 +457,55 @@ function ProductServiceForm({ onCancel, onCreate }: { onCancel: () => void; onCr
   const [internalComments, setInternalComments] = useState("");
   const [price, setPrice] = useState("0,00");
   const [discountPercent, setDiscountPercent] = useState("0,00");
+  const [taxGroup, setTaxGroup] = useState(taxGroupOptions[0]!.label);
   const [inactive, setInactive] = useState(false);
   const [blockOrders, setBlockOrders] = useState(false);
   const [blockDeliveryNotes, setBlockDeliveryNotes] = useState(false);
   const [blockInvoices, setBlockInvoices] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const taxRate = taxGroupOptions.find((option) => option.label === taxGroup)?.rate ?? 21;
   const priceValue = parseSpanishNumber(price);
   const discountPercentValue = parseSpanishNumber(discountPercent);
   const discountAmount = priceValue * (discountPercentValue / 100);
   const discountedPrice = Math.max(priceValue - discountAmount, 0);
-  const taxAmount = discountedPrice * 0.21;
+  const taxAmount = discountedPrice * (taxRate / 100);
   const priceWithTax = discountedPrice + taxAmount;
-  const canCreate = code.trim().length > 0 && name.trim().length > 0;
+  const canCreate = code.trim().length > 0 && name.trim().length > 0 && !isSaving;
+
+  const submitProduct = async () => {
+    const formData = new FormData();
+
+    formData.set("organization_id", organizationId);
+    formData.set("code", code.trim());
+    formData.set("name", name.trim());
+    formData.set("kind", category);
+    formData.set("unit_price", String(priceValue));
+    formData.set("tax_rate", String(taxRate));
+    formData.set("description", [description.trim(), internalComments.trim()].filter(Boolean).join("\n\n"));
+
+    setSubmitError(null);
+    setIsSaving(true);
+
+    const result = await createProductService(formData);
+
+    setIsSaving(false);
+
+    if (result.error || !result.product) {
+      setSubmitError(result.error ?? "No se pudo guardar el producto o servicio.");
+      return;
+    }
+
+    onCreated({
+      id: result.product.id,
+      code: code.trim(),
+      name: name.trim(),
+      kind: category,
+      unitPrice: priceValue,
+      taxRate,
+      isActive: !inactive
+    });
+  };
 
   return (
     <section className="product-form-screen" aria-label="Alta de producto o servicio">
@@ -477,10 +583,10 @@ function ProductServiceForm({ onCancel, onCreate }: { onCancel: () => void; onCr
 
           <label className="sage-field product-tax-field">
             <span>Grupo de impuestos <RequiredMark /></span>
-            <select defaultValue="General - 21 %">
-              <option>General - 21 %</option>
-              <option>Reducido - 10 %</option>
-              <option>Exento - 0 %</option>
+            <select value={taxGroup} onChange={(event) => setTaxGroup(event.target.value)}>
+              {taxGroupOptions.map((option) => (
+                <option key={option.label}>{option.label}</option>
+              ))}
             </select>
           </label>
 
@@ -567,10 +673,12 @@ function ProductServiceForm({ onCancel, onCreate }: { onCancel: () => void; onCr
         </div>
       )}
 
+      {submitError ? <div className="sales-live-notice warning" role="alert">{submitError}</div> : null}
       <ProductStickyBar
         canCreate={canCreate}
+        isPending={isSaving}
         onCancel={onCancel}
-        onCreate={onCreate}
+        onCreate={() => { void submitProduct(); }}
         summaries={[
           { label: "Precio", value: priceValue },
           { label: "Precio con IVA y descuento", value: priceWithTax }
@@ -855,11 +963,13 @@ function FormItemsTable({
 
 function ProductStickyBar({
   canCreate,
+  isPending = false,
   onCancel,
   onCreate,
   summaries = []
 }: {
   canCreate: boolean;
+  isPending?: boolean;
   onCancel?: () => void;
   onCreate?: () => void;
   summaries?: Array<{ label: string; value: number }>;
@@ -870,7 +980,7 @@ function ProductStickyBar({
         <SummaryBox key={summary.label} label={summary.label} value={summary.value} />
       ))}
       <button className="quote-cancel-action" onClick={onCancel} type="button">Cancelar</button>
-      <button className="quote-create-action" disabled={!canCreate} onClick={canCreate ? onCreate : undefined} type="button">Crear</button>
+      <button className="quote-create-action" disabled={!canCreate} onClick={canCreate ? onCreate : undefined} type="button">{isPending ? "Creando..." : "Crear"}</button>
       <button className="quote-create-more" disabled={!canCreate} type="button" aria-label="Mas opciones de creacion">
         <ChevronDown aria-hidden="true" size={18} />
       </button>

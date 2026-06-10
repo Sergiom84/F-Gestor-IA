@@ -280,7 +280,7 @@ export async function createSupplier(formData: FormData): Promise<{ error?: stri
   return {};
 }
 
-export async function createProductService(formData: FormData): Promise<{ error?: string }> {
+export async function createProductService(formData: FormData): Promise<{ error?: string; product?: { id: string } }> {
   const organizationId = String(formData.get("organization_id") ?? "").trim();
 
   if (!isUuid(organizationId)) {
@@ -305,7 +305,7 @@ export async function createProductService(formData: FormData): Promise<{ error?
   const taxRateRaw = String(formData.get("tax_rate") ?? "").trim();
   const taxRate = taxRateRaw ? Number(taxRateRaw.replace(",", ".")) : null;
 
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("products_services")
     .insert({
       organization_id: organizationId,
@@ -317,14 +317,16 @@ export async function createProductService(formData: FormData): Promise<{ error?
       tax_rate: taxRate,
       is_active: true,
       created_by: user.id
-    });
+    })
+    .select("id")
+    .single();
 
-  if (error) {
-    return { error: error.message };
+  if (error || !data) {
+    return { error: error?.message ?? "No se pudo crear el producto o servicio." };
   }
 
   revalidatePath("/dashboard");
-  return {};
+  return { product: { id: data.id as string } };
 }
 
 export async function createSalesQuote(formData: FormData): Promise<{ error?: string; quote?: { id: string; number: string; total: number } }> {

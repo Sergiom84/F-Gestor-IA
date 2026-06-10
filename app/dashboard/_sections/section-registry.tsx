@@ -3,7 +3,7 @@ import { AccountingDashboard } from "./dashboard/accounting-dashboard";
 import { GestoriaDashboard } from "./dashboard/gestoria-dashboard";
 import { SalesDashboardSection } from "./dashboard/sales-dashboard-section";
 import { ContactsSection } from "./contacts/contacts-section";
-import { ProductsWorkspace } from "./products/products-workspace";
+import { ProductsSection } from "./products/products-section";
 import { PurchasesSection } from "./purchases/purchases-section";
 import { QuotesSection } from "./quotes/quotes-section";
 import { SalesSection } from "./sales/sales-section";
@@ -35,7 +35,10 @@ const sectionRegistry = {
   ),
   quotes: (data) => <QuotesSection organizationId={data.activeOrganization.id} />,
   products: (data) => (
-    <ProductsWorkspace organizationName={data.activeOrganization.name} />
+    <ProductsSection
+      organizationId={data.activeOrganization.id}
+      organizationName={data.activeOrganization.name}
+    />
   ),
   accounting: (data) => (
     <AccountingWorkspace organizationName={data.activeOrganization.name} />

@@ -68,6 +68,7 @@ type DbProductRow = {
   name: string;
   kind: string;
   unit_price: number;
+  tax_rate: number | null;
   is_active: boolean;
 };
 
@@ -259,12 +260,13 @@ export type SalesData = {
   documents: Record<SalesSectionId, ArtificialSalesDocumentRow[]>;
   fiscalEntities: Array<{ id: string; name: string }>;
   config: SalesConfigPayload;
+  products: ProductItem[];
 };
 
 export async function readSalesData(organizationId: string): Promise<SalesData> {
   const supabase = await createClient();
 
-  const [invoicesResult, quotesResult, clientRows, fiscalEntitiesResult, configResult] = await Promise.all([
+  const [invoicesResult, quotesResult, clientRows, fiscalEntitiesResult, configResult, productsResult] = await Promise.all([
     supabase
       .from("sales_invoices")
       .select("id, invoice_number, issue_date, status, total_amount, clients!client_id(name)")
@@ -293,7 +295,15 @@ export async function readSalesData(organizationId: string): Promise<SalesData> 
       .from("sales_config")
       .select("payload")
       .eq("organization_id", organizationId)
-      .maybeSingle()
+      .maybeSingle(),
+    supabase
+      .from("products_services")
+      .select("id, code, name, kind, unit_price, tax_rate, is_active")
+      .eq("organization_id", organizationId)
+      .eq("is_active", true)
+      .is("deleted_at", null)
+      .order("name", { ascending: true })
+      .returns<DbProductRow[]>()
   ]);
 
   const invoices: ArtificialSalesDocumentRow[] = (invoicesResult.data ?? []).map((row) => ({
@@ -343,7 +353,8 @@ export async function readSalesData(organizationId: string): Promise<SalesData> 
       id: entity.id,
       name: entity.legal_name
     })),
-    config: (configResult.data?.payload as SalesConfigPayload | null) ?? {}
+    config: (configResult.data?.payload as SalesConfigPayload | null) ?? {},
+    products: (productsResult.data ?? []).map(mapProductRow)
   };
 }
 
@@ -353,6 +364,7 @@ export type ProductItem = {
   name: string;
   kind: "product" | "service";
   unitPrice: number;
+  taxRate: number | null;
   isActive: boolean;
 };
 
@@ -365,22 +377,25 @@ export async function readProductsData(organizationId: string): Promise<Products
 
   const { data } = await supabase
     .from("products_services")
-    .select("id, code, name, kind, unit_price, is_active")
+    .select("id, code, name, kind, unit_price, tax_rate, is_active")
     .eq("organization_id", organizationId)
     .is("deleted_at", null)
     .order("name", { ascending: true })
     .returns<DbProductRow[]>();
 
-  const products: ProductItem[] = (data ?? []).map((row) => ({
+  return { products: (data ?? []).map(mapProductRow) };
+}
+
+function mapProductRow(row: DbProductRow): ProductItem {
+  return {
     id: row.id,
     code: row.code ?? "",
     name: row.name,
     kind: row.kind as "product" | "service",
     unitPrice: Number(row.unit_price),
+    taxRate: row.tax_rate === null ? null : Number(row.tax_rate),
     isActive: row.is_active
-  }));
-
-  return { products };
+  };
 }
 
 export type SalesDashboardMetrics = {

@@ -37,6 +37,7 @@ import {
 import type { SalesConfigPayload, SalesDocumentKind } from "../../commercial-actions";
 import { artificialSalesDocuments } from "../../_data/artificial-business-data";
 import type { ArtificialContactListItem, SalesSectionId } from "../../_data/artificial-business-data";
+import type { ProductItem } from "../../_data/commercial-data";
 import type { SalesDocRow } from "../../_lib/types";
 import { formatMoney } from "../../_lib/formatters";
 
@@ -332,9 +333,10 @@ type SalesWorkspaceProps = {
   organizationName: string;
   initialDocuments?: Record<SalesSectionId, SalesDocumentRow[]>;
   initialConfig?: SalesConfigPayload;
+  products?: ProductItem[];
 };
 
-export function SalesWorkspace({ clients, fiscalEntities, organizationId, organizationName, initialDocuments, initialConfig }: SalesWorkspaceProps) {
+export function SalesWorkspace({ clients, fiscalEntities, organizationId, organizationName, initialDocuments, initialConfig, products }: SalesWorkspaceProps) {
   const searchParams = useSearchParams();
   const sectionFromUrl = resolveSalesSectionId(searchParams.get("salesSection"));
   const [activeSectionId, setActiveSectionId] = useState<SalesSectionId>(sectionFromUrl ?? "invoices");
@@ -479,6 +481,7 @@ export function SalesWorkspace({ clients, fiscalEntities, organizationId, organi
             clients={clients}
             fiscalEntities={fiscalEntities}
             organizationId={organizationId}
+            products={products ?? []}
             section={activeSection}
             onCancel={() => setIsCreating(false)}
             onCreated={(document) => {
@@ -1220,6 +1223,7 @@ function QuoteForm({
   clients,
   fiscalEntities,
   organizationId,
+  products,
   section,
   onCancel,
   onCreated,
@@ -1228,6 +1232,7 @@ function QuoteForm({
   clients: ArtificialContactListItem[];
   fiscalEntities: Array<{ id: string; name: string }>;
   organizationId: string;
+  products: ProductItem[];
   section: SalesSection;
   onCancel: () => void;
   onCreated: (invoice: SalesDocumentRow) => void;
@@ -1307,6 +1312,23 @@ function QuoteForm({
   };
 
   const updateLine = (id: number, patch: Partial<QuoteLine>) => {
+    if (typeof patch.product === "string") {
+      const matched = products.find((item) => (
+        item.name === patch.product || (item.code !== "" && item.code === patch.product)
+      ));
+
+      if (matched) {
+        const line = lines.find((item) => item.id === id);
+
+        patch = {
+          ...patch,
+          product: matched.name,
+          unitPrice: line && line.unitPrice > 0 ? line.unitPrice : matched.unitPrice,
+          description: line?.description ? line.description : matched.name
+        };
+      }
+    }
+
     setLines((current) => current.map((line) => (
       line.id === id ? { ...line, ...patch } : line
     )));
@@ -1460,6 +1482,7 @@ function QuoteForm({
         {activeTab === "products" ? (
           <ProductsTab
             lines={lines}
+            products={products}
             onAddLine={addLine}
             onDuplicateLine={duplicateLine}
             onRemoveLine={removeLine}
@@ -1534,12 +1557,14 @@ function QuoteTab({
 
 function ProductsTab({
   lines,
+  products,
   onAddLine,
   onDuplicateLine,
   onRemoveLine,
   onUpdateLine
 }: {
   lines: QuoteLine[];
+  products: ProductItem[];
   onAddLine: () => void;
   onDuplicateLine: (line: QuoteLine) => void;
   onRemoveLine: (id: number) => void;
@@ -1558,6 +1583,16 @@ function ProductsTab({
         <Plus aria-hidden="true" size={23} />
         Anadir
       </button>
+
+      {products.length > 0 ? (
+        <datalist id="quote-product-options">
+          {products.map((product) => (
+            <option key={product.id} value={product.name}>
+              {product.code ? `${product.code} · ` : ""}{formatMoney(product.unitPrice)}
+            </option>
+          ))}
+        </datalist>
+      ) : null}
 
       <div className="quote-lines-wrap">
         <table className="quote-lines-table">
@@ -1580,6 +1615,7 @@ function ProductsTab({
                 <td>
                   <input
                     aria-label="Producto o servicio"
+                    list="quote-product-options"
                     onChange={(event) => onUpdateLine(line.id, { product: event.target.value })}
                     value={line.product}
                   />
