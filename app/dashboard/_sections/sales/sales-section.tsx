@@ -6,7 +6,10 @@ export async function SalesSection({ organizationId, organizationName }: { organ
 
   return (
     <SalesWorkspace
+      clients={data.clients}
+      fiscalEntities={data.fiscalEntities}
       organizationName={organizationName}
+      organizationId={organizationId}
       initialDocuments={data.documents}
     />
   );

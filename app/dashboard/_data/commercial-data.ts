@@ -9,7 +9,16 @@ import type {
 
 type DbClientRow = {
   id: string;
+  apply_irpf_by_default: boolean | null;
+  city: string | null;
+  code: string | null;
+  contact_email: string | null;
+  default_irpf_rate: number | null;
+  fiscal_address: string | null;
   name: string;
+  postal_code: string | null;
+  province: string | null;
+  tax_id: string | null;
 };
 
 type DbSupplierRow = {
@@ -37,6 +46,11 @@ type DbSalesInvoiceRow = {
   status: string;
   total_amount: number;
   clients: { name: string } | null;
+};
+
+type DbFiscalEntityOptionRow = {
+  id: string;
+  legal_name: string;
 };
 
 type DbSalesQuoteRow = {
@@ -74,6 +88,45 @@ function shortId(uuid: string): string {
   return uuid.slice(0, 8);
 }
 
+async function readClientRows(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  organizationId: string
+): Promise<DbClientRow[]> {
+  const extendedResult = await supabase
+    .from("clients")
+    .select("id, code, name, tax_id, contact_email, fiscal_address, city, province, postal_code, apply_irpf_by_default, default_irpf_rate")
+    .eq("organization_id", organizationId)
+    .is("deleted_at", null)
+    .order("name", { ascending: true })
+    .returns<DbClientRow[]>();
+
+  if (!extendedResult.error) {
+    return extendedResult.data ?? [];
+  }
+
+  const fallbackResult = await supabase
+    .from("clients")
+    .select("id, name, contact_email")
+    .eq("organization_id", organizationId)
+    .is("deleted_at", null)
+    .order("name", { ascending: true })
+    .returns<Array<{ id: string; name: string; contact_email: string | null }>>();
+
+  return (fallbackResult.data ?? []).map((client) => ({
+    id: client.id,
+    apply_irpf_by_default: false,
+    city: null,
+    code: null,
+    contact_email: client.contact_email,
+    default_irpf_rate: 0,
+    fiscal_address: null,
+    name: client.name,
+    postal_code: null,
+    province: null,
+    tax_id: null
+  }));
+}
+
 function mapPurchaseStatus(status: string): {
   display: ArtificialPurchaseInvoiceRow["status"];
   tab: Exclude<ArtificialPurchaseTabId, "all">;
@@ -109,14 +162,8 @@ export type ContactsData = {
 export async function readContactsData(organizationId: string): Promise<ContactsData> {
   const supabase = await createClient();
 
-  const [clientsResult, suppliersResult] = await Promise.all([
-    supabase
-      .from("clients")
-      .select("id, name")
-      .eq("organization_id", organizationId)
-      .is("deleted_at", null)
-      .order("name", { ascending: true })
-      .returns<DbClientRow[]>(),
+  const [clientRows, suppliersResult] = await Promise.all([
+    readClientRows(supabase, organizationId),
     supabase
       .from("suppliers")
       .select("id, name, tax_id")
@@ -126,11 +173,18 @@ export async function readContactsData(organizationId: string): Promise<Contacts
       .returns<DbSupplierRow[]>()
   ]);
 
-  const clients: ArtificialContactListItem[] = (clientsResult.data ?? []).map((c) => ({
+  const clients: ArtificialContactListItem[] = clientRows.map((c) => ({
     id: c.id,
     name: c.name,
-    code: shortId(c.id),
-    taxId: ""
+    code: c.code ?? shortId(c.id),
+    taxId: c.tax_id ?? "",
+    applyIrpfByDefault: Boolean(c.apply_irpf_by_default),
+    city: c.city ?? "",
+    contactEmail: c.contact_email ?? "",
+    defaultIrpfRate: Number(c.default_irpf_rate ?? 0),
+    fiscalAddress: c.fiscal_address ?? "",
+    postalCode: c.postal_code ?? "",
+    province: c.province ?? ""
   }));
 
   const suppliers: ArtificialContactListItem[] = (suppliersResult.data ?? []).map((s) => ({
@@ -181,13 +235,15 @@ export async function readPurchasesData(organizationId: string): Promise<Purchas
 }
 
 export type SalesData = {
+  clients: ArtificialContactListItem[];
   documents: Record<SalesSectionId, ArtificialSalesDocumentRow[]>;
+  fiscalEntities: Array<{ id: string; name: string }>;
 };
 
 export async function readSalesData(organizationId: string): Promise<SalesData> {
   const supabase = await createClient();
 
-  const [invoicesResult, quotesResult] = await Promise.all([
+  const [invoicesResult, quotesResult, clientRows, fiscalEntitiesResult] = await Promise.all([
     supabase
       .from("sales_invoices")
       .select("id, invoice_number, issue_date, status, total_amount, clients!client_id(name)")
@@ -203,7 +259,15 @@ export async function readSalesData(organizationId: string): Promise<SalesData> 
       .is("deleted_at", null)
       .order("quote_date", { ascending: false })
       .limit(50)
-      .returns<DbSalesQuoteRow[]>()
+      .returns<DbSalesQuoteRow[]>(),
+    readClientRows(supabase, organizationId),
+    supabase
+      .from("fiscal_entities")
+      .select("id, legal_name")
+      .eq("organization_id", organizationId)
+      .is("deleted_at", null)
+      .order("created_at", { ascending: true })
+      .returns<DbFiscalEntityOptionRow[]>()
   ]);
 
   const invoices: ArtificialSalesDocumentRow[] = (invoicesResult.data ?? []).map((row) => ({
@@ -229,13 +293,30 @@ export async function readSalesData(organizationId: string): Promise<SalesData> 
   }));
 
   return {
+    clients: clientRows.map((c) => ({
+      id: c.id,
+      name: c.name,
+      code: c.code ?? shortId(c.id),
+      taxId: c.tax_id ?? "",
+      applyIrpfByDefault: Boolean(c.apply_irpf_by_default),
+      city: c.city ?? "",
+      contactEmail: c.contact_email ?? "",
+      defaultIrpfRate: Number(c.default_irpf_rate ?? 0),
+      fiscalAddress: c.fiscal_address ?? "",
+      postalCode: c.postal_code ?? "",
+      province: c.province ?? ""
+    })),
     documents: {
       invoices,
       quotes,
       orders: [],
       "delivery-notes": [],
       "recurring-invoices": []
-    }
+    },
+    fiscalEntities: (fiscalEntitiesResult.data ?? []).map((entity) => ({
+      id: entity.id,
+      name: entity.legal_name
+    }))
   };
 }
 

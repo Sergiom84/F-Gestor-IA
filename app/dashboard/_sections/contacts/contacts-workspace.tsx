@@ -16,6 +16,7 @@ import {
   X
 } from "lucide-react";
 import { useMemo, useState } from "react";
+import { createContactClient } from "../../commercial-actions";
 import {
   artificialClientRows,
   artificialEmployeeRows,
@@ -24,6 +25,7 @@ import {
 import type { ArtificialContactListItem } from "../../_data/artificial-business-data";
 
 type ContactsWorkspaceProps = {
+  organizationId: string;
   organizationName: string;
   initialClients?: ArtificialContactListItem[];
   initialSuppliers?: ArtificialContactListItem[];
@@ -52,8 +54,8 @@ const clientTabs = [
 
 const employeeRows: ContactListItem[] = artificialEmployeeRows;
 
-export function ContactsWorkspace({ organizationName, initialClients, initialSuppliers }: ContactsWorkspaceProps) {
-  const clientRows: ContactListItem[] = initialClients ?? artificialClientRows;
+export function ContactsWorkspace({ organizationId, organizationName, initialClients, initialSuppliers }: ContactsWorkspaceProps) {
+  const [clientRows, setClientRows] = useState<ContactListItem[]>(initialClients ?? artificialClientRows);
   const supplierRows: ContactListItem[] = initialSuppliers ?? artificialSupplierRows;
   const [activeSection, setActiveSection] = useState<ContactSectionId>("clients");
   const [isSectionMenuOpen, setIsSectionMenuOpen] = useState(false);
@@ -206,7 +208,7 @@ export function ContactsWorkspace({ organizationName, initialClients, initialSup
         </div>
 
         <footer className="contacts-list-count">
-          {activeSection === "clients" ? "45 elementos" : `${filteredRows.length} elementos`}
+          {`${filteredRows.length} elementos`}
         </footer>
       </aside>
 
@@ -220,7 +222,22 @@ export function ContactsWorkspace({ organizationName, initialClients, initialSup
           </div>
         ) : null}
         {isCreatingContact ? (
-          <NewContactForm sectionLabel={currentSection.label} onCancel={() => setIsCreatingContact(false)} />
+          <NewContactForm
+            organizationId={organizationId}
+            sectionLabel={currentSection.label}
+            onCancel={() => setIsCreatingContact(false)}
+            onCreated={(client) => {
+              setClientRows((current) => [client, ...current]);
+              setQuery("");
+              setSelectedClientId(client.id);
+              setActiveClientTab("info");
+              setIsCreatingContact(false);
+              setContactsNotice(`${client.name} creado.`);
+            }}
+            onPersistenceError={(message) => {
+              setContactsNotice(`Cliente creado en la vista, pero no se pudo guardar: ${message}`);
+            }}
+          />
         ) : activeSection !== "clients" ? (
           <ContactCategoryPlaceholder sectionLabel={currentSection.label} />
         ) : selectedClient ? (
@@ -368,7 +385,7 @@ function ClientDetail({
         {activeTab === "contacts" ? <ClientContactsPanel onNotice={onNotice} /> : null}
         {activeTab === "payment" ? <ClientPaymentPanel onNotice={onNotice} /> : null}
         {activeTab === "addresses" ? <ClientAddressesPanel onNotice={onNotice} /> : null}
-        {activeTab === "sales" ? <ClientSalesPanel organizationName={organizationName} /> : null}
+        {activeTab === "sales" ? <ClientSalesPanel client={client} organizationName={organizationName} /> : null}
       </section>
 
       <footer className="client-sticky-bar">
@@ -458,8 +475,13 @@ function ClientInfoPanel({
         <h2>Direccion e informacion de contacto</h2>
         <ClientAddressCard
           title="Direccion principal"
-          lines={["CALLE JORGE JUAN 2 ESC 3 PTA 9", "28703 SAN SEBASTIAN DE LOS RE...", "MADRID - ESPANA"]}
+          lines={[
+            client.fiscalAddress || "Sin domicilio informado",
+            [client.postalCode, client.city].filter(Boolean).join(" "),
+            client.province || ""
+          ].filter(Boolean)}
           footerLabel="Igual que direccion de entrega"
+          isEmpty={!client.fiscalAddress}
           onNotice={onNotice}
         />
         <ClientAddressCard title="Contacto principal" lines={[]} footerLabel="Editar" isEmpty onNotice={onNotice} />
@@ -556,7 +578,7 @@ function ClientAddressesPanel({ onNotice }: { onNotice: (notice: ContactNotice) 
   );
 }
 
-function ClientSalesPanel({ organizationName }: { organizationName: string }) {
+function ClientSalesPanel({ client, organizationName }: { client: ContactListItem; organizationName: string }) {
   return (
     <div className="client-sales-grid">
       <section>
@@ -586,6 +608,10 @@ function ClientSalesPanel({ organizationName }: { organizationName: string }) {
           <span>% descuento a cliente</span>
           <input defaultValue="0,00" />
         </label>
+        <label className="sage-field client-discount-field">
+          <span>IRPF por defecto</span>
+          <input defaultValue={client.applyIrpfByDefault ? `${client.defaultIrpfRate ?? 15},00` : "0,00"} />
+        </label>
       </section>
 
       <section>
@@ -610,14 +636,75 @@ function ClientBlockToggle({ title, description }: { title: string; description:
   );
 }
 
-function NewContactForm({ sectionLabel, onCancel }: { sectionLabel: string; onCancel: () => void }) {
+function NewContactForm({
+  organizationId,
+  sectionLabel,
+  onCancel,
+  onCreated,
+  onPersistenceError
+}: {
+  organizationId: string;
+  sectionLabel: string;
+  onCancel: () => void;
+  onCreated: (client: ContactListItem) => void;
+  onPersistenceError: (message: string) => void;
+}) {
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
   const [taxId, setTaxId] = useState("");
   const [email, setEmail] = useState("");
-  const canCreate = name.trim().length > 0 && code.trim().length > 0;
-  const handleCreate = () => {
-    onCancel();
+  const [phone, setPhone] = useState("");
+  const [address, setAddress] = useState("");
+  const [city, setCity] = useState("");
+  const [province, setProvince] = useState("");
+  const [postalCode, setPostalCode] = useState("");
+  const [applyIrpf, setApplyIrpf] = useState(true);
+  const [irpfRate, setIrpfRate] = useState("15");
+  const [error, setError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const canCreate = name.trim().length > 0 && !isSaving;
+  const handleCreate = async () => {
+    const formData = new FormData();
+
+    formData.set("organization_id", organizationId);
+    formData.set("code", code);
+    formData.set("name", name);
+    formData.set("tax_id", taxId);
+    formData.set("contact_email", email);
+    formData.set("contact_phone", phone);
+    formData.set("fiscal_address", address);
+    formData.set("city", city);
+    formData.set("province", province);
+    formData.set("postal_code", postalCode);
+    formData.set("country", "ES");
+    formData.set("type", "company");
+    if (applyIrpf) {
+      formData.set("apply_irpf_by_default", "on");
+      formData.set("default_irpf_rate", irpfRate);
+    }
+
+    setError(null);
+    setIsSaving(true);
+
+    onCreated({
+      id: `client-pending-${Date.now()}`,
+      name,
+      code: code || `CLI-PEND-${Date.now().toString().slice(-4)}`,
+      taxId,
+      applyIrpfByDefault: applyIrpf,
+      city,
+      contactEmail: email,
+      defaultIrpfRate: Number(irpfRate) || 0,
+      fiscalAddress: address,
+      postalCode,
+      province
+    });
+
+    void createContactClient(formData).then((result) => {
+      if (result.error || !result.client) {
+        onPersistenceError(result.error ?? "No se pudo crear el cliente.");
+      }
+    });
   };
 
   return (
@@ -631,8 +718,8 @@ function NewContactForm({ sectionLabel, onCancel }: { sectionLabel: string; onCa
         <section>
           <h2>Informacion de empresa</h2>
           <label className="sage-field">
-            <span>Codigo *</span>
-            <input value={code} onChange={(e) => setCode(e.target.value)} />
+            <span>Codigo</span>
+            <input value={code} onChange={(e) => setCode(e.target.value)} placeholder="Automatico" />
           </label>
           <label className="sage-field">
             <span>Razon social o nombre *</span>
@@ -647,6 +734,10 @@ function NewContactForm({ sectionLabel, onCancel }: { sectionLabel: string; onCa
             <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" />
           </label>
           <label className="sage-field">
+            <span>Telefono</span>
+            <input value={phone} onChange={(e) => setPhone(e.target.value)} />
+          </label>
+          <label className="sage-field">
             <span>Pais</span>
             <select defaultValue="ES - ES">
               <option>ES - ES</option>
@@ -655,10 +746,52 @@ function NewContactForm({ sectionLabel, onCancel }: { sectionLabel: string; onCa
             </select>
           </label>
         </section>
+        <section>
+          <h2>Domicilio del cliente</h2>
+          <label className="sage-field">
+            <span>Domicilio</span>
+            <input value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Calle, numero, piso" />
+          </label>
+          <label className="sage-field">
+            <span>Poblacion</span>
+            <input value={city} onChange={(e) => setCity(e.target.value)} />
+          </label>
+          <label className="sage-field">
+            <span>Provincia</span>
+            <input value={province} onChange={(e) => setProvince(e.target.value)} />
+          </label>
+          <label className="sage-field">
+            <span>Codigo postal</span>
+            <input value={postalCode} onChange={(e) => setPostalCode(e.target.value)} inputMode="numeric" />
+          </label>
+
+          <h2>Retencion IRPF</h2>
+          <label className="client-block-toggle">
+            <strong>Aplicar IRPF por defecto</strong>
+            <p>Se usara al crear facturas para este cliente.</p>
+            <span className="sage-toggle-row">
+              <input checked={applyIrpf} onChange={(e) => setApplyIrpf(e.target.checked)} type="checkbox" />
+            </span>
+          </label>
+          <label className="sage-field client-short-field">
+            <span>IRPF %</span>
+            <input
+              disabled={!applyIrpf}
+              max="100"
+              min="0"
+              onChange={(e) => setIrpfRate(e.target.value)}
+              type="number"
+              value={irpfRate}
+            />
+          </label>
+        </section>
       </div>
+      {error ? <div className="sales-live-notice warning contacts-notice" role="alert">{error}</div> : null}
       <footer className="client-sticky-bar">
         <button className="quote-cancel-action" onClick={onCancel} type="button">Cancelar</button>
-        <button className="client-update-action" disabled={!canCreate} onClick={handleCreate} type="button">Crear</button>
+        <button className="client-update-action" disabled={!canCreate} onClick={handleCreate} type="button">
+          {isSaving ? "Creando..." : "Crear"}
+        </button>
       </footer>
     </section>
   );

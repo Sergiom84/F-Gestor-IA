@@ -6,6 +6,7 @@ export async function ContactsSection({ organizationId, organizationName }: { or
 
   return (
     <ContactsWorkspace
+      organizationId={organizationId}
       organizationName={organizationName}
       initialClients={data.clients}
       initialSuppliers={data.suppliers}

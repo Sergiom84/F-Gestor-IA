@@ -27,8 +27,9 @@ import {
 } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
+import { createSalesInvoice } from "../../commercial-actions";
 import { artificialSalesDefaults, artificialSalesDocuments } from "../../_data/artificial-business-data";
-import type { SalesSectionId } from "../../_data/artificial-business-data";
+import type { ArtificialContactListItem, SalesSectionId } from "../../_data/artificial-business-data";
 import type { SalesDocRow } from "../../_lib/types";
 import { formatMoney } from "../../_lib/formatters";
 
@@ -318,11 +319,14 @@ function resolveSalesSectionId(value: string | null): SalesSectionId | null {
 }
 
 type SalesWorkspaceProps = {
+  clients: ArtificialContactListItem[];
+  fiscalEntities: Array<{ id: string; name: string }>;
+  organizationId: string;
   organizationName: string;
   initialDocuments?: Record<SalesSectionId, SalesDocumentRow[]>;
 };
 
-export function SalesWorkspace({ organizationName, initialDocuments }: SalesWorkspaceProps) {
+export function SalesWorkspace({ clients, fiscalEntities, organizationId, organizationName, initialDocuments }: SalesWorkspaceProps) {
   const searchParams = useSearchParams();
   const sectionFromUrl = resolveSalesSectionId(searchParams.get("salesSection"));
   const [activeSectionId, setActiveSectionId] = useState<SalesSectionId>(sectionFromUrl ?? "invoices");
@@ -422,7 +426,24 @@ export function SalesWorkspace({ organizationName, initialDocuments }: SalesWork
     <section className="sales-module-shell sections-collapsed" aria-label="Modulo de ventas">
       <div className="sales-operation-surface">
         {isCreating ? (
-          <QuoteForm section={activeSection} onCancel={() => setIsCreating(false)} />
+          <QuoteForm
+            clients={clients}
+            fiscalEntities={fiscalEntities}
+            organizationId={organizationId}
+            section={activeSection}
+            onCancel={() => setIsCreating(false)}
+            onCreated={(invoice) => {
+              setDocumentsBySection((current) => ({
+                ...current,
+                [activeSectionId]: [invoice, ...current[activeSectionId]]
+              }));
+              setIsCreating(false);
+              setNotice({ tone: "success", text: `Factura ${invoice.number} creada.` });
+            }}
+            onPersistenceError={(message) => {
+              setNotice({ tone: "warning", text: `Factura creada en la vista, pero no se pudo guardar: ${message}` });
+            }}
+          />
         ) : (
           <DocumentList
             activeSection={activeSection}
@@ -1076,15 +1097,39 @@ function DeleteDocumentPanel({
   );
 }
 
-function QuoteForm({ section, onCancel }: { section: SalesSection; onCancel: () => void }) {
+function QuoteForm({
+  clients,
+  fiscalEntities,
+  organizationId,
+  section,
+  onCancel,
+  onCreated,
+  onPersistenceError
+}: {
+  clients: ArtificialContactListItem[];
+  fiscalEntities: Array<{ id: string; name: string }>;
+  organizationId: string;
+  section: SalesSection;
+  onCancel: () => void;
+  onCreated: (invoice: SalesDocumentRow) => void;
+  onPersistenceError: (message: string) => void;
+}) {
   const [activeTab, setActiveTab] = useState<QuoteFormTab>("products");
+  const [clientId, setClientId] = useState("");
   const [client, setClient] = useState("");
+  const [clientEmail, setClientEmail] = useState("");
+  const [clientPhone, setClientPhone] = useState("");
   const [reference, setReference] = useState("");
   const [quoteDate, setQuoteDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [lines, setLines] = useState<QuoteLine[]>([]);
   const [discountPercent, setDiscountPercent] = useState(0);
+  const [retentionRate, setRetentionRate] = useState(15);
+  const [suplidoAmount, setSuplidoAmount] = useState(0);
+  const [pdfTemplate, setPdfTemplate] = useState("standard");
   const [customMessage, setCustomMessage] = useState("");
   const [internalNotes, setInternalNotes] = useState("");
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
   const subtotal = lines.reduce((total, line) => {
     const rawLineTotal = line.quantity * line.unitPrice;
     const discountAmount = rawLineTotal * (line.discount / 100);
@@ -1094,8 +1139,24 @@ function QuoteForm({ section, onCancel }: { section: SalesSection; onCancel: () 
   const clientDiscount = subtotal * (discountPercent / 100);
   const taxableBase = Math.max(subtotal - clientDiscount, 0);
   const taxTotal = taxableBase * 0.21;
-  const total = taxableBase + taxTotal;
-  const canCreate = client.trim().length > 0 && lines.length > 0;
+  const retentionTotal = taxableBase * (retentionRate / 100);
+  const total = taxableBase + taxTotal - retentionTotal + suplidoAmount;
+  const canCreate = client.trim().length > 0 && lines.length > 0 && !isSaving;
+
+  const selectClient = (nextClientId: string) => {
+    setClientId(nextClientId);
+    const selectedClient = clients.find((item) => item.id === nextClientId);
+
+    if (!selectedClient) {
+      return;
+    }
+
+    setClient(selectedClient.name);
+    setClientEmail(selectedClient.contactEmail ?? "");
+    if (selectedClient.applyIrpfByDefault) {
+      setRetentionRate(selectedClient.defaultIrpfRate ?? 15);
+    }
+  };
 
   const addLine = () => {
     setLines((current) => [
@@ -1131,6 +1192,46 @@ function QuoteForm({ section, onCancel }: { section: SalesSection; onCancel: () 
     setLines((current) => current.filter((line) => line.id !== id));
   };
 
+  const submitInvoice = async () => {
+    const formData = new FormData();
+
+    const invoiceNumber = `VENTA-${new Date().toISOString().slice(0, 10).replace(/-/g, "")}-${Date.now().toString().slice(-5)}`;
+
+    formData.set("organization_id", organizationId);
+    formData.set("client_id", clientId);
+    formData.set("client_name", client);
+    formData.set("client_email", clientEmail);
+    formData.set("client_phone", clientPhone);
+    formData.set("invoice_number", invoiceNumber);
+    formData.set("reference", reference);
+    formData.set("issue_date", quoteDate);
+    formData.set("retention_rate", String(retentionRate));
+    formData.set("suplido_amount", String(suplidoAmount));
+    formData.set("pdf_template", pdfTemplate);
+    formData.set("notes", [customMessage, internalNotes].filter(Boolean).join("\n\n"));
+    formData.set("lines_json", JSON.stringify(lines));
+
+    setSubmitError(null);
+    setIsSaving(true);
+
+    onCreated({
+      id: `invoice-pending-${Date.now()}`,
+      status: "Borrador",
+      date: new Date(quoteDate).toLocaleDateString("es-ES"),
+      number: invoiceNumber,
+      reference,
+      clientCode: clients.find((item) => item.id === clientId)?.code ?? "",
+      client,
+      total
+    });
+
+    void createSalesInvoice(formData).then((result) => {
+      if (result.error || !result.invoice) {
+        onPersistenceError(result.error ?? "No se pudo crear la factura.");
+      }
+    });
+  };
+
   return (
     <section className="quote-form-screen" aria-label={section.singularTitle}>
       <header className="quote-form-heading">
@@ -1144,8 +1245,11 @@ function QuoteForm({ section, onCancel }: { section: SalesSection; onCancel: () 
         <div className="quote-top-grid">
           <label className="sage-field">
             <span>Cliente</span>
-            <select value={client} onChange={(event) => setClient(event.target.value)}>
+            <select value={clientId} onChange={(event) => selectClient(event.target.value)}>
               <option value="">Seleccionar...</option>
+              {clients.map((clientOption) => (
+                <option key={clientOption.id} value={clientOption.id}>{clientOption.name}</option>
+              ))}
             </select>
           </label>
           <label className="sage-field">
@@ -1154,6 +1258,13 @@ function QuoteForm({ section, onCancel }: { section: SalesSection; onCancel: () 
               <option>N/A</option>
               <option>VENTA</option>
               <option>2026</option>
+            </select>
+          </label>
+          <label className="sage-field">
+            <span>Plantilla PDF</span>
+            <select value={pdfTemplate} onChange={(event) => setPdfTemplate(event.target.value)}>
+              <option value="standard">Factura estandar</option>
+              <option value="tablamax">TABLAMAX con impuestos y suplido</option>
             </select>
           </label>
           <label className="sage-field">
@@ -1180,11 +1291,11 @@ function QuoteForm({ section, onCancel }: { section: SalesSection; onCancel: () 
           </label>
           <label className="sage-field">
             <span>E-mail</span>
-            <input type="email" />
+            <input onChange={(event) => setClientEmail(event.target.value)} type="email" value={clientEmail} />
           </label>
           <label className="sage-field span-2">
             <span>Telefono</span>
-            <input />
+            <input onChange={(event) => setClientPhone(event.target.value)} value={clientPhone} />
           </label>
           <label className="sage-field span-2">
             <span>Pais *</span>
@@ -1221,7 +1332,12 @@ function QuoteForm({ section, onCancel }: { section: SalesSection; onCancel: () 
             productDiscount={subtotal - lines.reduce((totalLine, line) => totalLine + line.quantity * line.unitPrice, 0)}
             subtotal={subtotal}
             taxableBase={taxableBase}
+            retentionRate={retentionRate}
+            retentionTotal={retentionTotal}
+            suplidoAmount={suplidoAmount}
             onDiscountPercentChange={setDiscountPercent}
+            onRetentionRateChange={setRetentionRate}
+            onSuplidoAmountChange={setSuplidoAmount}
           />
         ) : null}
         {activeTab === "notes" ? (
@@ -1232,10 +1348,21 @@ function QuoteForm({ section, onCancel }: { section: SalesSection; onCancel: () 
             onInternalNotesChange={setInternalNotes}
           />
         ) : null}
-        {activeTab === "client" ? <ClientInfoTab /> : null}
+        {activeTab === "client" ? <ClientInfoTab pdfTemplate={pdfTemplate} onPdfTemplateChange={setPdfTemplate} /> : null}
       </section>
 
-      <QuoteStickyBar canCreate={canCreate} taxableBase={taxableBase} taxTotal={taxTotal} total={total} onCancel={onCancel} />
+      {submitError ? <div className="sales-live-notice warning" role="alert">{submitError}</div> : null}
+      <QuoteStickyBar
+        canCreate={canCreate}
+        isPending={isSaving}
+        taxableBase={taxableBase}
+        taxTotal={taxTotal}
+        retentionTotal={retentionTotal}
+        suplidoAmount={suplidoAmount}
+        total={total}
+        onCancel={onCancel}
+        onCreate={submitInvoice}
+      />
     </section>
   );
 }
@@ -1398,16 +1525,26 @@ function TotalsTab({
   clientDiscount,
   discountPercent,
   productDiscount,
+  retentionRate,
+  retentionTotal,
   subtotal,
+  suplidoAmount,
   taxableBase,
-  onDiscountPercentChange
+  onDiscountPercentChange,
+  onRetentionRateChange,
+  onSuplidoAmountChange
 }: {
   clientDiscount: number;
   discountPercent: number;
   productDiscount: number;
+  retentionRate: number;
+  retentionTotal: number;
   subtotal: number;
+  suplidoAmount: number;
   taxableBase: number;
   onDiscountPercentChange: (value: number) => void;
+  onRetentionRateChange: (value: number) => void;
+  onSuplidoAmountChange: (value: number) => void;
 }) {
   return (
     <div className="totals-panel">
@@ -1424,6 +1561,26 @@ function TotalsTab({
       </label>
       <SummaryBox label="Descuento de cliente" value={clientDiscount} />
       <SummaryBox label="Total base imponible" value={taxableBase} />
+      <label className="sage-field discount-field">
+        <span>IRPF / retencion %</span>
+        <input
+          max="100"
+          min="0"
+          onChange={(event) => onRetentionRateChange(Number(event.target.value))}
+          type="number"
+          value={retentionRate}
+        />
+      </label>
+      <SummaryBox label="Retencion IRPF" value={-retentionTotal} />
+      <label className="sage-field discount-field">
+        <span>Suplido</span>
+        <input
+          min="0"
+          onChange={(event) => onSuplidoAmountChange(Number(event.target.value))}
+          type="number"
+          value={suplidoAmount}
+        />
+      </label>
     </div>
   );
 }
@@ -1466,7 +1623,13 @@ function NotesTab({
   );
 }
 
-function ClientInfoTab() {
+function ClientInfoTab({
+  pdfTemplate,
+  onPdfTemplateChange
+}: {
+  pdfTemplate: string;
+  onPdfTemplateChange: (value: string) => void;
+}) {
   return (
     <div className="client-info-panel">
       <section>
@@ -1524,6 +1687,13 @@ function ClientInfoTab() {
           <span>Recargo de equivalencia</span>
           <button type="button">OFF</button>
         </div>
+        <label className="sage-field">
+          <span>Plantilla PDF</span>
+          <select value={pdfTemplate} onChange={(event) => onPdfTemplateChange(event.target.value)}>
+            <option value="standard">Factura estandar</option>
+            <option value="tablamax">TABLAMAX con impuestos y suplido</option>
+          </select>
+        </label>
       </section>
 
       <section>
@@ -1561,25 +1731,35 @@ function AddressBox({ title }: { title: string }) {
 
 function QuoteStickyBar({
   canCreate,
+  isPending,
+  onCancel,
+  onCreate,
+  retentionTotal,
+  suplidoAmount,
   taxableBase,
   taxTotal,
-  total,
-  onCancel
+  total
 }: {
   canCreate: boolean;
+  isPending: boolean;
+  onCancel: () => void;
+  onCreate: () => void;
+  retentionTotal: number;
+  suplidoAmount: number;
   taxableBase: number;
   taxTotal: number;
   total: number;
-  onCancel: () => void;
 }) {
   return (
     <footer className="quote-sticky-bar">
       <SummaryBox label="Total base imponible" value={taxableBase} />
       <SummaryBox label="Total IVA" value={taxTotal} />
+      <SummaryBox label="Retencion IRPF" value={-retentionTotal} />
+      <SummaryBox label="Suplido" value={suplidoAmount} />
       <SummaryBox label="Total" value={total} />
       <button className="quote-cancel-action" onClick={onCancel} type="button">Cancelar</button>
-      <button className="quote-create-action" disabled={!canCreate} type="button">
-        Crear
+      <button className="quote-create-action" disabled={!canCreate} onClick={onCreate} type="button">
+        {isPending ? "Creando..." : "Crear"}
       </button>
       <button className="quote-create-more" disabled={!canCreate} type="button" aria-label="Mas opciones de creacion">
         <ChevronDown aria-hidden="true" size={18} />

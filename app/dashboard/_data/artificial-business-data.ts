@@ -58,6 +58,13 @@ export type ArtificialContactListItem = {
   name: string;
   code: string;
   taxId: string;
+  applyIrpfByDefault?: boolean;
+  city?: string;
+  contactEmail?: string;
+  defaultIrpfRate?: number;
+  fiscalAddress?: string;
+  postalCode?: string;
+  province?: string;
 };
 
 export const artificialClientRows: ArtificialContactListItem[] = [];
