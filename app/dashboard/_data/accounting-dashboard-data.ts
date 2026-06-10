@@ -34,7 +34,6 @@ type EntryLineRow = {
   account_code: string;
   debit: number;
   credit: number;
-  accounting_entries: { status: string; deleted_at: string | null; entry_date: string } | null;
 };
 
 export async function readAccountingDashboardData(
@@ -43,15 +42,19 @@ export async function readAccountingDashboardData(
   try {
     const supabase = await createClient();
     const currentYear = new Date().getFullYear();
+    const yearStart = `${currentYear}-01-01`;
+    const yearEnd = `${currentYear}-12-31`;
 
     const [linesResult, assetsResult, salesFallbackResult, purchasesFallbackResult] =
       await Promise.all([
         supabase
           .from("accounting_entry_lines")
-          .select(
-            "account_code, debit, credit, accounting_entries!entry_id(status, deleted_at, entry_date)"
-          )
+          .select("account_code, debit, credit, accounting_entries!entry_id!inner(entry_date)")
           .eq("organization_id", organizationId)
+          .eq("accounting_entries.status", "posted")
+          .is("accounting_entries.deleted_at", null)
+          .gte("accounting_entries.entry_date", yearStart)
+          .lte("accounting_entries.entry_date", yearEnd)
           .returns<EntryLineRow[]>(),
         supabase
           .from("accounting_fixed_assets")
@@ -70,15 +73,7 @@ export async function readAccountingDashboardData(
           .in("status", ["approved", "paid"])
       ]);
 
-    const allLines: EntryLineRow[] = linesResult.data ?? [];
-
-    const postedLines = allLines.filter((line) => {
-      const entry = line.accounting_entries;
-      if (!entry) return false;
-      if (entry.status !== "posted") return false;
-      if (entry.deleted_at !== null) return false;
-      return new Date(entry.entry_date).getFullYear() === currentYear;
-    });
+    const postedLines: EntryLineRow[] = linesResult.data ?? [];
 
     let sales = 0;
     let purchases = 0;
