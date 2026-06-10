@@ -1,4 +1,4 @@
-import { AccountingWorkspace } from "./accounting/accounting-workspace";
+import { AccountingSection } from "./accounting/accounting-section";
 import { AccountingDashboard } from "./dashboard/accounting-dashboard";
 import { GestoriaDashboard } from "./dashboard/gestoria-dashboard";
 import { SalesDashboardSection } from "./dashboard/sales-dashboard-section";
@@ -41,7 +41,10 @@ const sectionRegistry = {
     />
   ),
   accounting: (data) => (
-    <AccountingWorkspace organizationName={data.activeOrganization.name} />
+    <AccountingSection
+      organizationId={data.activeOrganization.id}
+      organizationName={data.activeOrganization.name}
+    />
   ),
   banks: (data) => <ReferenceModuleSection data={data} module="banks" />,
   tax: (data) => <ReferenceModuleSection data={data} module="tax" />,
