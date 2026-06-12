@@ -565,8 +565,8 @@ function ProductServiceForm({
   const [unitMeasure, setUnitMeasure] = useState<ProductUnitMeasure>("hour");
   const [description, setDescription] = useState("");
   const [internalComments, setInternalComments] = useState("");
-  const [price, setPrice] = useState("0,00");
-  const [discountPercent, setDiscountPercent] = useState("0,00");
+  const [price, setPrice] = useState("");
+  const [discountPercent, setDiscountPercent] = useState("");
   const [taxGroup, setTaxGroup] = useState(taxGroupOptions[0]!.label);
   const [inactive, setInactive] = useState(false);
   const [blockOrders, setBlockOrders] = useState(false);
@@ -582,6 +582,16 @@ function ProductServiceForm({
   const taxAmount = discountedPrice * (taxRate / 100);
   const priceWithTax = discountedPrice + taxAmount;
   const canCreate = code.trim().length > 0 && name.trim().length > 0 && !isSaving;
+
+  const requestCreate = () => {
+    if (activeTab === "basic") {
+      window.alert("Dirígete a Precios y descuento de venta para continuar con la creación del Servicio.");
+      setActiveTab("pricing");
+      return;
+    }
+
+    void submitProduct();
+  };
 
   const submitProduct = async () => {
     const formData = new FormData();
@@ -725,11 +735,11 @@ function ProductServiceForm({
             <div className="product-price-grid">
               <label className="sage-field product-money-field">
                 <span>Precio</span>
-                <input inputMode="decimal" onChange={(event) => setPrice(event.target.value)} value={price} />
+                <input inputMode="decimal" onChange={(event) => setPrice(event.target.value)} placeholder="0,00" value={price} />
               </label>
               <label className="sage-field product-money-field">
                 <span>Porcentaje de descuento</span>
-                <input inputMode="decimal" onChange={(event) => setDiscountPercent(event.target.value)} value={discountPercent} />
+                <input inputMode="decimal" onChange={(event) => setDiscountPercent(event.target.value)} placeholder="0,00" value={discountPercent} />
               </label>
               <label className="sage-field product-money-field">
                 <span>Importe de descuento</span>
@@ -743,7 +753,10 @@ function ProductServiceForm({
                 <span>Cuota de impuesto</span>
                 <input readOnly value={formatMoney(taxAmount)} />
               </label>
-              <SummaryBox label="Precio con IVA y descuento" value={priceWithTax} />
+              <label className="sage-field product-money-field product-price-with-tax-field">
+                <span>Precio con IVA y descuento</span>
+                <input readOnly value={formatMoney(priceWithTax)} />
+              </label>
               <label className="sage-field product-account-field">
                 <span>Cuenta contable</span>
                 <select defaultValue="700000000 - Ventas de mercaderias">
@@ -786,7 +799,7 @@ function ProductServiceForm({
         canCreate={canCreate}
         isPending={isSaving}
         onCancel={onCancel}
-        onCreate={() => { void submitProduct(); }}
+        onCreate={requestCreate}
         summaries={[
           { label: "Precio", value: priceValue },
           { label: "Precio con IVA y descuento", value: priceWithTax }

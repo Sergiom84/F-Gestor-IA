@@ -2265,6 +2265,14 @@ function formatPercent(value: number): string {
   }).format(value)}%`;
 }
 
+function editableNumberValue(value: number): string {
+  return value === 0 ? "" : String(value);
+}
+
+function parseEditableNumber(value: string): number {
+  return value === "" ? 0 : Number(value);
+}
+
 function DeleteDocumentPanel({
   activeSection,
   row,
@@ -2769,18 +2777,18 @@ function ProductsTab({
                   <input
                     aria-label="Cantidad"
                     min="0"
-                    onChange={(event) => onUpdateLine(line.id, { quantity: Number(event.target.value) })}
+                    onChange={(event) => onUpdateLine(line.id, { quantity: parseEditableNumber(event.target.value) })}
                     type="number"
-                    value={line.quantity}
+                    value={editableNumberValue(line.quantity)}
                   />
                 </td>
                 <td>
                   <input
                     aria-label="Precio unitario"
                     min="0"
-                    onChange={(event) => onUpdateLine(line.id, { unitPrice: Number(event.target.value) })}
+                    onChange={(event) => onUpdateLine(line.id, { unitPrice: parseEditableNumber(event.target.value) })}
                     type="number"
-                    value={line.unitPrice}
+                    value={editableNumberValue(line.unitPrice)}
                   />
                 </td>
                 <td>
@@ -2788,9 +2796,9 @@ function ProductsTab({
                     aria-label="Descuento"
                     min="0"
                     max="100"
-                    onChange={(event) => onUpdateLine(line.id, { discount: Number(event.target.value) })}
+                    onChange={(event) => onUpdateLine(line.id, { discount: parseEditableNumber(event.target.value) })}
                     type="number"
-                    value={line.discount}
+                    value={editableNumberValue(line.discount)}
                   />
                 </td>
                 <td>
@@ -2869,9 +2877,9 @@ function TotalsTab({
       <label className="sage-field discount-field">
         <span>% descuento a cliente</span>
         <input
-          onChange={(event) => onDiscountPercentChange(Number(event.target.value))}
+          onChange={(event) => onDiscountPercentChange(parseEditableNumber(event.target.value))}
           type="number"
-          value={discountPercent}
+          value={editableNumberValue(discountPercent)}
         />
       </label>
       <SummaryBox label="Descuento de cliente" value={clientDiscount} />
@@ -2881,7 +2889,7 @@ function TotalsTab({
         <input
           max="100"
           min="0"
-          onChange={(event) => onRetentionRateChange(Number(event.target.value))}
+          onChange={(event) => onRetentionRateChange(parseEditableNumber(event.target.value))}
           type="number"
           value={retentionRate}
         />
@@ -2891,9 +2899,9 @@ function TotalsTab({
         <span>Suplido</span>
         <input
           min="0"
-          onChange={(event) => onSuplidoAmountChange(Number(event.target.value))}
+          onChange={(event) => onSuplidoAmountChange(parseEditableNumber(event.target.value))}
           type="number"
-          value={suplidoAmount}
+          value={editableNumberValue(suplidoAmount)}
         />
       </label>
     </div>
