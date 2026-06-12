@@ -9,7 +9,11 @@ export type ArtificialSalesDocumentRow = {
   number: string;
   reference: string;
   clientCode: string;
+  clientEmail?: string;
+  clientPhone?: string;
+  clientCountry?: string;
   client: string;
+  baseAvailable?: number;
   total: number;
 };
 

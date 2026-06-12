@@ -62,9 +62,10 @@ type DbSalesQuoteRow = {
   quote_number: string | null;
   quote_date: string | null;
   status: string;
+  subtotal_amount: number | null;
   total_amount: number;
   reference: string | null;
-  clients: { name: string; code: string | null } | null;
+  clients: { name: string; code: string | null; contact_email: string | null; contact_phone: string | null; country: string | null } | null;
 };
 
 type DbSalesOrderRow = {
@@ -345,7 +346,7 @@ export async function readSalesData(organizationId: string): Promise<SalesData> 
       .returns<DbSalesInvoiceRow[]>(),
     supabase
       .from("sales_quotes")
-      .select("id, quote_number, quote_date, status, total_amount, reference, clients!client_id(name, code)")
+      .select("id, quote_number, quote_date, status, subtotal_amount, total_amount, reference, clients!client_id(name, code, contact_email, contact_phone, country)")
       .eq("organization_id", organizationId)
       .is("deleted_at", null)
       .order("quote_date", { ascending: false })
@@ -424,7 +425,11 @@ export async function readSalesData(organizationId: string): Promise<SalesData> 
     number: row.quote_number ?? shortId(row.id),
     reference: row.reference ?? "",
     clientCode: row.clients?.code ?? "",
+    clientCountry: row.clients?.country ?? "ES",
+    clientEmail: row.clients?.contact_email ?? "",
+    clientPhone: row.clients?.contact_phone ?? "",
     client: row.clients?.name ?? "—",
+    baseAvailable: Number(row.subtotal_amount ?? 0),
     total: Number(row.total_amount)
   }));
 

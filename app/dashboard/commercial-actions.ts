@@ -1338,6 +1338,18 @@ export type SalesDocumentStatusDetail = {
   isPaid: boolean;
 };
 
+export type SalesQuoteLineDetail = {
+  id: string;
+  productOrService: string;
+  description: string;
+  quantity: number;
+  unitPrice: number;
+  discountRate: number;
+  taxableBase: number;
+  taxRate: number | null;
+  status: string;
+};
+
 export type SalesConfigPayload = {
   numbering?: { series?: string; nextNumber?: string; format?: string; reset?: string };
   payments?: { term?: string; method?: string; bankAccount?: string; reminder?: string };
@@ -1488,6 +1500,46 @@ export async function getSalesDocumentStatusDetail(
       isPaid: Boolean((eventResult.data?.metadata as { is_paid?: boolean } | null)?.is_paid),
       notes: String(eventResult.data?.notes ?? "")
     }
+  };
+}
+
+export async function getSalesQuoteLineDetails(
+  quoteId: string
+): Promise<{ error?: string; lines?: SalesQuoteLineDetail[] }> {
+  if (!isUuid(quoteId)) {
+    return { error: "Documento inválido." };
+  }
+
+  const { supabase } = await getAuthenticatedUser();
+  const { data, error } = await supabase
+    .from("sales_quote_lines")
+    .select("id, description, quantity, unit_price, discount_rate, line_total, tax_rate, products_services!product_service_id(code, name)")
+    .eq("sales_quote_id", quoteId)
+    .order("line_index", { ascending: true });
+
+  if (error) {
+    return { error: error.message };
+  }
+
+  return {
+    lines: (data ?? []).map((line) => {
+      const product = line.products_services as { code?: string | null; name?: string | null } | null;
+      const productLabel = product?.name
+        ? [product.code, product.name].filter(Boolean).join(" - ")
+        : String(line.description ?? "Servicio").split("\n")[0] || "Servicio";
+
+      return {
+        id: String(line.id),
+        productOrService: productLabel,
+        description: String(line.description ?? ""),
+        quantity: Number(line.quantity ?? 0),
+        unitPrice: Number(line.unit_price ?? 0),
+        discountRate: Number(line.discount_rate ?? 0),
+        taxableBase: Number(line.line_total ?? 0),
+        taxRate: line.tax_rate === null ? null : Number(line.tax_rate),
+        status: "Completa"
+      };
+    })
   };
 }
 

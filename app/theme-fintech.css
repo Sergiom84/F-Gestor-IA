@@ -241,7 +241,8 @@ textarea {
 .gfiscal-topbar-inner,
 .fiscal-workbench {
   margin: 0 auto;
-  max-width: 1320px;
+  max-width: 1680px;
+  width: 100%;
 }
 
 .gfiscal-topbar-inner {
