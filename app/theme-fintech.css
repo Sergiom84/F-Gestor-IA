@@ -703,13 +703,14 @@ textarea {
 }
 
 .sales-template-metric {
+  align-items: center;
   background: #ffffff;
   border: 1px solid var(--gf-line);
   border-radius: var(--gf-radius-card);
   box-shadow: var(--gf-shadow-sm);
-  display: grid;
-  gap: 8px;
-  min-height: 170px;
+  display: flex;
+  gap: 14px;
+  min-height: 104px;
   padding: 22px;
 }
 
@@ -743,7 +744,7 @@ textarea {
   font-weight: 900;
   letter-spacing: 0;
   line-height: 1;
-  margin-top: 8px;
+  margin-top: 0;
 }
 
 .sales-template-metric h2 {
@@ -757,6 +758,10 @@ textarea {
   color: #718096;
   font-size: 0.8125rem;
   margin: 0;
+}
+
+.sales-template-metric p {
+  flex-basis: 100%;
 }
 
 .sales-template-table-panel {

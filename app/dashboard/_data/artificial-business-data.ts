@@ -8,12 +8,24 @@ export type ArtificialSalesDocumentRow = {
   date: string;
   number: string;
   reference: string;
+  clientId?: string;
+  clientApplyIrpfByDefault?: boolean;
   clientCode: string;
   clientEmail?: string;
+  clientFiscalAddress?: string;
   clientPhone?: string;
   clientCountry?: string;
+  clientDefaultIrpfRate?: number;
+  clientPostalCode?: string;
+  clientProvince?: string;
+  clientTaxId?: string;
+  clientCity?: string;
   client: string;
   baseAvailable?: number;
+  taxAmount?: number;
+  retentionRate?: number;
+  retentionAmount?: number;
+  suplidoAmount?: number;
   total: number;
 };
 

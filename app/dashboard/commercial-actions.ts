@@ -919,15 +919,7 @@ export async function createSalesQuote(formData: FormData): Promise<{ error?: st
   }
 
   const quoteDateRaw = String(formData.get("quote_date") ?? "").trim();
-  const subtotalAmount = roundMoney(lines.reduce((sum, line) => {
-    const quantity = numberOrDefault(line.quantity, 1);
-    const unitPrice = numberOrDefault(line.unitPrice, 0);
-    const discountRate = numberOrDefault(line.discount, 0);
-    const gross = quantity * unitPrice;
-
-    return sum + gross - (gross * discountRate / 100);
-  }, 0));
-  const taxAmount = roundMoney(subtotalAmount * 0.21);
+  const { subtotalAmount, taxAmount } = calculateSalesLinesTotals(lines);
   const retentionRate = clampPercent(parseAmount(formData, "retention_rate", 0));
   const retentionAmount = roundMoney(subtotalAmount * retentionRate / 100);
   const suplidoAmount = Math.max(parseAmount(formData, "suplido_amount", 0), 0);
@@ -976,24 +968,10 @@ export async function createSalesQuote(formData: FormData): Promise<{ error?: st
 
   const quoteLinesResult = await supabase
     .from("sales_quote_lines")
-    .insert(lines.map((line, index) => {
-      const quantity = numberOrDefault(line.quantity, 1);
-      const unitPrice = numberOrDefault(line.unitPrice, 0);
-      const discountRate = clampPercent(numberOrDefault(line.discount, 0));
-      const gross = quantity * unitPrice;
-
-      return {
-        organization_id: organizationId,
-        sales_quote_id: data.id,
-        line_index: index,
-        description: line.description?.trim() || line.product?.trim() || "Servicio",
-        quantity,
-        unit_price: unitPrice,
-        tax_rate: 21,
-        discount_rate: discountRate,
-        line_total: roundMoney(gross - (gross * discountRate / 100))
-      };
-    }));
+    .insert(lines.map((line, index) => ({
+      ...buildSalesLineRow(organizationId, line, index),
+      sales_quote_id: data.id
+    })));
 
   if (quoteLinesResult.error) {
     await supabase
@@ -1041,15 +1019,7 @@ export async function createSalesOrder(formData: FormData): Promise<{ error?: st
   }
 
   const orderDateRaw = String(formData.get("order_date") ?? "").trim();
-  const subtotalAmount = roundMoney(lines.reduce((sum, line) => {
-    const quantity = numberOrDefault(line.quantity, 1);
-    const unitPrice = numberOrDefault(line.unitPrice, 0);
-    const discountRate = numberOrDefault(line.discount, 0);
-    const gross = quantity * unitPrice;
-
-    return sum + gross - (gross * discountRate / 100);
-  }, 0));
-  const taxAmount = roundMoney(subtotalAmount * 0.21);
+  const { subtotalAmount, taxAmount } = calculateSalesLinesTotals(lines);
   const retentionRate = clampPercent(parseAmount(formData, "retention_rate", 0));
   const retentionAmount = roundMoney(subtotalAmount * retentionRate / 100);
   const suplidoAmount = Math.max(parseAmount(formData, "suplido_amount", 0), 0);
@@ -1096,24 +1066,10 @@ export async function createSalesOrder(formData: FormData): Promise<{ error?: st
 
   const orderLinesResult = await supabase
     .from("sales_order_lines")
-    .insert(lines.map((line, index) => {
-      const quantity = numberOrDefault(line.quantity, 1);
-      const unitPrice = numberOrDefault(line.unitPrice, 0);
-      const discountRate = clampPercent(numberOrDefault(line.discount, 0));
-      const gross = quantity * unitPrice;
-
-      return {
-        organization_id: organizationId,
-        sales_order_id: data.id,
-        line_index: index,
-        description: line.description?.trim() || line.product?.trim() || "Servicio",
-        quantity,
-        unit_price: unitPrice,
-        tax_rate: 21,
-        discount_rate: discountRate,
-        line_total: roundMoney(gross - (gross * discountRate / 100))
-      };
-    }));
+    .insert(lines.map((line, index) => ({
+      ...buildSalesLineRow(organizationId, line, index),
+      sales_order_id: data.id
+    })));
 
   if (orderLinesResult.error) {
     await supabase
@@ -1138,7 +1094,9 @@ type SalesInvoiceLineInput = {
   description?: string;
   discount?: number;
   product?: string;
+  productId?: string;
   quantity?: number;
+  taxRate?: number;
   unitPrice?: number;
 };
 
@@ -1168,15 +1126,7 @@ export async function createSalesInvoice(formData: FormData): Promise<{ error?: 
     return { error: "Añade al menos una línea de producto o servicio." };
   }
 
-  const subtotalAmount = roundMoney(lines.reduce((sum, line) => {
-    const quantity = numberOrDefault(line.quantity, 1);
-    const unitPrice = numberOrDefault(line.unitPrice, 0);
-    const discountRate = numberOrDefault(line.discount, 0);
-    const gross = quantity * unitPrice;
-
-    return sum + gross - (gross * discountRate / 100);
-  }, 0));
-  const taxAmount = roundMoney(subtotalAmount * 0.21);
+  const { subtotalAmount, taxAmount } = calculateSalesLinesTotals(lines);
   const retentionRate = clampPercent(parseAmount(formData, "retention_rate", 0));
   const retentionAmount = roundMoney(subtotalAmount * retentionRate / 100);
   const suplidoAmount = Math.max(parseAmount(formData, "suplido_amount", 0), 0);
@@ -1250,35 +1200,19 @@ export async function createSalesInvoice(formData: FormData): Promise<{ error?: 
 
   const invoice = invoiceInsertResult.data;
 
-  const lineRows = lines.map((line, index) => {
-    const quantity = numberOrDefault(line.quantity, 1);
-    const unitPrice = numberOrDefault(line.unitPrice, 0);
-    const discountRate = clampPercent(numberOrDefault(line.discount, 0));
-    const gross = quantity * unitPrice;
-
-    return {
-      organization_id: organizationId,
-      sales_invoice_id: invoice.id,
-      line_index: index,
-      description: line.description?.trim() || line.product?.trim() || "Servicio",
-      quantity,
-      unit_price: unitPrice,
-      tax_rate: 21,
-      line_total: roundMoney(gross - (gross * discountRate / 100))
-    };
-  });
+  const lineRows = lines.map((line, index) => ({
+    ...buildSalesLineRow(organizationId, line, index),
+    sales_invoice_id: invoice.id
+  }));
 
   let linesResult = await supabase
     .from("sales_invoice_lines")
-    .insert(lineRows.map((line, index) => ({
-      ...line,
-      discount_rate: clampPercent(numberOrDefault(lines[index]?.discount, 0))
-    })));
+    .insert(lineRows);
 
   if (linesResult.error) {
     linesResult = await supabase
       .from("sales_invoice_lines")
-      .insert(lineRows);
+      .insert(lineRows.map(({ product_service_id, ...line }) => line));
   }
 
   if (linesResult.error) {
@@ -1512,6 +1446,51 @@ function roundMoney(value: number): number {
   return Math.round((value + Number.EPSILON) * 100) / 100;
 }
 
+function lineProductServiceId(line: SalesInvoiceLineInput): string | null {
+  const productId = String(line.productId ?? "").trim();
+
+  return isUuid(productId) ? productId : null;
+}
+
+function lineTaxRate(line: SalesInvoiceLineInput): number {
+  return clampPercent(numberOrDefault(line.taxRate, 21));
+}
+
+function calculateSalesLinesTotals(lines: SalesInvoiceLineInput[]): { subtotalAmount: number; taxAmount: number } {
+  return lines.reduce((totals, line) => {
+    const quantity = numberOrDefault(line.quantity, 1);
+    const unitPrice = numberOrDefault(line.unitPrice, 0);
+    const discountRate = clampPercent(numberOrDefault(line.discount, 0));
+    const gross = quantity * unitPrice;
+    const lineTotal = roundMoney(gross - (gross * discountRate / 100));
+    const lineTaxAmount = roundMoney(lineTotal * (lineTaxRate(line) / 100));
+
+    return {
+      subtotalAmount: roundMoney(totals.subtotalAmount + lineTotal),
+      taxAmount: roundMoney(totals.taxAmount + lineTaxAmount)
+    };
+  }, { subtotalAmount: 0, taxAmount: 0 });
+}
+
+function buildSalesLineRow(organizationId: string, line: SalesInvoiceLineInput, index: number) {
+  const quantity = numberOrDefault(line.quantity, 1);
+  const unitPrice = numberOrDefault(line.unitPrice, 0);
+  const discountRate = clampPercent(numberOrDefault(line.discount, 0));
+  const gross = quantity * unitPrice;
+
+  return {
+    organization_id: organizationId,
+    product_service_id: lineProductServiceId(line),
+    line_index: index,
+    description: line.description?.trim() || line.product?.trim() || "Servicio",
+    quantity,
+    unit_price: unitPrice,
+    tax_rate: lineTaxRate(line),
+    discount_rate: discountRate,
+    line_total: roundMoney(gross - (gross * discountRate / 100))
+  };
+}
+
 export type SalesDocumentKind = "invoice" | "quote" | "order" | "delivery-note" | "recurring-invoice";
 export type SalesDocumentStatusDetail = {
   currentStatus: string;
@@ -1532,6 +1511,17 @@ export type SalesQuoteLineDetail = {
   taxableBase: number;
   taxRate: number | null;
   status: string;
+};
+
+type SalesDocumentLineResult = {
+  id: string;
+  description: string | null;
+  quantity: number | null;
+  unit_price: number | null;
+  discount_rate: number | null;
+  line_total: number | null;
+  tax_rate: number | null;
+  products_services?: { code?: string | null; name?: string | null } | null;
 };
 
 export type SalesConfigPayload = {
@@ -1558,6 +1548,30 @@ function salesDocumentTable(kind: SalesDocumentKind): "sales_invoices" | "sales_
   if (kind === "delivery-note") return "sales_delivery_notes";
   if (kind === "recurring-invoice") return "sales_recurring_invoices";
   return "sales_invoices";
+}
+
+function salesDocumentLineConfig(kind: SalesDocumentKind): {
+  table: "sales_invoice_lines" | "sales_quote_lines" | "sales_order_lines" | "sales_delivery_note_lines" | "sales_recurring_invoice_lines";
+  documentColumn: "sales_invoice_id" | "sales_quote_id" | "sales_order_id" | "sales_delivery_note_id" | "sales_recurring_invoice_id";
+  hasProductService: boolean;
+} {
+  if (kind === "quote") {
+    return { table: "sales_quote_lines", documentColumn: "sales_quote_id", hasProductService: true };
+  }
+
+  if (kind === "order") {
+    return { table: "sales_order_lines", documentColumn: "sales_order_id", hasProductService: true };
+  }
+
+  if (kind === "delivery-note") {
+    return { table: "sales_delivery_note_lines", documentColumn: "sales_delivery_note_id", hasProductService: false };
+  }
+
+  if (kind === "recurring-invoice") {
+    return { table: "sales_recurring_invoice_lines", documentColumn: "sales_recurring_invoice_id", hasProductService: false };
+  }
+
+  return { table: "sales_invoice_lines", documentColumn: "sales_invoice_id", hasProductService: true };
 }
 
 export async function updateSalesDocumentStatus(
@@ -1687,18 +1701,63 @@ export async function getSalesDocumentStatusDetail(
   };
 }
 
-export async function getSalesQuoteLineDetails(
-  quoteId: string
-): Promise<{ error?: string; lines?: SalesQuoteLineDetail[] }> {
-  if (!isUuid(quoteId)) {
+export async function getSalesDocumentNotes(kind: SalesDocumentKind, documentId: string): Promise<{ error?: string; notes?: string }> {
+  if (!isUuid(documentId)) {
     return { error: "Documento inválido." };
   }
 
   const { supabase } = await getAuthenticatedUser();
   const { data, error } = await supabase
-    .from("sales_quote_lines")
-    .select("id, description, quantity, unit_price, discount_rate, line_total, tax_rate, products_services!product_service_id(code, name)")
-    .eq("sales_quote_id", quoteId)
+    .from(salesDocumentTable(kind))
+    .select("notes")
+    .eq("id", documentId)
+    .is("deleted_at", null)
+    .maybeSingle();
+
+  if (error || !data) {
+    return { error: error?.message ?? "Documento no encontrado." };
+  }
+
+  return { notes: String(data.notes ?? "") };
+}
+
+export async function updateSalesDocumentNotes(kind: SalesDocumentKind, documentId: string, notes: string): Promise<{ error?: string }> {
+  if (!isUuid(documentId)) {
+    return { error: "Documento inválido." };
+  }
+
+  const { supabase } = await getAuthenticatedUser();
+  const { error } = await supabase
+    .from(salesDocumentTable(kind))
+    .update({ notes: notes.trim() || null })
+    .eq("id", documentId)
+    .is("deleted_at", null);
+
+  if (error) {
+    return { error: error.message };
+  }
+
+  revalidatePath("/dashboard");
+  return {};
+}
+
+export async function getSalesDocumentLineDetails(
+  kind: SalesDocumentKind,
+  documentId: string
+): Promise<{ error?: string; lines?: SalesQuoteLineDetail[] }> {
+  if (!isUuid(documentId)) {
+    return { error: "Documento inválido." };
+  }
+
+  const { supabase } = await getAuthenticatedUser();
+  const lineConfig = salesDocumentLineConfig(kind);
+  const selectColumns = lineConfig.hasProductService
+    ? "id, description, quantity, unit_price, discount_rate, line_total, tax_rate, products_services!product_service_id(code, name)"
+    : "id, description, quantity, unit_price, discount_rate, line_total, tax_rate";
+  const { data, error } = await supabase
+    .from(lineConfig.table)
+    .select(selectColumns as "id, description, quantity, unit_price, discount_rate, line_total, tax_rate")
+    .eq(lineConfig.documentColumn, documentId)
     .order("line_index", { ascending: true });
 
   if (error) {
@@ -1706,8 +1765,8 @@ export async function getSalesQuoteLineDetails(
   }
 
   return {
-    lines: (data ?? []).map((line) => {
-      const product = line.products_services as { code?: string | null; name?: string | null } | null;
+    lines: ((data ?? []) as unknown as SalesDocumentLineResult[]).map((line) => {
+      const product = line.products_services ?? null;
       const productLabel = product?.name
         ? [product.code, product.name].filter(Boolean).join(" - ")
         : String(line.description ?? "Servicio").split("\n")[0] || "Servicio";
@@ -1814,7 +1873,7 @@ export async function duplicateSalesDocument(
 
     const { data: originalLines } = await supabase
       .from("sales_quote_lines")
-      .select("organization_id, line_index, description, quantity, unit_price, tax_rate, discount_rate, line_total")
+      .select("organization_id, product_service_id, line_index, description, quantity, unit_price, tax_rate, discount_rate, line_total")
       .eq("sales_quote_id", documentId)
       .order("line_index", { ascending: true });
 
@@ -1889,7 +1948,7 @@ export async function duplicateSalesDocument(
 
     const { data: originalLines } = await supabase
       .from("sales_order_lines")
-      .select("organization_id, line_index, description, quantity, unit_price, tax_rate, discount_rate, line_total")
+      .select("organization_id, product_service_id, line_index, description, quantity, unit_price, tax_rate, discount_rate, line_total")
       .eq("sales_order_id", documentId)
       .order("line_index", { ascending: true });
 
@@ -1963,7 +2022,7 @@ export async function duplicateSalesDocument(
 
     const { data: originalLines } = await supabase
       .from("sales_invoice_lines")
-      .select("organization_id, line_index, description, quantity, unit_price, tax_rate, line_total")
+      .select("organization_id, product_service_id, line_index, description, quantity, unit_price, tax_rate, discount_rate, line_total")
       .eq("sales_invoice_id", documentId)
       .order("line_index", { ascending: true });
 
@@ -2167,15 +2226,7 @@ export async function createSalesDeliveryNote(formData: FormData): Promise<{ err
   }
 
   const noteDateRaw = String(formData.get("note_date") ?? "").trim();
-  const subtotalAmount = roundMoney(lines.reduce((sum, line) => {
-    const quantity = numberOrDefault(line.quantity, 1);
-    const unitPrice = numberOrDefault(line.unitPrice, 0);
-    const discountRate = numberOrDefault(line.discount, 0);
-    const gross = quantity * unitPrice;
-
-    return sum + gross - (gross * discountRate / 100);
-  }, 0));
-  const taxAmount = roundMoney(subtotalAmount * 0.21);
+  const { subtotalAmount, taxAmount } = calculateSalesLinesTotals(lines);
   const retentionRate = clampPercent(parseAmount(formData, "retention_rate", 0));
   const retentionAmount = roundMoney(subtotalAmount * retentionRate / 100);
   const suplidoAmount = Math.max(parseAmount(formData, "suplido_amount", 0), 0);
@@ -2223,22 +2274,11 @@ export async function createSalesDeliveryNote(formData: FormData): Promise<{ err
   const noteLinesResult = await supabase
     .from("sales_delivery_note_lines")
     .insert(lines.map((line, index) => {
-      const quantity = numberOrDefault(line.quantity, 1);
-      const unitPrice = numberOrDefault(line.unitPrice, 0);
-      const discountRate = clampPercent(numberOrDefault(line.discount, 0));
-      const gross = quantity * unitPrice;
-      const lineTotal = roundMoney(gross - (gross * discountRate / 100));
+      const { product_service_id, ...lineRow } = buildSalesLineRow(organizationId, line, index);
 
       return {
-        organization_id: organizationId,
+        ...lineRow,
         sales_delivery_note_id: data.id,
-        line_index: index,
-        description: line.description?.trim() || line.product?.trim() || "Servicio",
-        quantity,
-        unit_price: unitPrice,
-        tax_rate: 21,
-        discount_rate: discountRate,
-        line_total: lineTotal
       };
     }));
 
@@ -2284,15 +2324,7 @@ export async function createSalesRecurringInvoice(formData: FormData): Promise<{
 
   const nextIssueDateRaw = String(formData.get("next_issue_date") ?? "").trim();
   const frequency = String(formData.get("frequency") ?? "monthly").trim();
-  const subtotalAmount = roundMoney(lines.reduce((sum, line) => {
-    const quantity = numberOrDefault(line.quantity, 1);
-    const unitPrice = numberOrDefault(line.unitPrice, 0);
-    const discountRate = numberOrDefault(line.discount, 0);
-    const gross = quantity * unitPrice;
-
-    return sum + gross - (gross * discountRate / 100);
-  }, 0));
-  const taxAmount = roundMoney(subtotalAmount * 0.21);
+  const { subtotalAmount, taxAmount } = calculateSalesLinesTotals(lines);
   const retentionRate = clampPercent(parseAmount(formData, "retention_rate", 0));
   const retentionAmount = roundMoney(subtotalAmount * retentionRate / 100);
   const suplidoAmount = Math.max(parseAmount(formData, "suplido_amount", 0), 0);
@@ -2341,22 +2373,11 @@ export async function createSalesRecurringInvoice(formData: FormData): Promise<{
   const recurringLinesResult = await supabase
     .from("sales_recurring_invoice_lines")
     .insert(lines.map((line, index) => {
-      const quantity = numberOrDefault(line.quantity, 1);
-      const unitPrice = numberOrDefault(line.unitPrice, 0);
-      const discountRate = clampPercent(numberOrDefault(line.discount, 0));
-      const gross = quantity * unitPrice;
-      const lineTotal = roundMoney(gross - (gross * discountRate / 100));
+      const { product_service_id, ...lineRow } = buildSalesLineRow(organizationId, line, index);
 
       return {
-        organization_id: organizationId,
+        ...lineRow,
         sales_recurring_invoice_id: data.id,
-        line_index: index,
-        description: line.description?.trim() || line.product?.trim() || "Servicio",
-        quantity,
-        unit_price: unitPrice,
-        tax_rate: 21,
-        discount_rate: discountRate,
-        line_total: lineTotal
       };
     }));
 

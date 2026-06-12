@@ -34,10 +34,13 @@ import {
   createSalesQuote,
   createSalesRecurringInvoice,
   duplicateSalesDocument,
-  getSalesQuoteLineDetails,
+  getSalesDocumentLineDetails,
+  getSalesDocumentNotes,
   getSalesDocumentStatusDetail,
   saveSalesConfigSection,
   softDeleteSalesDocument,
+  updateContactClient,
+  updateSalesDocumentNotes,
   updateSalesDocumentStatus
 } from "../../commercial-actions";
 import type { SalesConfigPayload, SalesDocumentKind, SalesDocumentStatusDetail, SalesQuoteLineDetail } from "../../commercial-actions";
@@ -106,22 +109,36 @@ type SalesDocumentRow = {
   date: string;
   number: string;
   reference: string;
+  clientId?: string;
+  clientApplyIrpfByDefault?: boolean;
   clientCode: string;
   clientCountry?: string;
+  clientDefaultIrpfRate?: number;
   clientEmail?: string;
+  clientFiscalAddress?: string;
   clientPhone?: string;
+  clientPostalCode?: string;
+  clientProvince?: string;
+  clientTaxId?: string;
+  clientCity?: string;
   client: string;
   baseAvailable?: number;
+  taxAmount?: number;
+  retentionRate?: number;
+  retentionAmount?: number;
+  suplidoAmount?: number;
   total: number;
 };
 
 type QuoteLine = {
   id: number;
   product: string;
+  productId: string;
   description: string;
   quantity: number;
   unitPrice: number;
   discount: number;
+  taxRate: number;
 };
 
 type SalesPrintFormat = "template" | "pdf";
@@ -343,7 +360,7 @@ const statusOptionsByKind: Record<SalesDocumentKind, Array<{ value: string; labe
   ],
   quote: [
     { value: "draft", label: "Borrador" },
-    { value: "open", label: "Abierta" },
+    { value: "open", label: "Pendiente" },
     { value: "sent", label: "Enviada" },
     { value: "accepted", label: "Aceptada" },
     { value: "rejected", label: "Rechazada" },
@@ -536,11 +553,15 @@ function calculateSalesPrintTotals(row: SalesDocumentRow, lines: SalesQuoteLineD
   const lineTaxAmount = lines.length > 0
     ? lines.reduce((sum, line) => sum + taxableLineAmount(line) * ((line.taxRate ?? 0) / 100), 0)
     : Math.max(row.total - (row.baseAvailable ?? row.total), 0);
-  const total = Number.isFinite(row.total) && row.total > 0 ? row.total : subtotal + lineTaxAmount;
-  const taxAmount = Math.max(total - subtotal, 0);
+  const taxAmount = row.taxAmount ?? lineTaxAmount;
+  const retentionAmount = row.retentionAmount ?? 0;
+  const suplidoAmount = row.suplidoAmount ?? 0;
+  const total = Number.isFinite(row.total) && row.total > 0
+    ? row.total
+    : subtotal + taxAmount - retentionAmount + suplidoAmount;
   const effectiveTaxRate = subtotal > 0 ? (taxAmount / subtotal) * 100 : 0;
 
-  return { subtotal, taxAmount, total, effectiveTaxRate };
+  return { subtotal, taxAmount, retentionAmount, suplidoAmount, total, effectiveTaxRate };
 }
 
 function formatSalesPrintDate(value: string): string {
@@ -717,12 +738,11 @@ export function SalesWorkspace({ clients, fiscalEntities, organizationId, organi
     }
 
     const copy: SalesDocumentRow = {
+      ...row,
       id: result.document.id,
       status: statusLabel(activeKind, result.document.status),
       date: result.document.date ? new Date(result.document.date).toLocaleDateString("es-ES") : row.date,
       number: result.document.number,
-      reference: row.reference,
-      clientCode: row.clientCode,
       client: result.document.client,
       total: result.document.total
     };
@@ -1472,17 +1492,22 @@ function SalesDocumentPanel({
   onClose: () => void;
   onDelete: () => void;
   onDuplicate: () => void;
-  onSave: (dbStatus: string, notes: string, isPaid: boolean) => void;
+  onSave: (dbStatus: string, notes: string, isPaid: boolean) => Promise<void>;
 }) {
   const [statusValue, setStatusValue] = useState(() => statusValueFromLabel(kind, row.status));
   const [documentTitle, setDocumentTitle] = useState(`${activeSection.singularTitle} ${row.number}`);
-  const [notes, setNotes] = useState("");
+  const [statusNotes, setStatusNotes] = useState("");
+  const [quoteCustomMessage, setQuoteCustomMessage] = useState("");
+  const [quoteInternalNotes, setQuoteInternalNotes] = useState("");
   const [isPaid, setIsPaid] = useState(false);
   const [detail, setDetail] = useState<SalesDocumentStatusDetail | null>(null);
   const [activeTab, setActiveTab] = useState<SalesDocumentDetailTab>("products");
-  const [quoteLines, setQuoteLines] = useState<SalesQuoteLineDetail[]>([]);
+  const [documentLines, setDocumentLines] = useState<SalesQuoteLineDetail[]>([]);
   const [isLoadingDetail, setIsLoadingDetail] = useState(true);
-  const [isLoadingLines, setIsLoadingLines] = useState(kind === "quote");
+  const [isLoadingLines, setIsLoadingLines] = useState(true);
+  const [isLoadingQuoteNotes, setIsLoadingQuoteNotes] = useState(true);
+  const [isSavingDocument, setIsSavingDocument] = useState(false);
+  const [saveNotice, setSaveNotice] = useState<SalesNotice | null>(null);
   const [isPrintDialogOpen, setIsPrintDialogOpen] = useState(false);
   const [printFormat, setPrintFormat] = useState<SalesPrintFormat | null>(null);
   const [printConfig, setPrintConfig] = useState<QuotesTemplateConfig | null>(null);
@@ -1496,7 +1521,7 @@ function SalesDocumentPanel({
     void getSalesDocumentStatusDetail(kind, row.id).then((result) => {
       if (!isMounted) return;
       setDetail(result.detail ?? null);
-      setNotes(result.detail?.notes ?? "");
+      setStatusNotes(result.detail?.notes ?? "");
       setIsPaid(Boolean(result.detail?.isPaid));
       setIsLoadingDetail(false);
     });
@@ -1536,7 +1561,8 @@ function SalesDocumentPanel({
     const now = new Date().toISOString();
     const sourceKind = printSourceKind(kind);
     const documentType = sourceKind === "invoice" ? "pdfInvoice" : "pdfQuote";
-    const displayLines = printableLines(row, quoteLines);
+    const displayLines = printableLines(row, documentLines);
+    const totals = calculateSalesPrintTotals(row, displayLines);
     const historyId = `sales-print-${kind}-${row.id}-${newPrintHistoryId()}`;
 
     await upsertQuoteDocument(organizationId, {
@@ -1569,7 +1595,7 @@ function SalesDocumentPanel({
           manualAmount: taxableLineAmount(line),
         })),
         taxEnabled: true,
-        taxRate: 21,
+        taxRate: totals.effectiveTaxRate,
         discountRate: 0,
         discountAmount: 0,
         notes: "",
@@ -1594,18 +1620,12 @@ function SalesDocumentPanel({
   };
 
   useEffect(() => {
-    if (kind !== "quote") {
-      setQuoteLines([]);
-      setIsLoadingLines(false);
-      return;
-    }
-
     let isMounted = true;
     setIsLoadingLines(true);
 
-    void getSalesQuoteLineDetails(row.id).then((result) => {
+    void getSalesDocumentLineDetails(kind, row.id).then((result) => {
       if (!isMounted) return;
-      setQuoteLines(result.lines ?? []);
+      setDocumentLines(result.lines ?? []);
       setIsLoadingLines(false);
     });
 
@@ -1613,6 +1633,41 @@ function SalesDocumentPanel({
       isMounted = false;
     };
   }, [kind, row.id]);
+
+  useEffect(() => {
+    let isMounted = true;
+    setQuoteCustomMessage("");
+    setIsLoadingQuoteNotes(true);
+
+    void getSalesDocumentNotes(kind, row.id).then((result) => {
+      if (!isMounted) return;
+      setQuoteInternalNotes(result.notes ?? "");
+      setIsLoadingQuoteNotes(false);
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [kind, row.id]);
+
+  const handleSaveChanges = async () => {
+    setIsSavingDocument(true);
+    setSaveNotice(null);
+
+    try {
+      const documentNotes = [quoteCustomMessage, quoteInternalNotes].filter((value) => value.trim()).join("\n\n");
+      const notesResult = await updateSalesDocumentNotes(kind, row.id, documentNotes);
+
+      if (notesResult.error) {
+        setSaveNotice({ tone: "warning", text: `No se pudieron guardar las notas: ${notesResult.error}` });
+        return;
+      }
+
+      await onSave(statusValue, statusNotes, isPaid);
+    } finally {
+      setIsSavingDocument(false);
+    }
+  };
 
   return (
     <section className="sales-action-panel document-detail-panel inline-document-detail-panel" aria-label={`Editar ${row.number}`}>
@@ -1638,19 +1693,18 @@ function SalesDocumentPanel({
 
       <section className="document-detail-tab-panel">
         {activeTab === "products" ? (
-          <QuoteLinesTable isLoading={isLoadingLines} lines={quoteLines} row={row} />
+          <QuoteLinesTable isLoading={isLoadingLines} lines={documentLines} row={row} />
         ) : null}
         {activeTab === "totals" ? <DocumentTotalsPanel row={row} /> : null}
         {activeTab === "notes" ? (
-          <label className="sage-textarea-field compact-sales-notes detail-tab-notes">
-            <span>Notas</span>
-            <textarea
-              onChange={(event) => setNotes(event.target.value)}
-              placeholder={isLoadingDetail ? "Cargando historial..." : "Anade contexto para este estado"}
-              rows={4}
-              value={notes}
-            />
-          </label>
+          <DocumentNotesPanel
+            customMessage={quoteCustomMessage}
+            documentName={salesPrintDocumentLabel(kind).singular}
+            internalNotes={quoteInternalNotes}
+            isLoading={isLoadingQuoteNotes}
+            onCustomMessageChange={setQuoteCustomMessage}
+            onInternalNotesChange={setQuoteInternalNotes}
+          />
         ) : null}
         {activeTab === "client" ? <DocumentClientPanel row={row} /> : null}
       </section>
@@ -1668,10 +1722,11 @@ function SalesDocumentPanel({
           <Trash2 aria-hidden="true" size={18} />
           Eliminar
         </button>
-        <button className="sage-primary-button" onClick={() => onSave(statusValue, notes, isPaid)} type="button">
-          Guardar cambios
+        <button className="sage-primary-button" disabled={isSavingDocument} onClick={handleSaveChanges} type="button">
+          {isSavingDocument ? "Guardando..." : "Guardar cambios"}
         </button>
       </div>
+      {saveNotice ? <div className={`sales-live-notice ${saveNotice.tone}`} role="status">{saveNotice.text}</div> : null}
 
       <SalesPrintDialog
         config={printConfig}
@@ -1679,7 +1734,7 @@ function SalesDocumentPanel({
         isOpen={isPrintDialogOpen}
         isLoadingConfig={isLoadingPrintConfig}
         kind={kind}
-        lines={quoteLines}
+        lines={documentLines}
         loadError={printError}
         onClose={() => {
           setIsPrintDialogOpen(false);
@@ -1922,6 +1977,18 @@ function SalesPdfDocument({
               <strong>{formatMoney(totals.taxAmount)}</strong>
             </div>
           ) : null}
+          {totals.retentionAmount > 0 ? (
+            <div>
+              <span>IRPF</span>
+              <strong>{formatMoney(-totals.retentionAmount)}</strong>
+            </div>
+          ) : null}
+          {totals.suplidoAmount > 0 ? (
+            <div>
+              <span>Suplido</span>
+              <strong>{formatMoney(totals.suplidoAmount)}</strong>
+            </div>
+          ) : null}
           <div className="grand-total">
             <span>Total</span>
             <strong>{formatMoney(totals.total)}</strong>
@@ -2030,8 +2097,10 @@ function SalesTemplateDocument({
         <div className="pdf-summary-table">
           <span>TOTAL</span>
           <strong>{formatMoney(totals.subtotal + totals.taxAmount)}</strong>
+          <span>IRPF</span>
+          <strong>{formatMoney(-totals.retentionAmount)}</strong>
           <span>SUPLIDO</span>
-          <strong>{formatMoney(Math.max(totals.total - totals.subtotal - totals.taxAmount, 0))}</strong>
+          <strong>{formatMoney(totals.suplidoAmount)}</strong>
           <strong>TOTAL NETO</strong>
           <strong>{formatMoney(totals.total)}</strong>
         </div>
@@ -2085,13 +2154,15 @@ function DocumentHeaderSummary({
   row: SalesDocumentRow;
   statusValue: string;
 }) {
+  const documentLabel = salesPrintDocumentLabel(kind);
+
   return (
-    <section className="document-header-summary" aria-label="Resumen del presupuesto">
+    <section className="document-header-summary" aria-label={`Resumen de ${documentLabel.singular}`}>
       <header className="document-header-title-row">
         <label className="document-title-field">
           <PenLine aria-hidden="true" size={22} />
           <input
-            aria-label="Nombre del presupuesto"
+            aria-label={`Nombre de ${documentLabel.singular}`}
             onChange={(event) => onTitleChange(event.target.value)}
             value={documentTitle}
           />
@@ -2115,7 +2186,7 @@ function DocumentHeaderSummary({
           <input disabled value={row.client} />
         </label>
         <label className="sage-field">
-          <span>Nº presupuesto</span>
+          <span>{documentLabel.number}</span>
           <input disabled value={row.number} />
         </label>
         <label className="sage-field">
@@ -2123,7 +2194,7 @@ function DocumentHeaderSummary({
           <input disabled value={row.reference} />
         </label>
         <label className="sage-field compact-date">
-          <span>Fecha presupuesto</span>
+          <span>Fecha {documentLabel.singular}</span>
           <input disabled value={row.date} />
         </label>
         <label className="sage-field">
@@ -2227,15 +2298,194 @@ function QuoteLinesTable({
 }
 
 function DocumentTotalsPanel({ row }: { row: SalesDocumentRow }) {
+  const taxableBase = row.baseAvailable ?? Math.max(row.total - (row.taxAmount ?? 0) + (row.retentionAmount ?? 0) - (row.suplidoAmount ?? 0), 0);
+  const taxAmount = row.taxAmount ?? Math.max(row.total - taxableBase, 0);
+  const taxRate = taxableBase > 0 ? (taxAmount / taxableBase) * 100 : 0;
+  const retentionRate = row.retentionRate ?? 0;
+  const retentionAmount = row.retentionAmount ?? 0;
+  const suplidoAmount = row.suplidoAmount ?? 0;
+
   return (
-    <div className="document-detail-summary-grid">
-      <SummaryBox label="Total base imponible" value={row.baseAvailable ?? 0} />
-      <SummaryBox label="Total" value={row.total} />
+    <div className="totals-panel document-detail-totals-panel">
+      <div className="totals-summary-row">
+        <SummaryBox label="Total base imponible" value={taxableBase} />
+        <SummaryBox label="Total IVA" value={taxAmount} />
+        <SummaryBox label="Retencion IRPF" value={-retentionAmount} />
+        <SummaryBox label="Suplido" value={suplidoAmount} />
+        <SummaryBox label="Total" value={row.total} />
+      </div>
+
+      <TaxBreakdownTable
+        columns={["Impuesto", "Base imponible", "Tipo de IVA", "Cuota de IVA"]}
+        rows={[{ id: "iva", label: `IVA ${formatPercent(taxRate)}`, base: taxableBase, rate: taxRate, amount: taxAmount }]}
+        title="IVA"
+      />
+
+      <TaxBreakdownTable
+        columns={["Impuesto", "Base imponible", "Tipo de IRPF", "Cuota de retencion"]}
+        emptyMessage="Esta lista esta en blanco."
+        rows={retentionAmount > 0 ? [{ id: "irpf", label: "IRPF", base: taxableBase, rate: retentionRate, amount: retentionAmount }] : []}
+        title="IRPF"
+      />
+    </div>
+  );
+}
+
+function DocumentNotesPanel({
+  customMessage,
+  documentName,
+  internalNotes,
+  isLoading,
+  onCustomMessageChange,
+  onInternalNotesChange
+}: {
+  customMessage: string;
+  documentName: string;
+  internalNotes: string;
+  isLoading: boolean;
+  onCustomMessageChange: (value: string) => void;
+  onInternalNotesChange: (value: string) => void;
+}) {
+  return (
+    <div className="notes-panel document-notes-panel">
+      <label className="sage-textarea-field">
+        <span>Mensaje personalizado</span>
+        <small>Anade un mensaje personalizado a la version en PDF de este {documentName}.</small>
+        <textarea
+          maxLength={500}
+          onChange={(event) => onCustomMessageChange(event.target.value)}
+          value={customMessage}
+        />
+        <em>Quedan {500 - customMessage.length} caracteres.</em>
+      </label>
+      <label className="sage-textarea-field">
+        <span>Notas</span>
+        <small>Anade notas a este {documentName}. No se muestran al cliente.</small>
+        <textarea
+          disabled={isLoading}
+          maxLength={1000}
+          onChange={(event) => onInternalNotesChange(event.target.value)}
+          placeholder={isLoading ? "Cargando notas..." : undefined}
+          value={internalNotes}
+        />
+        <em>Quedan {1000 - internalNotes.length} caracteres.</em>
+      </label>
     </div>
   );
 }
 
 function DocumentClientPanel({ row }: { row: SalesDocumentRow }) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [clientInfo, setClientInfo] = useState(() => ({
+    city: row.clientCity ?? "",
+    country: row.clientCountry ?? "ES",
+    email: row.clientEmail ?? "",
+    fiscalAddress: row.clientFiscalAddress ?? "",
+    phone: row.clientPhone ?? "",
+    postalCode: row.clientPostalCode ?? "",
+    province: row.clientProvince ?? "",
+    taxId: row.clientTaxId ?? ""
+  }));
+  const [draftEmail, setDraftEmail] = useState(clientInfo.email);
+  const [draftAddress, setDraftAddress] = useState(clientInfo.fiscalAddress);
+  const [draftPostalCode, setDraftPostalCode] = useState(clientInfo.postalCode);
+  const [draftCity, setDraftCity] = useState(clientInfo.city);
+  const [draftProvince, setDraftProvince] = useState(clientInfo.province);
+  const [draftCountry, setDraftCountry] = useState(clientInfo.country);
+  const [notice, setNotice] = useState<SalesNotice | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    const nextClientInfo = {
+      city: row.clientCity ?? "",
+      country: row.clientCountry ?? "ES",
+      email: row.clientEmail ?? "",
+      fiscalAddress: row.clientFiscalAddress ?? "",
+      phone: row.clientPhone ?? "",
+      postalCode: row.clientPostalCode ?? "",
+      province: row.clientProvince ?? "",
+      taxId: row.clientTaxId ?? ""
+    };
+
+    setClientInfo(nextClientInfo);
+    setDraftEmail(nextClientInfo.email);
+    setDraftAddress(nextClientInfo.fiscalAddress);
+    setDraftPostalCode(nextClientInfo.postalCode);
+    setDraftCity(nextClientInfo.city);
+    setDraftProvince(nextClientInfo.province);
+    setDraftCountry(nextClientInfo.country);
+    setIsEditing(false);
+    setNotice(null);
+  }, [row.id, row.clientCity, row.clientCountry, row.clientEmail, row.clientFiscalAddress, row.clientPhone, row.clientPostalCode, row.clientProvince, row.clientTaxId]);
+
+  const address = [
+    clientInfo.fiscalAddress,
+    [clientInfo.postalCode, clientInfo.city].filter(Boolean).join(" "),
+    clientInfo.province,
+    clientInfo.country
+  ].filter(Boolean).join("\n");
+
+  const cancelEdit = () => {
+    setDraftEmail(clientInfo.email);
+    setDraftAddress(clientInfo.fiscalAddress);
+    setDraftPostalCode(clientInfo.postalCode);
+    setDraftCity(clientInfo.city);
+    setDraftProvince(clientInfo.province);
+    setDraftCountry(clientInfo.country);
+    setNotice(null);
+    setIsEditing(false);
+  };
+
+  const saveContactInfo = async () => {
+    if (!row.clientId) {
+      setNotice({ tone: "warning", text: "Este documento no tiene un cliente real asociado." });
+      return;
+    }
+
+    const formData = new FormData();
+    formData.set("client_id", row.clientId);
+    formData.set("name", row.client);
+    formData.set("tax_id", clientInfo.taxId);
+    formData.set("contact_email", draftEmail.trim());
+    formData.set("contact_phone", clientInfo.phone);
+    formData.set("fiscal_address", draftAddress.trim());
+    formData.set("postal_code", draftPostalCode.trim());
+    formData.set("city", draftCity.trim());
+    formData.set("province", draftProvince.trim());
+    formData.set("country", draftCountry.trim() || "ES");
+    if (row.clientApplyIrpfByDefault) formData.set("apply_irpf_by_default", "on");
+    formData.set("default_irpf_rate", String(row.clientDefaultIrpfRate ?? 0));
+
+    setIsSaving(true);
+    setNotice(null);
+
+    try {
+      const result = await updateContactClient(formData);
+
+      if (result.error || !result.client) {
+        setNotice({ tone: "warning", text: result.error ?? "No se pudo actualizar el contacto." });
+        return;
+      }
+
+      setClientInfo({
+        city: result.client.city,
+        country: result.client.country,
+        email: result.client.contactEmail,
+        fiscalAddress: result.client.fiscalAddress,
+        phone: result.client.contactPhone,
+        postalCode: result.client.postalCode,
+        province: result.client.province,
+        taxId: result.client.taxId
+      });
+      setIsEditing(false);
+      setNotice({ tone: "success", text: "Contacto actualizado." });
+    } catch (error) {
+      setNotice({ tone: "warning", text: error instanceof Error ? error.message : "No se pudo actualizar el contacto." });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   return (
     <div className="document-detail-client-grid">
       <label className="sage-field">
@@ -2246,6 +2496,70 @@ function DocumentClientPanel({ row }: { row: SalesDocumentRow }) {
         <span>Cliente</span>
         <input disabled value={row.client} />
       </label>
+      <label className="sage-field">
+        <span>Numero de identificacion</span>
+        <input disabled value={clientInfo.taxId} />
+      </label>
+      <section className="document-client-contact-panel">
+        <div className="client-info-section-heading">
+          <h2>Direccion e informacion de contacto</h2>
+          <button
+            aria-label="Editar direccion e informacion de contacto"
+            className="quote-inline-icon-button client-info-edit-button"
+            disabled={!row.clientId}
+            onClick={() => setIsEditing(true)}
+            type="button"
+          >
+            <PenLine aria-hidden="true" size={18} />
+          </button>
+        </div>
+        {isEditing ? (
+          <div className="client-contact-edit-panel">
+            <label className="sage-field">
+              <span>Email:</span>
+              <input onChange={(event) => setDraftEmail(event.target.value)} type="email" value={draftEmail} />
+            </label>
+            <label className="sage-field">
+              <span>Direccion</span>
+              <input onChange={(event) => setDraftAddress(event.target.value)} value={draftAddress} />
+            </label>
+            <div className="client-contact-edit-grid">
+              <label className="sage-field">
+                <span>Codigo postal</span>
+                <input onChange={(event) => setDraftPostalCode(event.target.value)} value={draftPostalCode} />
+              </label>
+              <label className="sage-field">
+                <span>Poblacion</span>
+                <input onChange={(event) => setDraftCity(event.target.value)} value={draftCity} />
+              </label>
+              <label className="sage-field">
+                <span>Provincia</span>
+                <input onChange={(event) => setDraftProvince(event.target.value)} value={draftProvince} />
+              </label>
+              <label className="sage-field">
+                <span>Pais</span>
+                <input maxLength={2} onChange={(event) => setDraftCountry(event.target.value.toUpperCase())} value={draftCountry} />
+              </label>
+            </div>
+            <div className="client-contact-edit-actions">
+              <button className="sage-outline-button" disabled={isSaving} onClick={cancelEdit} type="button">Cancelar</button>
+              <button className="sage-primary-button" disabled={isSaving} onClick={saveContactInfo} type="button">
+                {isSaving ? "Guardando..." : "Guardar"}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <label className="sage-field">
+              <span>Email:</span>
+              <input readOnly type="email" value={clientInfo.email} />
+            </label>
+            <AddressBox address={address} title="Direccion de entrega" />
+            <AddressBox address={address} title="Direccion de facturacion" />
+          </>
+        )}
+        {notice ? <div className={`sales-live-notice ${notice.tone}`} role="status">{notice.text}</div> : null}
+      </section>
     </div>
   );
 }
@@ -2270,6 +2584,23 @@ function editableNumberValue(value: number): string {
 
 function parseEditableNumber(value: string): number {
   return value === "" ? 0 : Number(value);
+}
+
+function parseQuantityNumber(value: string): number {
+  const parsed = parseEditableNumber(value);
+
+  return parsed > 0 ? parsed : 1;
+}
+
+function formatClientAddress(client?: ArtificialContactListItem): string {
+  if (!client) return "";
+
+  return [
+    client.fiscalAddress,
+    [client.postalCode, client.city].filter(Boolean).join(" "),
+    client.province,
+    client.country
+  ].filter(Boolean).join("\n");
 }
 
 function DeleteDocumentPanel({
@@ -2336,6 +2667,7 @@ function QuoteForm({
   const [internalNotes, setInternalNotes] = useState("");
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [clientOverrides, setClientOverrides] = useState<Record<string, ArtificialContactListItem>>({});
   const clientInputRef = useRef<HTMLInputElement>(null);
   const clientEmailInputRef = useRef<HTMLInputElement>(null);
   const clientPhoneInputRef = useRef<HTMLInputElement>(null);
@@ -2355,10 +2687,21 @@ function QuoteForm({
   }, 0);
   const clientDiscount = subtotal * (discountPercent / 100);
   const taxableBase = Math.max(subtotal - clientDiscount, 0);
-  const taxTotal = taxableBase * 0.21;
+  const taxTotal = lines.reduce((totalTax, line) => {
+    const rawLineTotal = line.quantity * line.unitPrice;
+    const discountAmount = rawLineTotal * (line.discount / 100);
+    const lineBase = Math.max(rawLineTotal - discountAmount, 0);
+    const lineBaseAfterClientDiscount = Math.max(lineBase - (lineBase * (discountPercent / 100)), 0);
+
+    return totalTax + lineBaseAfterClientDiscount * ((line.taxRate || 0) / 100);
+  }, 0);
   const retentionTotal = taxableBase * (retentionRate / 100);
   const total = taxableBase + taxTotal - retentionTotal + suplidoAmount;
   const canCreate = client.trim().length > 0 && lines.length > 0 && !isSaving;
+  const selectedClientBase = clients.find((item) => item.id === clientId)
+    ?? clients.find((item) => item.name === client.trim())
+    ?? clients.find((item) => item.code === client.trim());
+  const selectedClient = selectedClientBase ? (clientOverrides[selectedClientBase.id] ?? selectedClientBase) : undefined;
 
   useEffect(() => {
     if (!isReferenceManual) {
@@ -2391,10 +2734,12 @@ function QuoteForm({
       {
         id: Date.now(),
         product: "",
+        productId: "",
         description: "",
         quantity: 1,
         unitPrice: 0,
-        discount: 0
+        discount: 0,
+        taxRate: 21
       }
     ]);
   };
@@ -2429,8 +2774,18 @@ function QuoteForm({
         patch = {
           ...patch,
           product: matchedDisplayName,
+          productId: matched.id,
+          quantity: line && line.quantity > 0 ? line.quantity : 1,
           unitPrice: isDifferentProduct ? matched.unitPrice : line && line.unitPrice > 0 ? line.unitPrice : matched.unitPrice,
-          description: matched.description.trim() || matched.name
+          description: matched.description.trim() || matched.name,
+          taxRate: matched.taxRate ?? 21
+        };
+      }
+
+      if (!matched) {
+        patch = {
+          ...patch,
+          productId: ""
         };
       }
     }
@@ -2442,6 +2797,13 @@ function QuoteForm({
 
   const removeLine = (id: number) => {
     setLines((current) => current.filter((line) => line.id !== id));
+  };
+
+  const updateSelectedClient = (nextClient: ArtificialContactListItem) => {
+    setClientOverrides((current) => ({ ...current, [nextClient.id]: nextClient }));
+    setClient(nextClient.name);
+    setClientEmail(nextClient.contactEmail ?? "");
+    setClientPhone(nextClient.contactPhone ?? "");
   };
 
   const submitDocument = async () => {
@@ -2504,12 +2866,28 @@ function QuoteForm({
 
       onCreated({
         id: persisted.id,
-        status: isQuote || isOrder || isDeliveryNote || isRecurring ? "Abierta" : "Borrador",
+        status: isQuote ? "Pendiente" : isOrder || isDeliveryNote || isRecurring ? "Abierta" : "Borrador",
         date: new Date(documentDate).toLocaleDateString("es-ES"),
         number: persisted.number,
         reference: reference.trim() || autoReference,
-        clientCode: clients.find((item) => item.id === clientId)?.code ?? "",
+        clientId: selectedClient?.id ?? clientId,
+        clientApplyIrpfByDefault: selectedClient?.applyIrpfByDefault ?? retentionRate > 0,
+        clientCode: selectedClient?.code ?? "",
+        clientCountry: selectedClient?.country ?? "ES",
+        clientDefaultIrpfRate: selectedClient?.defaultIrpfRate ?? retentionRate,
+        clientEmail: clientEmailValue,
+        clientFiscalAddress: selectedClient?.fiscalAddress ?? "",
+        clientPhone: clientPhoneValue,
+        clientPostalCode: selectedClient?.postalCode ?? "",
+        clientProvince: selectedClient?.province ?? "",
+        clientTaxId: selectedClient?.taxId ?? "",
+        clientCity: selectedClient?.city ?? "",
         client: clientNameValue,
+        baseAvailable: taxableBase,
+        taxAmount: taxTotal,
+        retentionRate,
+        retentionAmount: retentionTotal,
+        suplidoAmount,
         total: persisted.total
       });
     } catch (error) {
@@ -2634,6 +3012,7 @@ function QuoteForm({
       <section className="quote-tab-panel">
         {activeTab === "products" ? (
           <ProductsTab
+            forcePendingStatus={isQuote}
             lines={lines}
             products={products}
             onAddLine={addLine}
@@ -2647,25 +3026,30 @@ function QuoteForm({
             clientDiscount={clientDiscount}
             discountPercent={discountPercent}
             productDiscount={subtotal - lines.reduce((totalLine, line) => totalLine + line.quantity * line.unitPrice, 0)}
-            subtotal={subtotal}
-            taxableBase={taxableBase}
             retentionRate={retentionRate}
             retentionTotal={retentionTotal}
-            suplidoAmount={suplidoAmount}
+            subtotal={subtotal}
+            taxTotal={taxTotal}
+            taxableBase={taxableBase}
             onDiscountPercentChange={setDiscountPercent}
-            onRetentionRateChange={setRetentionRate}
-            onSuplidoAmountChange={setSuplidoAmount}
           />
         ) : null}
         {activeTab === "notes" ? (
           <NotesTab
             customMessage={customMessage}
+            documentName={section.singularTitle.toLowerCase()}
             internalNotes={internalNotes}
             onCustomMessageChange={setCustomMessage}
             onInternalNotesChange={setInternalNotes}
           />
         ) : null}
-        {activeTab === "client" ? <ClientInfoTab pdfTemplate={pdfTemplate} onPdfTemplateChange={setPdfTemplate} /> : null}
+        {activeTab === "client" ? (
+          <ClientInfoTab
+            client={selectedClient}
+            fallbackEmail={clientEmail}
+            onClientUpdated={updateSelectedClient}
+          />
+        ) : null}
       </section>
 
       {submitError ? <div className="sales-live-notice warning" role="alert">{submitError}</div> : null}
@@ -2709,6 +3093,7 @@ function QuoteTab({
 }
 
 function ProductsTab({
+  forcePendingStatus,
   lines,
   products,
   onAddLine,
@@ -2716,6 +3101,7 @@ function ProductsTab({
   onRemoveLine,
   onUpdateLine
 }: {
+  forcePendingStatus?: boolean;
   lines: QuoteLine[];
   products: ProductItem[];
   onAddLine: () => void;
@@ -2841,7 +3227,7 @@ function ProductsTab({
               const selectedProduct = findSelectedProduct(line.product);
               const rawLineTotal = line.quantity * line.unitPrice;
               const lineBase = rawLineTotal - (rawLineTotal * (line.discount / 100));
-              const lineStatus = line.product.trim() && line.description.trim() && line.quantity > 0 ? "Completa" : "Pendiente";
+              const lineStatus = !forcePendingStatus && line.product.trim() && line.description.trim() && line.quantity > 0 ? "Completa" : "Pendiente";
               const visibleProducts = products.filter((product) => (
                 !productQuery
                 || product.name.toLowerCase().includes(productQuery)
@@ -2895,14 +3281,16 @@ function ProductsTab({
                   />
                 </td>
                 <td className="quote-line-quantity-cell">
-                  <input
-                    aria-label="Cantidad"
-                    min="0"
-                    onChange={(event) => onUpdateLine(line.id, { quantity: parseEditableNumber(event.target.value) })}
-                    type="number"
-                    value={editableNumberValue(line.quantity)}
-                  />
-                  {unitMeasureAbbreviation(selectedProduct?.unitMeasure) ? <span>{unitMeasureAbbreviation(selectedProduct?.unitMeasure)}</span> : null}
+                  <div className="quote-line-quantity-control">
+                    <input
+                      aria-label="Cantidad"
+                      min="0"
+                      onChange={(event) => onUpdateLine(line.id, { quantity: parseQuantityNumber(event.target.value) })}
+                      type="number"
+                      value={editableNumberValue(line.quantity)}
+                    />
+                    {unitMeasureAbbreviation(selectedProduct?.unitMeasure) ? <span>{unitMeasureAbbreviation(selectedProduct?.unitMeasure)}</span> : null}
+                  </div>
                 </td>
                 <td>
                   <input
@@ -2926,7 +3314,7 @@ function ProductsTab({
                 <td>
                   {formatMoney(Math.max(lineBase, 0))}
                 </td>
-                <td>21,00%</td>
+                <td>{formatPercent(line.taxRate)}</td>
                 <td>
                   <span className={`quote-line-status ${lineStatus === "Completa" ? "is-complete" : "is-pending"}`}>{lineStatus}</span>
                 </td>
@@ -2980,11 +3368,9 @@ function TotalsTab({
   retentionRate,
   retentionTotal,
   subtotal,
-  suplidoAmount,
+  taxTotal,
   taxableBase,
-  onDiscountPercentChange,
-  onRetentionRateChange,
-  onSuplidoAmountChange
+  onDiscountPercentChange
 }: {
   clientDiscount: number;
   discountPercent: number;
@@ -2992,48 +3378,81 @@ function TotalsTab({
   retentionRate: number;
   retentionTotal: number;
   subtotal: number;
-  suplidoAmount: number;
+  taxTotal: number;
   taxableBase: number;
   onDiscountPercentChange: (value: number) => void;
-  onRetentionRateChange: (value: number) => void;
-  onSuplidoAmountChange: (value: number) => void;
 }) {
+  const productDiscountTotal = Math.abs(productDiscount);
+  const ivaRate = taxableBase > 0 ? 21 : 0;
+  const irpfRows = taxableBase > 0 && retentionRate > 0
+    ? [{ id: "irpf", label: "IRPF", base: taxableBase, rate: retentionRate, amount: retentionTotal }]
+    : [];
+
   return (
     <div className="totals-panel">
-      <SummaryBox label="Total sin descuento de producto" value={subtotal} />
-      <SummaryBox label="Descuento total de producto" value={Math.abs(productDiscount)} />
-      <SummaryBox label="Total sin descuento de cliente" value={subtotal} />
-      <label className="sage-field discount-field">
-        <span>% descuento a cliente</span>
-        <input
-          onChange={(event) => onDiscountPercentChange(parseEditableNumber(event.target.value))}
-          type="number"
-          value={editableNumberValue(discountPercent)}
-        />
-      </label>
-      <SummaryBox label="Descuento de cliente" value={clientDiscount} />
-      <SummaryBox label="Total base imponible" value={taxableBase} />
-      <label className="sage-field discount-field">
-        <span>IRPF / retencion %</span>
-        <input
-          max="100"
-          min="0"
-          onChange={(event) => onRetentionRateChange(parseEditableNumber(event.target.value))}
-          type="number"
-          value={retentionRate}
-        />
-      </label>
-      <SummaryBox label="Retencion IRPF" value={-retentionTotal} />
-      <label className="sage-field discount-field">
-        <span>Suplido</span>
-        <input
-          min="0"
-          onChange={(event) => onSuplidoAmountChange(parseEditableNumber(event.target.value))}
-          type="number"
-          value={editableNumberValue(suplidoAmount)}
-        />
-      </label>
+      <div className="totals-summary-row">
+        <SummaryBox label="Total sin descuento de producto" value={subtotal} />
+        <SummaryBox label="Descuento total de producto" value={productDiscountTotal} />
+        <SummaryBox label="Total sin descuento de cliente" value={subtotal} />
+        <label className="sage-field discount-field totals-discount-field">
+          <span>% descuento a cliente</span>
+          <input
+            onChange={(event) => onDiscountPercentChange(parseEditableNumber(event.target.value))}
+            type="number"
+            value={editableNumberValue(discountPercent)}
+          />
+        </label>
+        <SummaryBox label="Descuento total a cliente" value={clientDiscount} />
+      </div>
+
+      <TaxBreakdownTable
+        columns={["Impuesto", "Base imponible", "Tipo de IVA", "Cuota de IVA"]}
+        rows={[{ id: "iva", label: `IVA ${ivaRate} %`, base: taxableBase, rate: ivaRate, amount: taxTotal }]}
+        title="IVA"
+      />
+
+      <TaxBreakdownTable
+        columns={["Impuesto", "Base imponible", "Tipo de IRPF", "Cuota de retencion"]}
+        emptyMessage="Esta lista esta en blanco."
+        rows={irpfRows}
+        title="IRPF"
+      />
     </div>
+  );
+}
+
+function TaxBreakdownTable({
+  columns,
+  emptyMessage,
+  rows,
+  title
+}: {
+  columns: [string, string, string, string];
+  emptyMessage?: string;
+  rows: Array<{ id: string; label: string; base: number; rate: number; amount: number }>;
+  title: string;
+}) {
+  return (
+    <section className="tax-breakdown-section">
+      <h3>{title}</h3>
+      <div className="tax-breakdown-table" role="table" aria-label={title}>
+        <div className="tax-breakdown-header" role="row">
+          {columns.map((column) => <span key={column} role="columnheader">{column}</span>)}
+        </div>
+        {rows.length > 0 ? rows.map((row) => (
+          <div className="tax-breakdown-row" key={row.id} role="row">
+            <span role="cell">{row.label}</span>
+            <span role="cell">{formatMoney(row.base)}</span>
+            <span role="cell">{formatPercent(row.rate)}</span>
+            <span role="cell">{formatMoney(row.amount)}</span>
+          </div>
+        )) : (
+          <div className="tax-breakdown-empty" role="row">
+            <span role="cell">{emptyMessage ?? "Esta lista esta en blanco."}</span>
+          </div>
+        )}
+      </div>
+    </section>
   );
 }
 
@@ -3048,11 +3467,13 @@ function SummaryBox({ label, value }: { label: string; value: number }) {
 
 function NotesTab({
   customMessage,
+  documentName,
   internalNotes,
   onCustomMessageChange,
   onInternalNotesChange
 }: {
   customMessage: string;
+  documentName: string;
   internalNotes: string;
   onCustomMessageChange: (value: string) => void;
   onInternalNotesChange: (value: string) => void;
@@ -3061,13 +3482,13 @@ function NotesTab({
     <div className="notes-panel">
       <label className="sage-textarea-field">
         <span>Mensaje personalizado</span>
-        <small>Anade un mensaje personalizado a la version en PDF del presupuesto.</small>
+        <small>Anade un mensaje personalizado a la version en PDF de este {documentName}.</small>
         <textarea maxLength={500} onChange={(event) => onCustomMessageChange(event.target.value)} value={customMessage} />
         <em>Quedan {500 - customMessage.length} caracteres.</em>
       </label>
       <label className="sage-textarea-field">
         <span>Notas</span>
-        <small>Anade notas a este presupuesto. No se muestran al cliente.</small>
+        <small>Anade notas a este {documentName}. No se muestran al cliente.</small>
         <textarea maxLength={1000} onChange={(event) => onInternalNotesChange(event.target.value)} value={internalNotes} />
         <em>Quedan {1000 - internalNotes.length} caracteres.</em>
       </label>
@@ -3076,97 +3497,173 @@ function NotesTab({
 }
 
 function ClientInfoTab({
-  pdfTemplate,
-  onPdfTemplateChange
+  client,
+  fallbackEmail,
+  onClientUpdated
 }: {
-  pdfTemplate: string;
-  onPdfTemplateChange: (value: string) => void;
+  client: ArtificialContactListItem | undefined;
+  fallbackEmail: string;
+  onClientUpdated: (client: ArtificialContactListItem) => void;
 }) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [draftEmail, setDraftEmail] = useState("");
+  const [draftAddress, setDraftAddress] = useState("");
+  const [draftPostalCode, setDraftPostalCode] = useState("");
+  const [draftCity, setDraftCity] = useState("");
+  const [draftProvince, setDraftProvince] = useState("");
+  const [draftCountry, setDraftCountry] = useState("ES");
+  const [notice, setNotice] = useState<SalesNotice | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const email = client?.contactEmail || fallbackEmail;
+  const address = formatClientAddress(client);
+
+  useEffect(() => {
+    setDraftEmail(email);
+    setDraftAddress(client?.fiscalAddress ?? "");
+    setDraftPostalCode(client?.postalCode ?? "");
+    setDraftCity(client?.city ?? "");
+    setDraftProvince(client?.province ?? "");
+    setDraftCountry(client?.country ?? "ES");
+    setNotice(null);
+  }, [client, email]);
+
+  const cancelEdit = () => {
+    setDraftEmail(email);
+    setDraftAddress(client?.fiscalAddress ?? "");
+    setDraftPostalCode(client?.postalCode ?? "");
+    setDraftCity(client?.city ?? "");
+    setDraftProvince(client?.province ?? "");
+    setDraftCountry(client?.country ?? "ES");
+    setNotice(null);
+    setIsEditing(false);
+  };
+
+  const saveContactInfo = async () => {
+    if (!client) return;
+
+    const formData = new FormData();
+    formData.set("client_id", client.id);
+    formData.set("name", client.name);
+    formData.set("tax_id", client.taxId ?? "");
+    formData.set("contact_email", draftEmail.trim());
+    formData.set("contact_phone", client.contactPhone ?? "");
+    formData.set("fiscal_address", draftAddress.trim());
+    formData.set("postal_code", draftPostalCode.trim());
+    formData.set("city", draftCity.trim());
+    formData.set("province", draftProvince.trim());
+    formData.set("country", draftCountry.trim() || "ES");
+    if (client.applyIrpfByDefault) formData.set("apply_irpf_by_default", "on");
+    formData.set("default_irpf_rate", String(client.defaultIrpfRate ?? 0));
+
+    setIsSaving(true);
+    setNotice(null);
+
+    try {
+      const result = await updateContactClient(formData);
+
+      if (result.error || !result.client) {
+        setNotice({ tone: "warning", text: result.error ?? "No se pudo actualizar el contacto." });
+        return;
+      }
+
+      onClientUpdated(result.client);
+      setIsEditing(false);
+      setNotice({ tone: "success", text: "Contacto actualizado." });
+    } catch (error) {
+      setNotice({ tone: "warning", text: error instanceof Error ? error.message : "No se pudo actualizar el contacto." });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   return (
     <div className="client-info-panel">
       <section>
         <h2>Informacion de empresa</h2>
         <label className="sage-field">
           <span>Codigo de cliente</span>
-          <input disabled />
-        </label>
-        <label className="sage-field">
-          <span>Tipo de identificacion</span>
-          <input disabled defaultValue="NIF/DNI/NIE" />
+          <input readOnly value={client?.code ?? ""} />
         </label>
         <label className="sage-field">
           <span>Numero de identificacion</span>
-          <input />
+          <input readOnly value={client?.taxId ?? ""} />
         </label>
         <label className="sage-field">
           <span>NIF-IVA</span>
-          <input />
-        </label>
-        <label className="sage-field">
-          <span>Idioma</span>
-          <small>Se aplica a los titulos de las secciones y a las cabeceras de las columnas de los PDF de los documentos de venta.</small>
-          <select defaultValue="">
-            <option value="">Seleccionar...</option>
-            <option>Espanol</option>
-            <option>Portugues</option>
-          </select>
-        </label>
-
-        <h2>Informacion de precios y descuentos</h2>
-        <label className="sage-field">
-          <span>Codigo de tarifa</span>
-          <select defaultValue="">
-            <option value="">Seleccionar...</option>
-            <option>GENERAL</option>
-          </select>
-        </label>
-        <label className="sage-field">
-          <span>Nombre de tarifa</span>
-          <input disabled />
-        </label>
-        <label className="sage-field">
-          <span>Codigo de grupo de descuentos</span>
-          <select defaultValue="">
-            <option value="">Seleccionar...</option>
-            <option>MAYORISTA</option>
-          </select>
-        </label>
-        <label className="sage-field">
-          <span>Nombre de grupo de descuentos</span>
-          <input disabled />
-        </label>
-        <label className="sage-field">
-          <span>Plantilla PDF</span>
-          <select value={pdfTemplate} onChange={(event) => onPdfTemplateChange(event.target.value)}>
-            <option value="standard">Factura estandar</option>
-            <option value="tablamax">TABLAMAX con impuestos y suplido</option>
-          </select>
+          <input readOnly value={client?.taxId ?? ""} />
         </label>
       </section>
 
       <section>
-        <h2>Direccion e informacion de contacto</h2>
-        <label className="sage-field">
-          <span>Tipo de e-mail</span>
-          <input disabled defaultValue="Personalizado" />
-        </label>
-        <label className="sage-field">
-          <span>E-mail de factura</span>
-          <input type="email" />
-        </label>
-        <AddressBox title="Direccion de entrega" />
-        <AddressBox title="Direccion de facturacion" />
+        <div className="client-info-section-heading">
+          <h2>Direccion e informacion de contacto</h2>
+          <button
+            aria-label="Editar direccion e informacion de contacto"
+            className="quote-inline-icon-button client-info-edit-button"
+            disabled={!client}
+            onClick={() => setIsEditing(true)}
+            type="button"
+          >
+            <PenLine aria-hidden="true" size={18} />
+          </button>
+        </div>
+        {isEditing ? (
+          <div className="client-contact-edit-panel">
+            <label className="sage-field">
+              <span>Email:</span>
+              <input onChange={(event) => setDraftEmail(event.target.value)} type="email" value={draftEmail} />
+            </label>
+            <label className="sage-field">
+              <span>Direccion</span>
+              <input onChange={(event) => setDraftAddress(event.target.value)} value={draftAddress} />
+            </label>
+            <div className="client-contact-edit-grid">
+              <label className="sage-field">
+                <span>Codigo postal</span>
+                <input onChange={(event) => setDraftPostalCode(event.target.value)} value={draftPostalCode} />
+              </label>
+              <label className="sage-field">
+                <span>Poblacion</span>
+                <input onChange={(event) => setDraftCity(event.target.value)} value={draftCity} />
+              </label>
+              <label className="sage-field">
+                <span>Provincia</span>
+                <input onChange={(event) => setDraftProvince(event.target.value)} value={draftProvince} />
+              </label>
+              <label className="sage-field">
+                <span>Pais</span>
+                <input maxLength={2} onChange={(event) => setDraftCountry(event.target.value.toUpperCase())} value={draftCountry} />
+              </label>
+            </div>
+            <div className="client-contact-edit-actions">
+              <button className="sage-outline-button" disabled={isSaving} onClick={cancelEdit} type="button">Cancelar</button>
+              <button className="sage-primary-button" disabled={isSaving} onClick={saveContactInfo} type="button">
+                {isSaving ? "Guardando..." : "Guardar"}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <label className="sage-field">
+              <span>Email:</span>
+              <input readOnly type="email" value={email} />
+            </label>
+            <AddressBox address={address} title="Direccion de entrega" />
+            <AddressBox address={address} title="Direccion de facturacion" />
+          </>
+        )}
+        {notice ? <div className={`sales-live-notice ${notice.tone}`} role="status">{notice.text}</div> : null}
       </section>
     </div>
   );
 }
 
-function AddressBox({ title }: { title: string }) {
+function AddressBox({ address, title }: { address: string; title: string }) {
   return (
     <div className="address-box">
       <span>{title}</span>
       <div className="address-box-body">
-        <em>Se utiliza la direccion guardada en la ficha del cliente.</em>
+        {address ? address.split("\n").map((line, index) => <p key={`${line}-${index}`}>{line}</p>) : <p>Sin direccion informada</p>}
       </div>
     </div>
   );

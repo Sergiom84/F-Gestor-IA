@@ -2502,6 +2502,12 @@ a {
   min-height: 120px;
 }
 
+.document-client-contact-panel {
+  display: grid;
+  gap: 12px;
+  grid-column: 1 / -1;
+}
+
 .delete-panel {
   border-color: #f0bdc6;
 }
@@ -2936,16 +2942,24 @@ a {
 }
 
 .quote-line-quantity-cell {
+  text-align: center;
+}
+
+.quote-line-quantity-control {
   align-items: center;
-  display: flex;
+  display: inline-flex;
   gap: 5px;
+  justify-content: center;
+  max-width: 100%;
 }
 
-.quote-line-quantity-cell input {
+.quote-line-quantity-control input {
+  flex: 0 0 46px;
   min-width: 0;
+  text-align: right;
 }
 
-.quote-line-quantity-cell span {
+.quote-line-quantity-control span {
   font-weight: 800;
 }
 
@@ -3027,10 +3041,15 @@ a {
 }
 
 .totals-panel {
+  display: grid;
+  gap: 18px;
+}
+
+.totals-summary-row {
   align-items: start;
   display: grid;
-  gap: 20px;
-  grid-template-columns: repeat(3, minmax(180px, 1fr)) minmax(220px, 0.9fr);
+  gap: 16px;
+  grid-template-columns: repeat(3, minmax(160px, 1fr)) minmax(210px, 1.1fr) minmax(160px, 0.85fr);
 }
 
 .quote-summary-box {
@@ -3063,10 +3082,85 @@ a {
   text-align: right;
 }
 
+.totals-discount-field input {
+  min-height: 39px;
+}
+
+.tax-breakdown-section {
+  display: grid;
+  gap: 10px;
+}
+
+.tax-breakdown-section h3 {
+  color: #000000;
+  font-size: 0.95rem;
+  font-weight: 900;
+  line-height: 1.1;
+  margin: 0;
+}
+
+.tax-breakdown-table {
+  border: 1px solid #d7e0e8;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.tax-breakdown-header,
+.tax-breakdown-row {
+  display: grid;
+  grid-template-columns: 1.15fr 1fr 1fr 1fr;
+}
+
+.tax-breakdown-header {
+  background: #cfd9e0;
+  color: #000000;
+  font-size: 0.9rem;
+  font-weight: 900;
+}
+
+.tax-breakdown-header span,
+.tax-breakdown-row span,
+.tax-breakdown-empty span {
+  align-items: center;
+  display: flex;
+  min-height: 46px;
+  padding: 10px 16px;
+}
+
+.tax-breakdown-header span:not(:first-child),
+.tax-breakdown-row span:not(:first-child) {
+  justify-content: flex-end;
+  text-align: right;
+}
+
+.tax-breakdown-row {
+  background: #ffffff;
+  color: #000000;
+  font-size: 0.9rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.tax-breakdown-empty {
+  background: #ffffff;
+  color: #000000;
+  display: grid;
+  font-size: 0.9rem;
+  min-height: 48px;
+  text-align: center;
+}
+
+.tax-breakdown-empty span {
+  justify-content: center;
+}
+
 .notes-panel {
   display: grid;
   gap: 20px;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.document-notes-panel {
+  padding: 16px 0 4px;
 }
 
 .sage-textarea-field textarea {
@@ -3098,6 +3192,35 @@ a {
   margin: 0;
 }
 
+.client-info-section-heading {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.client-info-edit-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.client-contact-edit-panel {
+  display: grid;
+  gap: 14px;
+}
+
+.client-contact-edit-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.client-contact-edit-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
 .address-box {
   display: grid;
   gap: 8px;
@@ -3106,9 +3229,17 @@ a {
 .address-box-body {
   background: #ffffff;
   border: 1px solid #c8d4df;
-  border-bottom: 0;
-  border-radius: 8px 8px 0 0;
-  min-height: 178px;
+  border-radius: 8px;
+  color: #000000;
+  display: grid;
+  gap: 4px;
+  min-height: 118px;
+  padding: 14px 16px;
+  align-content: start;
+}
+
+.address-box-body p {
+  margin: 0;
 }
 
 .address-box-actions {
@@ -4859,7 +4990,7 @@ a {
     grid-template-columns: 1fr;
   }
 
-  .totals-panel {
+  .totals-summary-row {
     grid-template-columns: repeat(2, minmax(180px, 1fr));
   }
 
@@ -5887,14 +6018,31 @@ a {
   .document-detail-grid,
   .document-detail-summary-grid,
   .document-detail-client-grid,
-  .totals-panel {
+  .totals-summary-row {
     grid-template-columns: 1fr;
+  }
+
+  .tax-breakdown-header,
+  .tax-breakdown-row {
+    grid-template-columns: minmax(90px, 1.1fr) repeat(3, minmax(76px, 1fr));
+  }
+
+  .tax-breakdown-header span,
+  .tax-breakdown-row span,
+  .tax-breakdown-empty span {
+    min-height: 42px;
+    padding: 8px 10px;
   }
 
   .quote-contact-grid .sage-field,
   .quote-contact-grid .span-2,
+  .client-contact-edit-grid,
   .settings-panel-grid .span-2 {
     grid-column: auto;
+  }
+
+  .client-contact-edit-grid {
+    grid-template-columns: 1fr;
   }
 
   .sales-action-panel header,
