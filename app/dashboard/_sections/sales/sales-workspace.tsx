@@ -1,5 +1,7 @@
 "use client";
 
+import "../quotes/quotes.css";
+
 import {
   AlertTriangle,
   CalendarDays,
@@ -24,7 +26,7 @@ import {
   X
 } from "lucide-react";
 import { useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { type CSSProperties, useEffect, useMemo, useRef, useState } from "react";
 import {
   createSalesDeliveryNote,
   createSalesInvoice,
@@ -32,21 +34,24 @@ import {
   createSalesQuote,
   createSalesRecurringInvoice,
   duplicateSalesDocument,
+  getSalesQuoteLineDetails,
   getSalesDocumentStatusDetail,
   saveSalesConfigSection,
   softDeleteSalesDocument,
   updateSalesDocumentStatus
 } from "../../commercial-actions";
-import type { SalesConfigPayload, SalesDocumentKind, SalesDocumentStatusDetail } from "../../commercial-actions";
+import type { SalesConfigPayload, SalesDocumentKind, SalesDocumentStatusDetail, SalesQuoteLineDetail } from "../../commercial-actions";
 import { artificialSalesDocuments } from "../../_data/artificial-business-data";
 import type { ArtificialContactListItem, SalesSectionId } from "../../_data/artificial-business-data";
 import type { ProductItem } from "../../_data/commercial-data";
 import type { SalesDocRow } from "../../_lib/types";
 import { formatMoney } from "../../_lib/formatters";
+import { loadQuotesInitialData, upsertQuoteDocument } from "../quotes/quotes-actions";
 
 type QuoteFormTab = "products" | "totals" | "notes" | "client";
+type SalesDocumentDetailTab = "products" | "totals" | "notes" | "client";
 type SalesSettingsPanelId = "numbering" | "payments" | "preferences";
-type SalesColumnId = "status" | "date" | "number" | "client" | "clientCode" | "total";
+type SalesColumnId = "status" | "date" | "number" | "reference" | "clientCode" | "client" | "total" | "baseAvailable";
 type SalesNotice = {
   tone: "success" | "warning";
   text: string;
@@ -71,8 +76,10 @@ type SalesSection = {
   tableHeaders: {
     date: string;
     number: string;
+    reference?: string;
     client: string;
     clientCode: string;
+    baseAvailable?: string;
     total: string;
   };
   hero: {
@@ -100,7 +107,11 @@ type SalesDocumentRow = {
   number: string;
   reference: string;
   clientCode: string;
+  clientCountry?: string;
+  clientEmail?: string;
+  clientPhone?: string;
   client: string;
+  baseAvailable?: number;
   total: number;
 };
 
@@ -111,6 +122,32 @@ type QuoteLine = {
   quantity: number;
   unitPrice: number;
   discount: number;
+};
+
+type SalesPrintFormat = "template" | "pdf";
+type SalesPrintSourceKind = "quote" | "order" | "delivery-note" | "invoice";
+
+type QuotesTemplateConfig = {
+  companyName: string;
+  companyTagline: string;
+  logoDataUrl: string;
+  templateIssuerName: string;
+  templateIssuerTaxId: string;
+  templateIssuerAddress: string;
+  templateIssuerCity: string;
+  templatePaymentRows: Array<{ id: string; label: string; value: string }>;
+  templateSectionTitle: string;
+  templateShowQuantity: boolean;
+  quoteFixedNotes: string;
+  invoiceFixedNotes: string;
+  quotePrepaymentEnabled: boolean;
+  quotePrepaymentRate: number;
+  quotePrepaymentText: string;
+  paymentDetails: string;
+  pdfPaymentRows: Array<{ id: string; label: string; value: string }>;
+  accentColor: string;
+  pageBackgroundColor: string;
+  clientBoxBackgroundColor: string;
 };
 
 const salesSections: SalesSection[] = [
@@ -128,8 +165,10 @@ const salesSections: SalesSection[] = [
     tableHeaders: {
       date: "Fecha de presupuesto",
       number: "Numero de presupuesto",
+      reference: "Referencia",
       client: "Cliente",
-      clientCode: "Codigo",
+      clientCode: "Codigo de cliente",
+      baseAvailable: "Base imponible",
       total: "Total"
     },
     hero: {
@@ -374,6 +413,189 @@ function formatDateTime(value: string | null): string {
     dateStyle: "short",
     timeStyle: "short"
   }).format(date);
+}
+
+function getConfigString(config: Record<string, unknown> | null | undefined, key: string, fallback = ""): string {
+  const value = config?.[key];
+  return typeof value === "string" ? value : fallback;
+}
+
+function getConfigNumber(config: Record<string, unknown> | null | undefined, key: string, fallback: number): number {
+  const value = config?.[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
+function getConfigBoolean(config: Record<string, unknown> | null | undefined, key: string, fallback: boolean): boolean {
+  const value = config?.[key];
+  return typeof value === "boolean" ? value : fallback;
+}
+
+function normalizePaymentRows(value: unknown): QuotesTemplateConfig["pdfPaymentRows"] {
+  if (!Array.isArray(value)) return [];
+
+  return value.map((row, index) => {
+    const source = row && typeof row === "object" ? row as { id?: unknown; label?: unknown; value?: unknown } : {};
+
+    return {
+      id: typeof source.id === "string" && source.id ? source.id : `payment-${index}`,
+      label: typeof source.label === "string" ? source.label : "",
+      value: typeof source.value === "string" ? source.value : ""
+    };
+  });
+}
+
+function normalizeQuotesTemplateConfig(config: Record<string, unknown> | null, organizationName: string): QuotesTemplateConfig {
+  const pdfRows = normalizePaymentRows(config?.pdfPaymentRows);
+  const fallbackPayment = getConfigString(config, "paymentDetails").trim();
+
+  return {
+    companyName: getConfigString(config, "companyName", organizationName),
+    companyTagline: getConfigString(config, "companyTagline"),
+    logoDataUrl: getConfigString(config, "logoDataUrl"),
+    templateIssuerName: getConfigString(config, "templateIssuerName", getConfigString(config, "companyName", organizationName)),
+    templateIssuerTaxId: getConfigString(config, "templateIssuerTaxId"),
+    templateIssuerAddress: getConfigString(config, "templateIssuerAddress"),
+    templateIssuerCity: getConfigString(config, "templateIssuerCity"),
+    templatePaymentRows: normalizePaymentRows(config?.templatePaymentRows),
+    templateSectionTitle: getConfigString(config, "templateSectionTitle", "PRESUPUESTO"),
+    templateShowQuantity: getConfigBoolean(config, "templateShowQuantity", false),
+    quoteFixedNotes: getConfigString(config, "quoteFixedNotes"),
+    invoiceFixedNotes: getConfigString(config, "invoiceFixedNotes"),
+    quotePrepaymentEnabled: getConfigBoolean(config, "quotePrepaymentEnabled", false),
+    quotePrepaymentRate: getConfigNumber(config, "quotePrepaymentRate", 20),
+    quotePrepaymentText: getConfigString(
+      config,
+      "quotePrepaymentText",
+      "Para iniciar el desarrollo, será necesario abonar un anticipo del 20% del total:"
+    ),
+    paymentDetails: fallbackPayment,
+    pdfPaymentRows: pdfRows.length > 0
+      ? pdfRows
+      : fallbackPayment
+        ? [{ id: "payment-details", label: "Metodo de pago", value: fallbackPayment }]
+        : [],
+    accentColor: getConfigString(config, "accentColor", "#0077ff"),
+    pageBackgroundColor: getConfigString(config, "pageBackgroundColor", "#fffdf8"),
+    clientBoxBackgroundColor: getConfigString(config, "clientBoxBackgroundColor", "#eff7ff")
+  };
+}
+
+function selectQuotesPrintConfig(
+  config: Record<string, unknown> | null,
+  format: SalesPrintFormat
+): Record<string, unknown> | null {
+  const salesTemplateDefaults = format === "template"
+    ? { templateSectionTitle: "PRODUCTOS Y SERVICIOS", templateShowQuantity: true }
+    : {};
+  const profiles = config?.profiles;
+  if (!profiles || typeof profiles !== "object") return config ? { ...config, ...salesTemplateDefaults } : salesTemplateDefaults;
+
+  const salesProfiles = (profiles as Record<string, unknown>).sales;
+  if (!salesProfiles || typeof salesProfiles !== "object") return config ? { ...config, ...salesTemplateDefaults } : salesTemplateDefaults;
+
+  const profile = (salesProfiles as Record<string, unknown>)[format === "template" ? "template" : "pdf"];
+  if (!profile || typeof profile !== "object") return config ? { ...config, ...salesTemplateDefaults } : salesTemplateDefaults;
+
+  return {
+    ...config,
+    ...salesTemplateDefaults,
+    ...(profile as Record<string, unknown>),
+  };
+}
+
+const newPrintHistoryId = () =>
+  typeof crypto !== "undefined" && "randomUUID" in crypto
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+function printSourceKind(kind: SalesDocumentKind): SalesPrintSourceKind {
+  if (kind === "order") return "order";
+  if (kind === "delivery-note") return "delivery-note";
+  if (kind === "invoice" || kind === "recurring-invoice") return "invoice";
+  return "quote";
+}
+
+function salesPrintDocumentLabel(kind: SalesDocumentKind): { singular: string; upper: string; total: string; number: string } {
+  if (kind === "order") return { singular: "pedido", upper: "PEDIDO", total: "TOTAL IMPORTE DEL PEDIDO", number: "Nº PEDIDO" };
+  if (kind === "delivery-note") return { singular: "albarán", upper: "ALBARÁN", total: "TOTAL IMPORTE DEL ALBARÁN", number: "Nº ALBARÁN" };
+  if (kind === "invoice" || kind === "recurring-invoice") return { singular: "factura", upper: "FACTURA", total: "TOTAL IMPORTE FACTURADO", number: "Nº FACTURA" };
+  return { singular: "presupuesto", upper: "PRESUPUESTO", total: "TOTAL IMPORTE PRESUPUESTADO", number: "Nº PRESUPUESTO" };
+}
+
+function taxableLineAmount(line: SalesQuoteLineDetail): number {
+  if (Number.isFinite(line.taxableBase)) return line.taxableBase;
+
+  const raw = line.quantity * line.unitPrice;
+  return Math.max(raw - raw * (line.discountRate / 100), 0);
+}
+
+function calculateSalesPrintTotals(row: SalesDocumentRow, lines: SalesQuoteLineDetail[]) {
+  const subtotal = lines.length > 0
+    ? lines.reduce((sum, line) => sum + taxableLineAmount(line), 0)
+    : row.baseAvailable ?? row.total;
+  const lineTaxAmount = lines.length > 0
+    ? lines.reduce((sum, line) => sum + taxableLineAmount(line) * ((line.taxRate ?? 0) / 100), 0)
+    : Math.max(row.total - (row.baseAvailable ?? row.total), 0);
+  const total = Number.isFinite(row.total) && row.total > 0 ? row.total : subtotal + lineTaxAmount;
+  const taxAmount = Math.max(total - subtotal, 0);
+  const effectiveTaxRate = subtotal > 0 ? (taxAmount / subtotal) * 100 : 0;
+
+  return { subtotal, taxAmount, total, effectiveTaxRate };
+}
+
+function formatSalesPrintDate(value: string): string {
+  const [day, month, year] = value.split("/");
+  const date = day && month && year ? new Date(`${year}-${month}-${day}T00:00:00`) : new Date(`${value}T00:00:00`);
+
+  if (Number.isNaN(date.getTime())) return value;
+
+  return new Intl.DateTimeFormat("es-ES", {
+    day: "2-digit",
+    month: "long",
+    year: "numeric"
+  }).format(date);
+}
+
+function SalesOrbLogo({ size = 56 }: { size?: number }) {
+  return (
+    <span className="orb-logo-frame" style={{ width: size, height: size }} aria-hidden="true">
+      <svg
+        className="orb-logo orb-logo-screen"
+        viewBox="0 0 120 120"
+        width={size}
+        height={size}
+        fill="none"
+        xmlns="http://www.w3.org/2000/svg"
+        preserveAspectRatio="xMidYMid meet"
+      >
+        <defs>
+          <radialGradient id="sales-orb-sphere" cx="40%" cy="32%" r="64%">
+            <stop offset="0%" stopColor="#ffffff" />
+            <stop offset="18%" stopColor="#9bd1ff" />
+            <stop offset="52%" stopColor="#0077ff" />
+            <stop offset="100%" stopColor="#004db8" />
+          </radialGradient>
+          <radialGradient id="sales-orb-shine" cx="45%" cy="40%" r="60%">
+            <stop offset="0%" stopColor="#ffffff" stopOpacity="0.65" />
+            <stop offset="52%" stopColor="#ffffff" stopOpacity="0.28" />
+            <stop offset="100%" stopColor="#ffffff" stopOpacity="0" />
+          </radialGradient>
+        </defs>
+        <circle className="orb-logo-halo orb-logo-halo-outer" cx="60" cy="60" r="52" fill="#eaf5ff" />
+        <circle className="orb-logo-shadow" cx="61" cy="73" r="27" fill="#004ca8" opacity="0.08" />
+        <circle className="orb-logo-sphere" cx="60" cy="60" r="30" fill="url(#sales-orb-sphere)" />
+        <circle className="orb-logo-shine" cx="51" cy="48" r="12" fill="url(#sales-orb-shine)" />
+        <path
+          className="orb-logo-curve"
+          d="M35 61c10 8 29 11 50 4"
+          stroke="#f6fbff"
+          strokeLinecap="round"
+          strokeWidth="2"
+          opacity="0.34"
+        />
+      </svg>
+    </span>
+  );
 }
 
 function sectionDocumentKind(sectionId: SalesSectionId): SalesDocumentKind | null {
@@ -678,7 +900,16 @@ function DocumentList({
     (statusFilter === "" || row.status === statusFilter)
     && (clientFilter === "" || row.client === clientFilter)
   ));
-  const columns: Array<{ id: SalesColumnId; label: string }> = [
+  const columns: Array<{ id: SalesColumnId; label: string }> = activeSectionId === "quotes" ? [
+    { id: "status", label: "Estado" },
+    { id: "date", label: activeSection.tableHeaders.date },
+    { id: "number", label: activeSection.tableHeaders.number },
+    { id: "reference", label: activeSection.tableHeaders.reference ?? "Referencia" },
+    { id: "clientCode", label: activeSection.tableHeaders.clientCode },
+    { id: "client", label: activeSection.tableHeaders.client },
+    { id: "total", label: activeSection.tableHeaders.total },
+    { id: "baseAvailable", label: activeSection.tableHeaders.baseAvailable ?? "Base imponible" }
+  ] : [
     { id: "status", label: "Estado" },
     { id: "date", label: activeSection.tableHeaders.date },
     { id: "number", label: activeSection.tableHeaders.number },
@@ -847,23 +1078,38 @@ function DocumentList({
                 {columns.filter((column) => isColumnVisible(column.id)).map((column) => (
                   <th key={column.id}>{column.label}</th>
                 ))}
-                <th>Acciones</th>
+                <th>{activeSectionId === "quotes" ? "Editar" : "Acciones"}</th>
               </tr>
             </thead>
             <tbody>
               {visibleRows.length > 0 ? visibleRows.flatMap((row) => {
                 const kind = activeKind ?? "quote";
                 const presentation = statusPresentation(statusValueFromLabel(kind, row.status));
+                const visibleColumns = columns.filter((column) => isColumnVisible(column.id));
 
                 return [
                   (
                     <tr key={`${row.id}-${row.status}`}>
-                      {isColumnVisible("status") ? <td><span className={`closed-badge ${presentation.className}`}>{row.status}</span></td> : null}
-                      {isColumnVisible("date") ? <td>{row.date}</td> : null}
-                      {isColumnVisible("number") ? <td>{row.number}</td> : null}
-                      {isColumnVisible("client") ? <td>{row.client}</td> : null}
-                      {isColumnVisible("clientCode") ? <td>{row.clientCode}</td> : null}
-                      {isColumnVisible("total") ? <td>{formatMoney(row.total)}</td> : null}
+                      {visibleColumns.map((column) => {
+                        switch (column.id) {
+                          case "status":
+                            return <td key={column.id}><span className={`closed-badge ${presentation.className}`}>{row.status}</span></td>;
+                          case "date":
+                            return <td key={column.id}>{row.date}</td>;
+                          case "number":
+                            return <td key={column.id}>{row.number}</td>;
+                          case "reference":
+                            return <td key={column.id}>{row.reference}</td>;
+                          case "clientCode":
+                            return <td key={column.id}>{row.clientCode}</td>;
+                          case "client":
+                            return <td key={column.id}>{row.client}</td>;
+                          case "total":
+                            return <td key={column.id}>{formatMoney(row.total)}</td>;
+                          case "baseAvailable":
+                            return <td key={column.id}>{formatMoney(row.baseAvailable ?? 0)}</td>;
+                        }
+                      })}
                       <td className="sales-row-actions-cell">
                         <button
                           className="sage-table-button"
@@ -886,6 +1132,8 @@ function DocumentList({
                         <SalesDocumentPanel
                           activeSection={activeSection}
                           kind={kind}
+                          organizationId={organizationId}
+                          organizationName={organizationName}
                           row={selectedRow}
                           onClose={() => setSelectedRow(null)}
                           onDelete={() => {
@@ -896,7 +1144,6 @@ function DocumentList({
                             onDuplicateDocument(selectedRow);
                             setSelectedRow(null);
                           }}
-                          onPrint={() => window.print()}
                           onSave={async (dbStatus, notes, isPaid) => {
                             const result = await onUpdateDocumentStatus(selectedRow.id, dbStatus, { notes, isPaid });
 
@@ -1209,27 +1456,39 @@ function SalesSettingsPanel({
 function SalesDocumentPanel({
   activeSection,
   kind,
+  organizationId,
+  organizationName,
   row,
   onClose,
   onDelete,
   onDuplicate,
-  onPrint,
   onSave
 }: {
   activeSection: SalesSection;
   kind: SalesDocumentKind;
+  organizationId: string;
+  organizationName: string;
   row: SalesDocumentRow;
   onClose: () => void;
   onDelete: () => void;
   onDuplicate: () => void;
-  onPrint: () => void;
   onSave: (dbStatus: string, notes: string, isPaid: boolean) => void;
 }) {
   const [statusValue, setStatusValue] = useState(() => statusValueFromLabel(kind, row.status));
+  const [documentTitle, setDocumentTitle] = useState(`${activeSection.singularTitle} ${row.number}`);
   const [notes, setNotes] = useState("");
   const [isPaid, setIsPaid] = useState(false);
   const [detail, setDetail] = useState<SalesDocumentStatusDetail | null>(null);
+  const [activeTab, setActiveTab] = useState<SalesDocumentDetailTab>("products");
+  const [quoteLines, setQuoteLines] = useState<SalesQuoteLineDetail[]>([]);
   const [isLoadingDetail, setIsLoadingDetail] = useState(true);
+  const [isLoadingLines, setIsLoadingLines] = useState(kind === "quote");
+  const [isPrintDialogOpen, setIsPrintDialogOpen] = useState(false);
+  const [printFormat, setPrintFormat] = useState<SalesPrintFormat | null>(null);
+  const [printConfig, setPrintConfig] = useState<QuotesTemplateConfig | null>(null);
+  const [printConfigFormat, setPrintConfigFormat] = useState<SalesPrintFormat | null>(null);
+  const [isLoadingPrintConfig, setIsLoadingPrintConfig] = useState(false);
+  const [printError, setPrintError] = useState<string | null>(null);
   useEffect(() => {
     let isMounted = true;
     setIsLoadingDetail(true);
@@ -1247,102 +1506,157 @@ function SalesDocumentPanel({
     };
   }, [kind, row.id]);
 
+  const openPrintPreview = async (format: SalesPrintFormat) => {
+    setPrintFormat(format);
+    setPrintError(null);
+
+    if (printConfig && printConfigFormat === format) return;
+
+    setIsLoadingPrintConfig(true);
+
+    try {
+      const initialData = await loadQuotesInitialData(organizationId);
+      setPrintConfig(normalizeQuotesTemplateConfig(selectQuotesPrintConfig(initialData.config, format), organizationName));
+      setPrintConfigFormat(format);
+    } catch (error) {
+      setPrintError(error instanceof Error ? error.message : "No se pudo cargar la plantilla de Presupuestos.");
+      setPrintConfig(normalizeQuotesTemplateConfig(null, organizationName));
+      setPrintConfigFormat(format);
+    } finally {
+      setIsLoadingPrintConfig(false);
+    }
+  };
+
+  const openTemplatePrintPreview = () => {
+    setIsPrintDialogOpen(true);
+    void openPrintPreview("template");
+  };
+
+  const saveTemplatePrintHistory = async () => {
+    const now = new Date().toISOString();
+    const sourceKind = printSourceKind(kind);
+    const documentType = sourceKind === "invoice" ? "pdfInvoice" : "pdfQuote";
+    const displayLines = printableLines(row, quoteLines);
+    const historyId = `sales-print-${kind}-${row.id}-${newPrintHistoryId()}`;
+
+    await upsertQuoteDocument(organizationId, {
+      id: historyId,
+      document_type: documentType,
+      quote_number: row.number,
+      client_name: row.client || null,
+      date: row.date || null,
+      due_date: row.date || null,
+      total_amount: row.total,
+      payload: {
+        id: historyId,
+        documentType,
+        templateScope: "sales",
+        sourceKind,
+        createdAt: now,
+        updatedAt: now,
+        quoteNumber: row.number,
+        date: row.date,
+        dueDate: row.date,
+        clientName: row.client,
+        clientDetails: [row.clientCode, row.clientEmail, row.clientPhone, row.clientCountry].filter(Boolean).join("\n"),
+        items: displayLines.map((line) => ({
+          id: line.id,
+          serviceType: line.productOrService || row.reference || row.number,
+          description: line.description,
+          hours: line.quantity || 1,
+          hourlyRate: line.unitPrice || 0,
+          manualAmountEnabled: true,
+          manualAmount: taxableLineAmount(line),
+        })),
+        taxEnabled: true,
+        taxRate: 21,
+        discountRate: 0,
+        discountAmount: 0,
+        notes: "",
+        noteItems: [],
+        pdfFields: {
+          issuerName: "",
+          issuerTaxId: "",
+          issuerAddress: "",
+          issuerCity: "",
+          paymentMethod: "",
+          iban: "",
+          paymentRows: [],
+          suplido: 0,
+        },
+        taxItems: [],
+      },
+    });
+  };
+
+  const printTemplateDocument = () => {
+    void saveTemplatePrintHistory().finally(() => window.print());
+  };
+
+  useEffect(() => {
+    if (kind !== "quote") {
+      setQuoteLines([]);
+      setIsLoadingLines(false);
+      return;
+    }
+
+    let isMounted = true;
+    setIsLoadingLines(true);
+
+    void getSalesQuoteLineDetails(row.id).then((result) => {
+      if (!isMounted) return;
+      setQuoteLines(result.lines ?? []);
+      setIsLoadingLines(false);
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [kind, row.id]);
+
   return (
     <section className="sales-action-panel document-detail-panel inline-document-detail-panel" aria-label={`Editar ${row.number}`}>
-      <header>
-        <div>
-          <PenLine aria-hidden="true" size={22} />
-          <h2>{activeSection.singularTitle} {row.number}</h2>
-        </div>
-        <button className="panel-icon-button" onClick={onClose} type="button" aria-label="Cerrar edicion">
-          <X aria-hidden="true" size={18} />
-        </button>
-      </header>
+      <DocumentHeaderSummary
+        detail={detail}
+        documentTitle={documentTitle}
+        isPaid={isPaid}
+        kind={kind}
+        onClose={onClose}
+        onPaidChange={setIsPaid}
+        onStatusChange={setStatusValue}
+        onTitleChange={setDocumentTitle}
+        row={row}
+        statusValue={statusValue}
+      />
 
-      <div className="document-detail-grid">
-        <label className="sage-field">
-          <span>Estado</span>
-          <select value={statusValue} onChange={(event) => setStatusValue(event.target.value)}>
-            {statusOptionsByKind[kind].map((option) => (
-              <option key={option.value} value={option.value}>{option.label}</option>
-            ))}
-          </select>
-        </label>
-        <label className="sage-field">
-          <span>Fecha</span>
-          <input disabled value={row.date} />
-        </label>
+      <div className="document-detail-tabs" role="tablist" aria-label="Detalle del documento">
+        <DocumentDetailTab activeTab={activeTab} id="products" label="Productos y servicios" onSelect={setActiveTab} />
+        <DocumentDetailTab activeTab={activeTab} id="totals" label="Totales y descuentos" onSelect={setActiveTab} />
+        <DocumentDetailTab activeTab={activeTab} id="notes" label="Notas" onSelect={setActiveTab} />
+        <DocumentDetailTab activeTab={activeTab} id="client" label="Informacion de cliente" onSelect={setActiveTab} />
       </div>
 
-      <div className="document-detail-meta-grid">
-        {statusValue === "open" ? (
-          <>
-            <article className="sales-detail-card">
-              <span>Creado por</span>
-              <strong>{detail?.createdByName ?? "Usuario de la organizacion"}</strong>
-            </article>
-            <article className="sales-detail-card">
-              <span>Fecha y hora de creacion</span>
-              <strong>{formatDateTime(detail?.createdAt ?? null)}</strong>
-            </article>
-          </>
+      <section className="document-detail-tab-panel">
+        {activeTab === "products" ? (
+          <QuoteLinesTable isLoading={isLoadingLines} lines={quoteLines} row={row} />
         ) : null}
-        {statusValue === "sent" ? (
-          <article className="sales-detail-card">
-            <span>Fecha y hora de envio</span>
-            <strong>{formatDateTime(detail?.eventAt ?? null)}</strong>
-          </article>
+        {activeTab === "totals" ? <DocumentTotalsPanel row={row} /> : null}
+        {activeTab === "notes" ? (
+          <label className="sage-textarea-field compact-sales-notes detail-tab-notes">
+            <span>Notas</span>
+            <textarea
+              onChange={(event) => setNotes(event.target.value)}
+              placeholder={isLoadingDetail ? "Cargando historial..." : "Anade contexto para este estado"}
+              rows={4}
+              value={notes}
+            />
+          </label>
         ) : null}
-        {statusValue === "accepted" ? (
-          <>
-            <article className="sales-detail-card">
-              <span>Fecha y hora de aceptacion</span>
-              <strong>{formatDateTime(detail?.eventAt ?? null)}</strong>
-            </article>
-            <article className="sales-detail-card">
-              <span>Abonado</span>
-              <strong>{isPaid ? "Si" : "No"}</strong>
-            </article>
-          </>
-        ) : null}
-        {statusValue === "rejected" ? (
-          <article className="sales-detail-card">
-            <span>Fecha y hora de rechazo</span>
-            <strong>{formatDateTime(detail?.eventAt ?? null)}</strong>
-          </article>
-        ) : null}
-        {statusValue === "cancelled" ? (
-          <article className="sales-detail-card">
-            <span>Fecha y hora de cancelacion</span>
-            <strong>{formatDateTime(detail?.eventAt ?? null)}</strong>
-          </article>
-        ) : null}
-      </div>
-
-      <label className="sage-textarea-field compact-sales-notes">
-        <span>Notas</span>
-        <textarea
-          onChange={(event) => setNotes(event.target.value)}
-          placeholder={isLoadingDetail ? "Cargando historial..." : "Anade contexto para este estado"}
-          rows={4}
-          value={notes}
-        />
-      </label>
-
-      {statusValue === "accepted" ? (
-        <label className="sales-inline-toggle">
-          <input checked={isPaid} onChange={(event) => setIsPaid(event.target.checked)} type="checkbox" />
-          <span>Marcar como abonado</span>
-        </label>
-      ) : null}
-
-      <div className="document-detail-compact-meta">
-        <span>Cliente: <strong>{row.client}</strong></span>
-        <span>Total: <strong>{formatMoney(row.total)}</strong></span>
-      </div>
+        {activeTab === "client" ? <DocumentClientPanel row={row} /> : null}
+      </section>
 
       <div className="document-action-strip">
-        <button className="sage-outline-button" onClick={onPrint} type="button">
+        <button className="sage-outline-button" onClick={openTemplatePrintPreview} type="button">
           <FileText aria-hidden="true" size={18} />
           Imprimir
         </button>
@@ -1358,8 +1672,593 @@ function SalesDocumentPanel({
           Guardar cambios
         </button>
       </div>
+
+      <SalesPrintDialog
+        config={printConfig}
+        format={printFormat}
+        isOpen={isPrintDialogOpen}
+        isLoadingConfig={isLoadingPrintConfig}
+        kind={kind}
+        lines={quoteLines}
+        loadError={printError}
+        onClose={() => {
+          setIsPrintDialogOpen(false);
+          setPrintFormat(null);
+        }}
+        onPrint={printTemplateDocument}
+        row={row}
+      />
     </section>
   );
+}
+
+function SalesPrintDialog({
+  config,
+  format,
+  isLoadingConfig,
+  isOpen,
+  kind,
+  lines,
+  loadError,
+  onClose,
+  onPrint,
+  row
+}: {
+  config: QuotesTemplateConfig | null;
+  format: SalesPrintFormat | null;
+  isLoadingConfig: boolean;
+  isOpen: boolean;
+  kind: SalesDocumentKind;
+  lines: SalesQuoteLineDetail[];
+  loadError: string | null;
+  onClose: () => void;
+  onPrint: () => void;
+  row: SalesDocumentRow;
+}) {
+  const [previewScale, setPreviewScale] = useState(0.62);
+  const previewPanelRef = useRef<HTMLElement | null>(null);
+  const documentLabel = salesPrintDocumentLabel(kind);
+  const title = `Imprimir ${documentLabel.singular} ${row.number}`;
+  const canPrint = Boolean(format && config && !isLoadingConfig);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const previewPanel = previewPanelRef.current;
+    if (!previewPanel) return;
+
+    const updateScale = () => {
+      const rect = previewPanel.getBoundingClientRect();
+      const nextScale = Math.min(
+        Math.max((rect.width - 20) / 794, 0.34),
+        Math.max((rect.height - 20) / 1123, 0.34),
+        1,
+      );
+      setPreviewScale(Number(nextScale.toFixed(3)));
+    };
+
+    updateScale();
+    const observer = new ResizeObserver(updateScale);
+    observer.observe(previewPanel);
+    window.addEventListener("resize", updateScale);
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", updateScale);
+    };
+  }, [config, format, isOpen]);
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="sales-print-modal-backdrop" role="presentation">
+      <section className="sales-print-modal" role="dialog" aria-modal="true" aria-label={title}>
+        <header className="sales-print-dialog-chrome sales-print-modal-header">
+          <h2>{row.number}</h2>
+          <button className="panel-icon-button" onClick={onClose} type="button" aria-label="Cerrar impresion">
+            <X aria-hidden="true" size={18} />
+          </button>
+        </header>
+
+        {loadError ? <p className="sales-print-dialog-chrome sales-print-warning">{loadError}</p> : null}
+        {isLoadingConfig ? <p className="sales-print-dialog-chrome sales-print-loading">Cargando plantilla guardada...</p> : null}
+
+        {format && config ? (
+          <div
+            className="quotes-shell sales-print-preview-shell"
+            style={{ "--sales-print-preview-scale": previewScale } as CSSProperties}
+          >
+            <section
+              ref={previewPanelRef}
+              className="preview-panel"
+              aria-label="Vista previa de impresion"
+            >
+              <div className="sales-print-printable">
+                <SalesPrintableDocument config={config} format={format} kind={kind} lines={lines} row={row} />
+              </div>
+            </section>
+          </div>
+        ) : (
+          <div className="sales-print-dialog-chrome sales-print-empty-state">
+            <FileText aria-hidden="true" size={34} />
+            <p>Preparando la plantilla de venta guardada.</p>
+          </div>
+        )}
+
+        <footer className="sales-print-dialog-chrome sales-print-actions">
+          <button className="sage-outline-button" onClick={onClose} type="button">Cancelar</button>
+          <button className="sage-primary-button" disabled={!canPrint} onClick={onPrint} type="button">
+            Imprimir ahora
+          </button>
+        </footer>
+      </section>
+    </div>
+  );
+}
+
+function SalesPrintableDocument({
+  config,
+  format,
+  kind,
+  lines,
+  row
+}: {
+  config: QuotesTemplateConfig;
+  format: SalesPrintFormat;
+  kind: SalesDocumentKind;
+  lines: SalesQuoteLineDetail[];
+  row: SalesDocumentRow;
+}) {
+  if (format === "template") {
+    return <SalesTemplateDocument config={config} kind={kind} lines={lines} row={row} />;
+  }
+
+  return <SalesPdfDocument config={config} kind={kind} lines={lines} row={row} />;
+}
+
+function printableLines(row: SalesDocumentRow, lines: SalesQuoteLineDetail[]): SalesQuoteLineDetail[] {
+  if (lines.length > 0) return lines;
+
+  return [{
+    id: `${row.id}-print-summary`,
+    productOrService: row.reference || row.number,
+    description: "",
+    quantity: 1,
+    unitPrice: row.baseAvailable ?? row.total,
+    discountRate: 0,
+    taxableBase: row.baseAvailable ?? row.total,
+    taxRate: null,
+    status: "Completa"
+  }];
+}
+
+function SalesPdfDocument({
+  config,
+  kind,
+  lines,
+  row
+}: {
+  config: QuotesTemplateConfig;
+  kind: SalesDocumentKind;
+  lines: SalesQuoteLineDetail[];
+  row: SalesDocumentRow;
+}) {
+  const displayLines = printableLines(row, lines);
+  const totals = calculateSalesPrintTotals(row, displayLines);
+  const isInvoice = kind === "invoice" || kind === "recurring-invoice";
+  const documentLabel = salesPrintDocumentLabel(kind);
+  const fixedNotes = (isInvoice ? config.invoiceFixedNotes : config.quoteFixedNotes).trim();
+  const prepaymentAmount = formatMoney(totals.total * (config.quotePrepaymentRate / 100));
+  const prepaymentNote = !isInvoice && config.quotePrepaymentEnabled
+    ? `${config.quotePrepaymentText} ${prepaymentAmount}`
+    : "";
+  const style = {
+    "--document-accent-color": config.accentColor,
+    "--document-page-bg": config.pageBackgroundColor,
+    "--document-client-box-bg": config.clientBoxBackgroundColor
+  } as CSSProperties;
+
+  return (
+    <article className={`quote-page ${isInvoice ? "is-invoice" : "is-quote"}`} style={style}>
+      <header className="quote-header">
+        <div className="quote-header-left">
+          <div className="orb-lockup">
+            {config.logoDataUrl ? <img className="brand-logo-image" src={config.logoDataUrl} alt="" /> : <SalesOrbLogo size={56} />}
+            <div className="orb-lockup-text">
+              <p className="quote-kicker">{documentLabel.upper}</p>
+              <h2>{config.companyName || "Tu empresa"}</h2>
+              {config.companyTagline.trim() ? <span className="orb-lockup-tagline">{config.companyTagline}</span> : null}
+            </div>
+          </div>
+        </div>
+        <div className="quote-meta">
+          <span>{row.number}</span>
+          <span>{formatSalesPrintDate(row.date)}</span>
+          {row.reference.trim() ? <span>{row.reference}</span> : null}
+        </div>
+      </header>
+
+      <section className="client-strip">
+        <div>
+          <span>Cliente</span>
+          <strong>{row.client || "Nombre del cliente"}</strong>
+        </div>
+        <p>{[row.clientCode, row.clientEmail, row.clientPhone, row.clientCountry].filter(Boolean).join("\n") || "Datos del cliente"}</p>
+      </section>
+
+      <section className="quote-section">
+        <div className="quote-table">
+          <div className="quote-table-row quote-table-head">
+            <span>{isInvoice ? "Concepto" : "Servicio"}</span>
+            <span>Horas</span>
+            <span>Tarifa</span>
+            <span>Importe</span>
+          </div>
+          {displayLines.map((line) => (
+            <div className="quote-table-row" key={line.id}>
+              <div>
+                <strong>{line.productOrService || "Servicio"}</strong>
+                <p>{line.description}</p>
+              </div>
+              <span>{line.quantity ? `${formatQuantity(line.quantity)} h` : "-"}</span>
+              <span>{formatMoney(line.unitPrice)}</span>
+              <strong>{formatMoney(taxableLineAmount(line))}</strong>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="totals-block">
+        <div className="totals-card">
+          <div>
+            <span>Subtotal</span>
+            <strong>{formatMoney(totals.subtotal)}</strong>
+          </div>
+          {totals.taxAmount > 0 ? (
+            <div>
+              <span>IVA {formatPercent(totals.effectiveTaxRate)}</span>
+              <strong>{formatMoney(totals.taxAmount)}</strong>
+            </div>
+          ) : null}
+          <div className="grand-total">
+            <span>Total</span>
+            <strong>{formatMoney(totals.total)}</strong>
+          </div>
+        </div>
+      </section>
+
+      <footer className="quote-footer">
+        <div className="quote-notes">
+          <span>Notas</span>
+        </div>
+        <div className="quote-terms">
+          {prepaymentNote ? <p className="fixed-notes-text">{prepaymentNote}</p> : null}
+          {fixedNotes ? <p className="fixed-notes-text">{fixedNotes}</p> : null}
+          {config.pdfPaymentRows.length > 0 ? (
+            <div className="payment-block">
+              <span>Metodo de pago</span>
+              {config.pdfPaymentRows.map((payment) => (
+                <p key={payment.id}>
+                  {payment.label.trim() ? <strong>{payment.label}: </strong> : null}
+                  {payment.value}
+                </p>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      </footer>
+    </article>
+  );
+}
+
+function SalesTemplateDocument({
+  config,
+  kind,
+  lines,
+  row
+}: {
+  config: QuotesTemplateConfig;
+  kind: SalesDocumentKind;
+  lines: SalesQuoteLineDetail[];
+  row: SalesDocumentRow;
+}) {
+  const displayLines = printableLines(row, lines);
+  const totals = calculateSalesPrintTotals(row, displayLines);
+  const isInvoice = kind === "invoice" || kind === "recurring-invoice";
+  const documentLabel = salesPrintDocumentLabel(kind);
+  const sectionTitle = config.templateSectionTitle.trim() || (isInvoice ? "DESCRIPCIÓN" : documentLabel.upper);
+  const taxRows = totals.taxAmount > 0
+    ? [{ id: "iva", label: "IVA", base: totals.subtotal, rate: totals.effectiveTaxRate, amount: totals.taxAmount }]
+    : [{ id: "iva", label: "IVA", base: totals.subtotal, rate: 0, amount: 0 }];
+
+  return (
+    <article className="quote-page pdf-invoice-page">
+      <header className="pdf-invoice-header">
+        <section className="pdf-issuer">
+          <strong>{row.client || "CLIENTE"}</strong>
+          {row.clientCode ? <span>Codigo: {row.clientCode}</span> : null}
+          {row.clientPhone ? <span>Tel: {row.clientPhone}</span> : null}
+          {row.clientEmail ? <span>{row.clientEmail}</span> : null}
+        </section>
+
+        <section className="pdf-meta-table">
+          <div>{documentLabel.number}</div>
+          <strong>{row.number}</strong>
+          <div>FECHA</div>
+          <strong>{row.date}</strong>
+        </section>
+      </header>
+
+      <section className={`pdf-description-table${config.templateShowQuantity ? " has-quantity" : ""}`}>
+        <h2>{sectionTitle}</h2>
+        <div className="pdf-description-body">
+          {displayLines.map((line) => (
+            <div className="pdf-description-line" key={line.id}>
+              <div>
+                <strong>{line.productOrService || "CONCEPTO"}</strong>
+                {line.description.trim() ? <span>{line.description}</span> : null}
+              </div>
+              {config.templateShowQuantity ? <span className="pdf-line-quantity">{formatQuantity(line.quantity)}</span> : null}
+              <strong>{formatMoney(taxableLineAmount(line))}</strong>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="pdf-invoice-total-row">
+        <strong>{documentLabel.total}</strong>
+        <span>{formatMoney(totals.subtotal)}</span>
+      </section>
+
+      <section className="pdf-taxes-section">
+        <div className="pdf-tax-table">
+          <div className="pdf-tax-head">IMPUESTOS</div>
+          <div className="pdf-tax-head">BASE IMPONIBLE</div>
+          <div className="pdf-tax-head">%</div>
+          <div className="pdf-tax-head"></div>
+          {taxRows.map((tax) => (
+            <div className="pdf-tax-row" key={tax.id}>
+              <span>{tax.label}</span>
+              <span>{formatMoney(tax.base)}</span>
+              <span>{tax.rate ? formatPercent(tax.rate) : "0"}</span>
+              <span>{formatMoney(tax.amount)}</span>
+            </div>
+          ))}
+        </div>
+        <div className="pdf-summary-table">
+          <span>TOTAL</span>
+          <strong>{formatMoney(totals.subtotal + totals.taxAmount)}</strong>
+          <span>SUPLIDO</span>
+          <strong>{formatMoney(Math.max(totals.total - totals.subtotal - totals.taxAmount, 0))}</strong>
+          <strong>TOTAL NETO</strong>
+          <strong>{formatMoney(totals.total)}</strong>
+        </div>
+      </section>
+
+      <footer className="pdf-invoice-footer">
+        <section className="pdf-client-block">
+          <strong>{config.templateIssuerName || config.companyName || "EMISOR"}</strong>
+          {config.templateIssuerTaxId ? <p>CIF: {config.templateIssuerTaxId}</p> : null}
+          {config.templateIssuerAddress ? <p>{config.templateIssuerAddress}</p> : null}
+          {config.templateIssuerCity ? <p>{config.templateIssuerCity}</p> : null}
+        </section>
+
+        {config.templatePaymentRows.length > 0 ? (
+          <>
+            <strong className="pdf-payment-heading">Forma de Pago:</strong>
+            <section className="pdf-payment-table">
+              {config.templatePaymentRows.map((payment) => (
+                <div key={payment.id}>
+                  <strong>{payment.label.trim() ? `${payment.label}:` : "Pago:"}</strong> {payment.value}
+                </div>
+              ))}
+            </section>
+          </>
+        ) : null}
+      </footer>
+    </article>
+  );
+}
+
+function DocumentHeaderSummary({
+  detail,
+  documentTitle,
+  isPaid,
+  kind,
+  onClose,
+  onPaidChange,
+  onStatusChange,
+  onTitleChange,
+  row,
+  statusValue
+}: {
+  detail: SalesDocumentStatusDetail | null;
+  documentTitle: string;
+  isPaid: boolean;
+  kind: SalesDocumentKind;
+  onClose: () => void;
+  onPaidChange: (isPaid: boolean) => void;
+  onStatusChange: (status: string) => void;
+  onTitleChange: (title: string) => void;
+  row: SalesDocumentRow;
+  statusValue: string;
+}) {
+  return (
+    <section className="document-header-summary" aria-label="Resumen del presupuesto">
+      <header className="document-header-title-row">
+        <label className="document-title-field">
+          <PenLine aria-hidden="true" size={22} />
+          <input
+            aria-label="Nombre del presupuesto"
+            onChange={(event) => onTitleChange(event.target.value)}
+            value={documentTitle}
+          />
+        </label>
+        <button className="panel-icon-button" onClick={onClose} type="button" aria-label="Cerrar edicion">
+          <X aria-hidden="true" size={18} />
+        </button>
+      </header>
+
+      <div className="document-header-primary compact">
+        <label className="sage-field">
+          <span>Estado</span>
+          <select value={statusValue} onChange={(event) => onStatusChange(event.target.value)}>
+            {statusOptionsByKind[kind].map((option) => (
+              <option key={option.value} value={option.value}>{option.label}</option>
+            ))}
+          </select>
+        </label>
+        <label className="sage-field">
+          <span>Cliente</span>
+          <input disabled value={row.client} />
+        </label>
+        <label className="sage-field">
+          <span>Nº presupuesto</span>
+          <input disabled value={row.number} />
+        </label>
+        <label className="sage-field">
+          <span>Referencia</span>
+          <input disabled value={row.reference} />
+        </label>
+        <label className="sage-field compact-date">
+          <span>Fecha presupuesto</span>
+          <input disabled value={row.date} />
+        </label>
+        <label className="sage-field">
+          <span>Fecha aceptacion y hora</span>
+          <input disabled value={formatDateTime(detail?.eventAt ?? null)} />
+        </label>
+        <label className="sage-field">
+          <span>Abonado</span>
+          <select value={isPaid ? "yes" : "no"} onChange={(event) => onPaidChange(event.target.value === "yes")}>
+            <option value="yes">Si</option>
+            <option value="no">No</option>
+          </select>
+        </label>
+      </div>
+    </section>
+  );
+}
+
+function DocumentDetailTab({
+  activeTab,
+  id,
+  label,
+  onSelect
+}: {
+  activeTab: SalesDocumentDetailTab;
+  id: SalesDocumentDetailTab;
+  label: string;
+  onSelect: (tab: SalesDocumentDetailTab) => void;
+}) {
+  return (
+    <button
+      aria-selected={activeTab === id}
+      className={`document-detail-tab${activeTab === id ? " active" : ""}`}
+      onClick={() => onSelect(id)}
+      role="tab"
+      type="button"
+    >
+      {label}
+    </button>
+  );
+}
+
+function QuoteLinesTable({
+  isLoading,
+  lines,
+  row
+}: {
+  isLoading: boolean;
+  lines: SalesQuoteLineDetail[];
+  row: SalesDocumentRow;
+}) {
+  const fallbackLine: SalesQuoteLineDetail = {
+    id: `${row.id}-summary`,
+    productOrService: row.reference || row.number,
+    description: "",
+    quantity: 1,
+    unitPrice: row.baseAvailable ?? row.total,
+    discountRate: 0,
+    taxableBase: row.baseAvailable ?? row.total,
+    taxRate: null,
+    status: "Completa"
+  };
+  const displayLines = lines.length > 0 ? lines : isLoading ? [] : [fallbackLine];
+
+  return (
+    <div className="quote-detail-lines-wrap">
+      <table className="quote-detail-lines-table">
+        <thead>
+          <tr>
+            <th>Producto o servicio</th>
+            <th>Descripcion</th>
+            <th>Cantidad</th>
+            <th>Precio unitario</th>
+            <th>Descuento</th>
+            <th>Base imponible</th>
+            <th>% IVA</th>
+            <th>Estado</th>
+          </tr>
+        </thead>
+        <tbody>
+          {isLoading ? (
+            <tr>
+              <td colSpan={8}>Cargando productos y servicios...</td>
+            </tr>
+          ) : displayLines.map((line) => (
+            <tr key={line.id}>
+              <td>{line.productOrService}</td>
+              <td className="quote-line-description">{line.description}</td>
+              <td>{formatQuantity(line.quantity)}</td>
+              <td>{formatMoney(line.unitPrice)}</td>
+              <td>{formatPercent(line.discountRate)}</td>
+              <td>{formatMoney(line.taxableBase)}</td>
+              <td>{line.taxRate === null ? "—" : formatPercent(line.taxRate)}</td>
+              <td><span className="quote-line-status">{line.status}</span></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function DocumentTotalsPanel({ row }: { row: SalesDocumentRow }) {
+  return (
+    <div className="document-detail-summary-grid">
+      <SummaryBox label="Total base imponible" value={row.baseAvailable ?? 0} />
+      <SummaryBox label="Total" value={row.total} />
+    </div>
+  );
+}
+
+function DocumentClientPanel({ row }: { row: SalesDocumentRow }) {
+  return (
+    <div className="document-detail-client-grid">
+      <label className="sage-field">
+        <span>Codigo de cliente</span>
+        <input disabled value={row.clientCode} />
+      </label>
+      <label className="sage-field">
+        <span>Cliente</span>
+        <input disabled value={row.client} />
+      </label>
+    </div>
+  );
+}
+
+function formatQuantity(value: number): string {
+  return new Intl.NumberFormat("es-ES", {
+    maximumFractionDigits: 4,
+    minimumFractionDigits: Number.isInteger(value) ? 0 : 2
+  }).format(value);
+}
+
+function formatPercent(value: number): string {
+  return `${new Intl.NumberFormat("es-ES", {
+    maximumFractionDigits: 2,
+    minimumFractionDigits: 2
+  }).format(value)}%`;
 }
 
 function DeleteDocumentPanel({

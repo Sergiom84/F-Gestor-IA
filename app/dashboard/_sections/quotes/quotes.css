@@ -1,5 +1,3 @@
-/* Ported from SOHL_Presupuestos src/styles.css, scoped under .quotes-shell. */
-
 @import url("https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;700;800;900&display=swap");
 
 .quotes-shell {
@@ -19,7 +17,7 @@
 .quotes-shell {
   margin: 0;
   min-width: 320px;
-  min-height: 100%;
+  min-height: 100vh;
 }
 
 .quotes-shell button,
@@ -36,14 +34,14 @@
 .quotes-shell .app-shell {
   display: grid;
   grid-template-columns:
-    var(--left-panel-width, 280px)
-    10px
+    var(--left-panel-width, 274px)
     var(--editor-panel-width, 520px)
     10px
-    minmax(360px, 1fr);
+    minmax(0, 1fr);
   gap: 10px;
   min-height: 100vh;
   padding: 18px;
+  overflow-x: hidden;
 }
 
 .quotes-shell .layout-resizer {
@@ -179,6 +177,7 @@
 
 .quotes-shell .history-list,
 .quotes-shell .template-section,
+.quotes-shell .sidebar-section-content,
 .quotes-shell .items-editor,
 .quotes-shell .tax-items-editor,
 .quotes-shell .pdf-payment-rows-editor,
@@ -232,6 +231,24 @@
   letter-spacing: 0.03em;
 }
 
+.quotes-shell .sidebar-subgroup-title {
+  color: #645849;
+  font-size: 0.74rem;
+  font-weight: 900;
+  letter-spacing: 0.02em;
+  padding: 3px 2px 0;
+  text-transform: uppercase;
+}
+
+.quotes-shell .template-section .config-action {
+  width: 100%;
+}
+
+.quotes-shell .template-section + .template-section,
+.quotes-shell .history-list {
+  padding-top: 2px;
+}
+
 .quotes-shell .section-title,
 .quotes-shell .card-heading,
 .quotes-shell .item-topline,
@@ -248,6 +265,35 @@
   color: #645849;
   font-size: 0.86rem;
   font-weight: 800;
+}
+
+.quotes-shell .section-toggle {
+  width: 100%;
+  padding: 8px 2px;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+}
+
+.quotes-shell .section-toggle:hover,
+.quotes-shell .section-toggle:focus-visible {
+  color: #2c2925;
+  outline: none;
+}
+
+.quotes-shell .accordion-indicator {
+  width: 8px;
+  height: 8px;
+  margin-left: auto;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(45deg);
+  transition: transform 160ms ease;
+}
+
+.quotes-shell .section-toggle.is-open .accordion-indicator {
+  transform: rotate(225deg);
 }
 
 .quotes-shell .quote-list-item {
@@ -399,8 +445,63 @@
   color: #2c2925;
 }
 
+.quotes-shell .config-tabs {
+  display: inline-flex;
+  width: fit-content;
+  padding: 4px;
+  border: 1px solid rgba(152, 111, 63, 0.24);
+  border-radius: 999px;
+  background: #fffaf2;
+  gap: 4px;
+}
+
+.quotes-shell .config-tabs button {
+  border: 0;
+  border-radius: 999px;
+  padding: 9px 16px;
+  background: transparent;
+  color: #645849;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.quotes-shell .config-tabs button.is-active,
+.quotes-shell .config-tabs button:hover,
+.quotes-shell .config-tabs button:focus-visible {
+  background: #2c2925;
+  color: #fffaf2;
+  outline: none;
+}
+
+.quotes-shell .config-scope-tabs {
+  align-items: center;
+  background: #f3eadc;
+  border: 1px solid rgba(152, 111, 63, 0.18);
+  border-radius: 8px;
+  display: grid;
+  gap: 6px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  padding: 5px;
+}
+
+.quotes-shell .config-scope-tabs button {
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #4d4235;
+  cursor: pointer;
+  font-weight: 850;
+  min-height: 34px;
+}
+
+.quotes-shell .config-scope-tabs button.is-active {
+  background: #fffaf2;
+  box-shadow: 0 1px 4px rgba(52, 45, 37, 0.12);
+  color: #2c2925;
+}
+
 .quotes-shell .large-textarea {
-  min-height: 132px;
+  min-height: 86px;
 }
 
 .quotes-shell .config-style-section {
@@ -409,6 +510,30 @@
 }
 
 .quotes-shell .config-fixed-notes-section {
+  display: grid;
+  gap: 14px;
+}
+
+.quotes-shell .config-template-section {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+  border: 1px solid rgba(152, 111, 63, 0.18);
+  border-radius: 14px;
+  background: #fffaf2;
+}
+
+.quotes-shell .config-template-section p {
+  margin: 0;
+  color: #6d665d;
+}
+
+.quotes-shell .template-quantity-toggle {
+  align-self: end;
+  min-height: 40px;
+}
+
+.quotes-shell .config-payment-section {
   display: grid;
   gap: 14px;
 }
@@ -619,24 +744,52 @@
 }
 
 .quotes-shell .toolbar {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
-  gap: 8px;
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 6px;
   border-radius: 8px;
-  padding: 10px;
+  padding: 8px;
 }
 
 .quotes-shell .toolbar button {
+  flex: 1 1 0;
   min-width: 0;
+  min-height: 34px;
+  padding: 0 8px;
   background: #fffaf2;
   color: #332d26;
   border: 1px solid rgba(52, 45, 37, 0.12);
-  font-size: clamp(0.82rem, 1.1vw, 1rem);
-  white-space: normal;
+  font-size: clamp(0.7rem, 0.82vw, 0.92rem);
+  line-height: 1;
+  white-space: nowrap;
+  transition:
+    transform 140ms ease,
+    border-color 140ms ease,
+    background 140ms ease,
+    color 140ms ease,
+    box-shadow 140ms ease;
+}
+
+.quotes-shell .toolbar button:active {
+  transform: translateY(1px) scale(0.98);
+}
+
+.quotes-shell .toolbar button.is-confirmed {
+  border-color: rgba(15, 118, 110, 0.55);
+  background: #e3f7ef;
+  color: #075f52;
+  box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.12);
 }
 
 .quotes-shell .toolbar .danger-button {
   color: #9b1c1c;
+}
+
+.quotes-shell .toolbar .danger-button.is-confirmed {
+  border-color: rgba(155, 28, 28, 0.45);
+  background: #fde8e8;
+  color: #9b1c1c;
+  box-shadow: 0 0 0 3px rgba(155, 28, 28, 0.12);
 }
 
 .quotes-shell .form-card {
@@ -778,6 +931,19 @@
   cursor: pointer;
 }
 
+.quotes-shell .pdf-suplido-field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 140px;
+  align-items: center;
+  gap: 12px;
+  max-width: 320px;
+  margin-left: auto;
+}
+
+.quotes-shell .pdf-suplido-field input {
+  text-align: right;
+}
+
 .quotes-shell .pdf-total-row {
   display: flex;
   align-items: center;
@@ -842,10 +1008,11 @@
   display: grid;
   justify-items: center;
   align-items: start;
-  overflow: auto;
+  width: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
   container-type: inline-size;
   min-width: 0;
-  padding-inline: 2px;
 }
 
 .quotes-shell .quote-page {
@@ -855,7 +1022,8 @@
   position: relative;
   display: flex;
   flex-direction: column;
-  width: min(210mm, calc(100cqw - 4px));
+  width: min(210mm, 100%);
+  max-width: 100%;
   height: auto;
   aspect-ratio: 210 / 297;
   min-height: 0;
@@ -1195,27 +1363,32 @@
 }
 
 .quotes-shell .pdf-invoice-page {
+  display: flex;
+  flex-direction: column;
   gap: 0;
-  padding: clamp(14px, 5.6cqw, 12mm);
+  width: min(210mm, 100%);
+  max-width: 100%;
+  min-height: min(297mm, calc(100cqw * 1.414));
+  padding: clamp(18px, 8.3cqw, 18mm);
   background: #fff;
   color: #050505;
   font-family: Arial, Helvetica, sans-serif;
-  font-size: clamp(0.45rem, 1.08cqw, 0.76rem);
+  font-size: clamp(0.45rem, 1.25cqw, 0.82rem);
   box-shadow: 0 26px 70px rgba(34, 27, 20, 0.18);
 }
 
 .quotes-shell .pdf-invoice-header {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 46%;
+  grid-template-columns: minmax(0, 1fr) minmax(42%, 54%);
   align-items: start;
-  gap: 6mm;
-  margin: 3mm 0 6mm;
+  gap: 8mm;
+  margin: 8mm 0 10mm;
 }
 
 .quotes-shell .pdf-issuer {
   display: grid;
   gap: 0.32em;
-  color: #41516a;
+  color: #050505;
   font-size: 1.34em;
   font-weight: 800;
   line-height: 1.1;
@@ -1227,11 +1400,11 @@
 
 .quotes-shell .pdf-meta-table {
   display: grid;
-  grid-template-columns: 50% 50%;
+  grid-template-columns: minmax(0, 52%) minmax(0, 48%);
   width: 100%;
   justify-self: end;
   border: 2px solid #070707;
-  font-size: 1.15em;
+  font-size: 1.08em;
   font-weight: 900;
 }
 
@@ -1240,10 +1413,13 @@
   border-right: 2px solid #070707;
   border-bottom: 2px solid #070707;
   padding: 0.12em 0.35em;
+  min-width: 0;
+  white-space: nowrap;
 }
 
 .quotes-shell .pdf-meta-table > :nth-child(2n) {
   border-right: 0;
+  font-size: 0.95em;
   text-align: center;
 }
 
@@ -1254,7 +1430,7 @@
 .quotes-shell .pdf-description-table {
   display: grid;
   border: 2px solid #070707;
-  min-height: 22mm;
+  min-height: 36mm;
 }
 
 .quotes-shell .pdf-description-table h2,
@@ -1272,42 +1448,55 @@
 
 .quotes-shell .pdf-description-body {
   display: grid;
-  row-gap: 0.6mm;
-  min-height: 16mm;
-  padding-top: 1.8mm;
-  padding-bottom: 2.6mm;
+  min-height: 30mm;
+  padding-top: 2mm;
+  padding-bottom: 2mm;
 }
 
 .quotes-shell .pdf-description-line {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 13.5%;
   align-items: start;
-  font-size: 1.12em;
-  line-height: 1.12;
+  font-size: 1.18em;
+  line-height: 1.08;
+}
+
+.quotes-shell .pdf-description-table.has-quantity .pdf-description-line {
+  grid-template-columns: minmax(0, 1fr) 11% 15%;
 }
 
 .quotes-shell .pdf-description-line > div {
   display: grid;
-  gap: 0.16em;
-  padding: 0.24em 0.4em;
+  gap: 0.08em;
+  padding: 0.14em 0.4em;
 }
 
-.quotes-shell .pdf-description-line strong,
-.quotes-shell .pdf-description-line span {
+.quotes-shell .pdf-description-line strong {
   font-weight: 500;
   text-transform: uppercase;
 }
 
+.quotes-shell .pdf-description-line span {
+  font-size: 0.92em;
+  font-weight: 500;
+  text-transform: uppercase;
+}
+
+.quotes-shell .pdf-line-quantity,
 .quotes-shell .pdf-description-line > strong {
   border-left: 2px solid #070707;
-  padding: 0.24em 0.42em;
+  padding: 0.14em 0.42em;
   text-align: right;
+}
+
+.quotes-shell .pdf-line-quantity {
+  font-weight: 700;
 }
 
 .quotes-shell .pdf-invoice-total-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 14%;
-  margin-top: 5mm;
+  margin-top: 7mm;
   border: 2px solid #070707;
   font-size: 1.12em;
 }
@@ -1321,8 +1510,12 @@
 }
 
 .quotes-shell .pdf-taxes-section {
+  --pdf-tax-description-width: 51%;
+  --pdf-tax-base-width: 23%;
+  --pdf-tax-rate-width: 10%;
+  --pdf-tax-amount-width: 16%;
   display: grid;
-  margin-top: 4mm;
+  margin-top: 5mm;
 }
 
 .quotes-shell .pdf-taxes-section h2 {
@@ -1331,7 +1524,11 @@
 
 .quotes-shell .pdf-tax-table {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(92px, 18%) minmax(58px, 12%) minmax(92px, 18%);
+  grid-template-columns:
+    var(--pdf-tax-description-width)
+    var(--pdf-tax-base-width)
+    var(--pdf-tax-rate-width)
+    var(--pdf-tax-amount-width);
   width: 100%;
   border: 2px solid #070707;
 }
@@ -1345,13 +1542,22 @@
   padding: 0.12em 0.32em;
 }
 
+.quotes-shell .pdf-summary-table > * {
+  white-space: nowrap;
+}
+
 .quotes-shell .pdf-tax-head {
-  min-height: 2.45em;
+  min-height: 3.2em;
   align-content: center;
-  font-size: 1.12em;
+  font-size: 1.04em;
   font-weight: 900;
   line-height: 1.15;
-  overflow-wrap: anywhere;
+  white-space: nowrap;
+}
+
+.quotes-shell .pdf-tax-head:nth-child(2) {
+  font-size: 0.98em;
+  letter-spacing: -0.02em;
 }
 
 .quotes-shell .pdf-tax-head:nth-child(4n),
@@ -1374,10 +1580,13 @@
 
 .quotes-shell .pdf-summary-table {
   display: grid;
-  grid-template-columns: 40% 60%;
-  justify-self: end;
-  width: 30%;
-  margin-top: 1.4mm;
+  grid-template-columns:
+    calc((var(--pdf-tax-base-width) + var(--pdf-tax-rate-width)) / (var(--pdf-tax-base-width) + var(--pdf-tax-rate-width) + var(--pdf-tax-amount-width)) * 100%)
+    calc(var(--pdf-tax-amount-width) / (var(--pdf-tax-base-width) + var(--pdf-tax-rate-width) + var(--pdf-tax-amount-width)) * 100%);
+  justify-self: start;
+  width: calc(var(--pdf-tax-base-width) + var(--pdf-tax-rate-width) + var(--pdf-tax-amount-width));
+  margin-left: var(--pdf-tax-description-width);
+  margin-top: 2mm;
   border: 2px solid #070707;
   font-size: 1.06em;
 }
@@ -1394,16 +1603,17 @@
 
 .quotes-shell .pdf-invoice-footer {
   display: grid;
-  gap: 1.8mm;
-  margin-top: 6mm;
+  gap: 3mm;
+  margin-top: auto;
+  padding-top: 16mm;
 }
 
 .quotes-shell .pdf-client-block {
   display: grid;
-  gap: 0.2em;
-  width: 45%;
+  gap: 0.35em;
+  width: 72%;
   font-size: 1.05em;
-  line-height: 1.2;
+  line-height: 1.35;
 }
 
 .quotes-shell .pdf-client-block strong {
@@ -1412,53 +1622,80 @@
 
 .quotes-shell .pdf-client-block p {
   margin: 0;
-  white-space: pre-wrap;
+  overflow-wrap: normal;
+  white-space: normal;
 }
 
 .quotes-shell .pdf-payment-heading {
-  margin-top: 1mm;
+  margin-top: 2mm;
   font-size: 1.02em;
   font-weight: 900;
 }
 
 .quotes-shell .pdf-payment-table {
+  box-sizing: border-box;
   display: grid;
-  width: 69%;
+  width: 100%;
   border: 2px solid #070707;
   font-size: 1.08em;
 }
 
 .quotes-shell .pdf-payment-table div {
-  min-height: 1.28em;
+  min-height: 1.45em;
   border-bottom: 2px solid #070707;
   padding: 0.1em 0.32em;
+  white-space: nowrap;
 }
 
 .quotes-shell .pdf-payment-table div:last-child {
   border-bottom: 0;
 }
 
+.quotes-shell.sales-print-preview-shell {
+  height: 100%;
+  margin: 0;
+  min-height: 0;
+}
+
+.quotes-shell.sales-print-preview-shell .quote-page,
+.quotes-shell.sales-print-preview-shell .pdf-invoice-page {
+  aspect-ratio: auto;
+  box-sizing: border-box;
+  flex: 0 0 794px;
+  height: 1123px;
+  margin: 0;
+  max-height: none;
+  max-width: none;
+  min-height: 1123px;
+  min-width: 794px;
+  transform: scale(var(--sales-print-preview-scale, 0.62));
+  transform-origin: top center;
+  width: 794px;
+}
+
 @media (max-width: 1080px) {
-.quotes-shell .app-shell {
+  .quotes-shell .app-shell {
     grid-template-columns: 1fr;
   }
-.quotes-shell .layout-resizer {
+
+  .quotes-shell .layout-resizer {
     display: none;
   }
-.quotes-shell .history-panel,
+
+  .quotes-shell .history-panel,
 .quotes-shell .editor-panel {
     position: static;
     max-height: none;
   }
-
 }
 
 @media (max-width: 820px) {
-.quotes-shell .app-shell {
+  .quotes-shell .app-shell {
     grid-template-columns: 1fr;
     padding: 12px;
   }
-.quotes-shell .toolbar,
+
+  .quotes-shell .toolbar,
 .quotes-shell .form-grid,
 .quotes-shell .discount-grid,
 .quotes-shell .background-options-grid,
@@ -1469,60 +1706,71 @@
 .quotes-shell .note-item-editor {
     grid-template-columns: 1fr;
   }
-.quotes-shell .history-modal-backdrop {
+
+  .quotes-shell .history-modal-backdrop {
     padding: 12px;
   }
-.quotes-shell .history-modal {
+
+  .quotes-shell .history-modal {
     max-height: calc(100vh - 24px);
   }
-.quotes-shell .quote-page {
+
+  .quotes-shell .quote-page {
     width: calc(100cqw - 4px);
   }
-.quotes-shell .quote-header,
+
+  .quotes-shell .quote-header,
 .quotes-shell .client-strip {
     grid-template-columns: 1fr;
     flex-direction: column;
   }
-.quotes-shell .quote-meta {
+
+  .quotes-shell .quote-meta {
     justify-items: start;
   }
-.quotes-shell .quote-table-row {
+
+  .quotes-shell .quote-table-row {
     grid-template-columns: 1fr;
   }
-.quotes-shell .quote-table-row > span,
+
+  .quotes-shell .quote-table-row > span,
 .quotes-shell .quote-table-row > strong {
     text-align: left;
   }
 
 }
 
-
-
 @page {
   size: A4;
   margin: 0;
 }
+
 @media print {
-.quotes-shell,
-.quotes-shell {
+  .quotes-shell,
+body {
     background: #fff;
   }
-.quotes-shell .no-print {
+
+  .quotes-shell .no-print {
     display: none !important;
   }
-.quotes-shell .app-shell {
+
+  .quotes-shell .app-shell {
     display: block;
     min-height: auto;
     padding: 0;
   }
-.quotes-shell .preview-panel {
+
+  .quotes-shell .preview-panel {
     display: block;
     overflow: visible;
   }
-.quotes-shell .quote-page {
+
+  .quotes-shell .quote-page {
+    box-sizing: border-box;
     width: 210mm;
     min-height: 297mm;
-    height: auto;
+    height: 297mm;
     overflow: visible;
     box-shadow: none;
     padding: 15mm;
@@ -1531,78 +1779,139 @@
     print-color-adjust: exact;
     -webkit-print-color-adjust: exact;
   }
-.quotes-shell .quote-page.pdf-invoice-page {
-    padding: 12mm;
-    font-size: 0.86rem;
+
+  .quotes-shell .pdf-invoice-page {
+    --pdf-tax-description-width: 51%;
+    --pdf-tax-base-width: 23%;
+    --pdf-tax-rate-width: 10%;
+    --pdf-tax-amount-width: 16%;
+    display: flex !important;
+    flex-direction: column !important;
+    box-sizing: border-box !important;
+    width: 210mm !important;
+    height: 297mm !important;
+    min-height: 297mm !important;
+    max-height: 297mm !important;
+    padding: 18mm !important;
+    font-family: Arial, Helvetica, sans-serif !important;
+    font-size: 0.82rem !important;
+    overflow: hidden !important;
   }
-.quotes-shell .quote-footer,
+
+  .quotes-shell.sales-print-preview-shell .quote-page,
+  .quotes-shell.sales-print-preview-shell .pdf-invoice-page {
+    height: 297mm !important;
+    max-height: 297mm !important;
+    min-height: 297mm !important;
+    transform: none !important;
+    width: 210mm !important;
+  }
+
+  .quotes-shell .pdf-meta-table {
+    grid-template-columns: 58% 42% !important;
+  }
+
+  .quotes-shell .pdf-meta-table > * {
+    white-space: nowrap !important;
+  }
+
+  .quotes-shell .pdf-tax-table {
+    grid-template-columns:
+      var(--pdf-tax-description-width)
+      var(--pdf-tax-base-width)
+      var(--pdf-tax-rate-width)
+      var(--pdf-tax-amount-width) !important;
+  }
+
+  .quotes-shell .pdf-taxes-section > h2 {
+    display: none !important;
+  }
+
+  .quotes-shell .pdf-summary-table {
+    justify-self: start !important;
+    width: calc(var(--pdf-tax-base-width) + var(--pdf-tax-rate-width) + var(--pdf-tax-amount-width)) !important;
+    margin-left: var(--pdf-tax-description-width) !important;
+    grid-template-columns:
+      calc((var(--pdf-tax-base-width) + var(--pdf-tax-rate-width)) / (var(--pdf-tax-base-width) + var(--pdf-tax-rate-width) + var(--pdf-tax-amount-width)) * 100%)
+      calc(var(--pdf-tax-amount-width) / (var(--pdf-tax-base-width) + var(--pdf-tax-rate-width) + var(--pdf-tax-amount-width)) * 100%) !important;
+  }
+
+  .quotes-shell .quote-footer,
 .quotes-shell .quote-notes,
 .quotes-shell .quote-footer p {
     overflow: visible;
   }
-.quotes-shell .orb-logo-frame,
+
+  .quotes-shell .orb-logo-frame,
 .quotes-shell .orb-logo,
 .quotes-shell .orb-logo * {
     color-adjust: exact;
     print-color-adjust: exact;
     -webkit-print-color-adjust: exact;
   }
-.quotes-shell .orb-logo-screen {
+
+  .quotes-shell .orb-logo-screen {
     display: none;
   }
-.quotes-shell .orb-logo-print {
+
+  .quotes-shell .orb-logo-print {
     display: block;
   }
-.quotes-shell .orb-logo {
+
+  .quotes-shell .orb-logo {
     overflow: hidden;
   }
-.quotes-shell .orb-logo-halo-outer {
+
+  .quotes-shell .orb-logo-halo-outer {
     opacity: 0.92;
   }
-.quotes-shell .orb-logo-halo-inner,
+
+  .quotes-shell .orb-logo-halo-inner,
 .quotes-shell .orb-logo-shadow {
     opacity: 0.08;
   }
-.quotes-shell .quote-header {
+
+  .quotes-shell .quote-header {
     display: flex;
     flex-direction: row;
     justify-content: space-between;
     align-items: flex-start;
   }
-.quotes-shell .quote-meta {
+
+  .quotes-shell .quote-meta {
     justify-items: end;
   }
-.quotes-shell .client-strip {
+
+  .quotes-shell .client-strip {
     display: grid;
     grid-template-columns: 1fr 1.2fr;
     flex-direction: initial;
   }
-.quotes-shell .quote-table-row {
+
+  .quotes-shell .quote-table-row {
     grid-template-columns: minmax(0, 1fr) 78px 98px 110px;
   }
-.quotes-shell .quote-table-row > span,
+
+  .quotes-shell .quote-table-row > span,
 .quotes-shell .quote-table-row > strong {
     text-align: right;
   }
-.quotes-shell .quote-table-row > :first-child {
+
+  .quotes-shell .quote-table-row > :first-child {
     text-align: left;
   }
 
 }
 
+
 /* When printing a quote/invoice, hide the GFiscal app chrome so only the
-   document page prints. These selectors are intentionally unscoped, but this
+   document content is sent to the browser print dialog. This scoped
    stylesheet only loads on the quotes module. */
 @media print {
-  .fiscal-sidebar {
-    display: none !important;
-  }
-
-  .fiscal-shell {
-    display: block !important;
-  }
-
-  .fiscal-workbench {
-    padding: 0 !important;
+  body:has(.quotes-shell) > *:not(.quotes-shell),
+  body:has(.quotes-shell) .dashboard-shell,
+  body:has(.quotes-shell) .dashboard-main,
+  body:has(.quotes-shell) .module-shell {
+    display: contents !important;
   }
 }

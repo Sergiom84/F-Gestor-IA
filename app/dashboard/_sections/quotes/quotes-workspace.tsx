@@ -131,11 +131,42 @@ type PdfInvoiceFields = {
   suplido: number;
 };
 
-type DocumentType = "quote" | "invoice" | "pdfInvoice";
+type TemplateScope = "sales" | "quotes";
+type ConfigFormat = "pdf" | "template";
+type DocumentType = "quote" | "invoice" | "pdfQuote" | "pdfInvoice";
+type SalesTemplateDocumentKind = "quote" | "order" | "delivery-note" | "invoice";
+
+type AppConfigBase = {
+  companyName: string;
+  companyTagline: string;
+  logoDataUrl: string;
+  templateIssuerName: string;
+  templateIssuerTaxId: string;
+  templateIssuerAddress: string;
+  templateIssuerCity: string;
+  templatePaymentRows: PdfPaymentRow[];
+  templateSectionTitle: string;
+  templateShowQuantity: boolean;
+  defaultNotes: string;
+  quoteFixedNotes: string;
+  invoiceFixedNotes: string;
+  quotePrepaymentEnabled: boolean;
+  quotePrepaymentRate: number;
+  quotePrepaymentText: string;
+  paymentDetails: string;
+  pdfPaymentRows: PdfPaymentRow[];
+  accentColor: string;
+  pageBackgroundColor: string;
+  clientBoxBackgroundColor: string;
+};
+
+type AppConfigProfiles = Record<TemplateScope, Record<ConfigFormat, Partial<AppConfigBase>>>;
 
 type Quote = {
   id: string;
   documentType: DocumentType;
+  templateScope: TemplateScope;
+  sourceKind?: SalesTemplateDocumentKind;
   createdAt: string;
   updatedAt: string;
   quoteNumber: string;
@@ -163,20 +194,8 @@ type HistoryExportPayload = {
   layout?: AppLayout;
 };
 
-type AppConfig = {
-  companyName: string;
-  companyTagline: string;
-  logoDataUrl: string;
-  defaultNotes: string;
-  quoteFixedNotes: string;
-  invoiceFixedNotes: string;
-  quotePrepaymentEnabled: boolean;
-  quotePrepaymentRate: number;
-  quotePrepaymentText: string;
-  paymentDetails: string;
-  accentColor: string;
-  pageBackgroundColor: string;
-  clientBoxBackgroundColor: string;
+type AppConfig = AppConfigBase & {
+  profiles: AppConfigProfiles;
 };
 
 const stripControlChars = (value: string) => value.replace(/\u0000/g, "").trim();
@@ -246,6 +265,13 @@ const DEFAULT_APP_CONFIG: AppConfig = {
   companyName: "",
   companyTagline: "",
   logoDataUrl: "",
+  templateIssuerName: "",
+  templateIssuerTaxId: "",
+  templateIssuerAddress: "",
+  templateIssuerCity: "",
+  templatePaymentRows: [],
+  templateSectionTitle: "PRESUPUESTO",
+  templateShowQuantity: false,
   defaultNotes: "",
   quoteFixedNotes: "",
   invoiceFixedNotes: "",
@@ -253,9 +279,23 @@ const DEFAULT_APP_CONFIG: AppConfig = {
   quotePrepaymentRate: 20,
   quotePrepaymentText: DEFAULT_QUOTE_PREPAYMENT_TEXT,
   paymentDetails: "",
+  pdfPaymentRows: [],
   accentColor: "#0077ff",
   pageBackgroundColor: "#fffdf8",
   clientBoxBackgroundColor: "#eff7ff",
+  profiles: {
+    sales: {
+      pdf: {},
+      template: {
+        templateSectionTitle: "PRODUCTOS Y SERVICIOS",
+        templateShowQuantity: true,
+      },
+    },
+    quotes: {
+      pdf: {},
+      template: {},
+    },
+  },
 };
 const ACCENT_COLOR_OPTIONS = [
   "#0077ff",
@@ -309,8 +349,34 @@ const addMonths = (dateValue: string, months: number) => {
   const lastDayOfTargetMonth = new Date(year, month - 1 + months + 1, 0).getDate();
   return formatDateInput(new Date(year, month - 1 + months, Math.min(day, lastDayOfTargetMonth)));
 };
+const isInvoiceDocument = (documentType: DocumentType) =>
+  documentType === "invoice" || documentType === "pdfInvoice";
+
+const isQuoteDocument = (documentType: DocumentType) =>
+  documentType === "quote" || documentType === "pdfQuote";
+
+const isTemplateDocument = (documentType: DocumentType) =>
+  documentType === "pdfQuote" || documentType === "pdfInvoice";
+
+const sourceKindForDocument = (documentType: DocumentType): SalesTemplateDocumentKind =>
+  isInvoiceDocument(documentType) ? "invoice" : "quote";
+
+const salesTemplateRoutes: Array<{ kind: SalesTemplateDocumentKind; label: string; templateType: DocumentType; pdfType: DocumentType }> = [
+  { kind: "quote", label: "Presupuestos", templateType: "pdfQuote", pdfType: "quote" },
+  { kind: "order", label: "Pedido", templateType: "pdfQuote", pdfType: "quote" },
+  { kind: "delivery-note", label: "Albaranes", templateType: "pdfQuote", pdfType: "quote" },
+  { kind: "invoice", label: "Facturas", templateType: "pdfInvoice", pdfType: "invoice" },
+];
+
+const templateDocumentLabels = (sourceKind: SalesTemplateDocumentKind) => {
+  if (sourceKind === "order") return { title: "Pedido", upper: "PEDIDO", number: "Nº PEDIDO", total: "TOTAL IMPORTE DEL PEDIDO" };
+  if (sourceKind === "delivery-note") return { title: "Albarán", upper: "ALBARÁN", number: "Nº ALBARÁN", total: "TOTAL IMPORTE DEL ALBARÁN" };
+  if (sourceKind === "invoice") return { title: "Factura", upper: "FACTURA", number: "Nº FACTURA", total: "TOTAL IMPORTE FACTURADO" };
+  return { title: "Presupuesto", upper: "PRESUPUESTO", number: "Nº PRESUPUESTO", total: "TOTAL IMPORTE PRESUPUESTADO" };
+};
+
 const getDefaultDueDate = (dateValue: string, documentType: DocumentType) =>
-  documentType === "invoice" ? addDays(dateValue, 30) : addMonths(dateValue, 3);
+  isInvoiceDocument(documentType) ? addDays(dateValue, 30) : addMonths(dateValue, 3);
 const newId = () =>
   typeof crypto !== "undefined" && "randomUUID" in crypto
     ? crypto.randomUUID()
@@ -387,33 +453,46 @@ const createPdfPaymentRows = (paymentMethod = "", iban = ""): PdfPaymentRow[] =>
   { id: newId(), label: "No. de IBAN", value: iban },
 ];
 
+const clonePaymentRows = (rows: PdfPaymentRow[]) =>
+  rows.map((row) => ({ ...row, id: newId() }));
+
 const getDocumentConfig = (documentType: DocumentType) =>
   documentType === "pdfInvoice"
     ? {
         title: "Factura",
-        pluralTitle: "Facturas PDF",
+        pluralTitle: "Facturas Plantilla",
         numberLabel: "Nº factura",
-        listLabel: "Factura PDF",
-        newLabel: "Nueva factura PDF",
+        listLabel: "Factura Plantilla",
+        newLabel: "Nueva factura plantilla",
         prefix: "A26",
         defaultNotes: "",
+      }
+    : documentType === "pdfQuote"
+    ? {
+        title: "Presupuesto",
+        pluralTitle: "Presupuestos Plantilla",
+        numberLabel: "Numero presupuesto",
+        listLabel: "Presupuesto Plantilla",
+        newLabel: "Nuevo presupuesto plantilla",
+        prefix: "PTO",
+        defaultNotes: DEFAULT_QUOTE_NOTES,
       }
     : documentType === "invoice"
     ? {
         title: "Factura",
-        pluralTitle: "Facturas",
+        pluralTitle: "Facturas PDF",
         numberLabel: "Numero factura",
-        listLabel: "Factura",
-        newLabel: "Nueva factura",
+        listLabel: "Factura PDF",
+        newLabel: "Nueva factura PDF",
         prefix: "FAC",
         defaultNotes: DEFAULT_INVOICE_NOTES,
       }
     : {
         title: "Presupuesto",
-        pluralTitle: "Presupuestos",
+        pluralTitle: "Presupuestos PDF",
         numberLabel: "Numero presupuesto",
-        listLabel: "Presupuesto",
-        newLabel: "Nuevo presupuesto",
+        listLabel: "Presupuesto PDF",
+        newLabel: "Nuevo presupuesto PDF",
         prefix: "PTO",
         defaultNotes: DEFAULT_QUOTE_NOTES,
       };
@@ -421,7 +500,7 @@ const getDocumentConfig = (documentType: DocumentType) =>
 const createDocumentNumber = (documentType: DocumentType, sequence = 1) =>
   documentType === "pdfInvoice"
     ? `A26-${String(sequence + 15).padStart(3, "0")}`
-    : documentType === "quote"
+    : isQuoteDocument(documentType)
     ? String(sequence).padStart(3, "0")
     : `${getDocumentConfig(documentType).prefix}-${new Date().getFullYear()}-${String(sequence).padStart(3, "0")}`;
 
@@ -429,12 +508,17 @@ const createQuote = (
   sequence = 1,
   documentType: DocumentType = "quote",
   config: AppConfig = DEFAULT_APP_CONFIG,
+  templateScope: TemplateScope = "quotes",
+  sourceKind: SalesTemplateDocumentKind = sourceKindForDocument(documentType),
 ): Quote => {
+  const documentConfig = resolveConfigProfile(config, templateScope, getConfigFormatForDocument(documentType));
   const now = new Date().toISOString();
   const date = today();
   return {
     id: newId(),
     documentType,
+    templateScope,
+    sourceKind,
     createdAt: now,
     updatedAt: now,
     quoteNumber: createDocumentNumber(documentType, sequence),
@@ -442,7 +526,7 @@ const createQuote = (
     dueDate: getDefaultDueDate(date, documentType),
     clientName: "",
     clientDetails: "",
-    items: documentType === "pdfInvoice" ? createPdfInvoiceItems() : [createItem()],
+    items: isTemplateDocument(documentType) ? createPdfInvoiceItems() : [createItem()],
     taxEnabled: true,
     taxRate: 21,
     discountRate: 0,
@@ -451,11 +535,14 @@ const createQuote = (
     noteItems: [],
     pdfFields: {
       ...DEFAULT_PDF_INVOICE_FIELDS,
-      issuerName: config.companyName,
-      paymentMethod: config.paymentDetails,
-      paymentRows: createPdfPaymentRows(config.paymentDetails, ""),
+      issuerName: documentConfig.templateIssuerName || documentConfig.companyName,
+      issuerTaxId: documentConfig.templateIssuerTaxId,
+      issuerAddress: documentConfig.templateIssuerAddress,
+      issuerCity: documentConfig.templateIssuerCity,
+      paymentMethod: "",
+      paymentRows: clonePaymentRows(documentConfig.templatePaymentRows),
     },
-    taxItems: documentType === "pdfInvoice" ? createPdfTaxItems() : [],
+    taxItems: isTemplateDocument(documentType) ? createPdfTaxItems() : [],
   };
 };
 
@@ -519,6 +606,78 @@ const normalizeColor = (value: unknown, fallback: string) =>
 const normalizePercentage = (value: unknown, fallback: number) =>
   typeof value === "number" && Number.isFinite(value) ? Math.min(Math.max(value, 0), 100) : fallback;
 
+const sanitizePaymentText = (value: string) => {
+  const cleaned = fixMojibake(value);
+  return cleaned.replace(/\s/g, "").toLocaleLowerCase("es-ES") === "cuentabancaria:bizum:" ? "" : cleaned;
+};
+
+const normalizePaymentRows = (rows: unknown): PdfPaymentRow[] =>
+  Array.isArray(rows)
+    ? rows.map((row) => {
+        const source = row && typeof row === "object" ? (row as Partial<PdfPaymentRow>) : {};
+        return {
+          id: typeof source.id === "string" && source.id ? source.id : newId(),
+          label: typeof source.label === "string" ? sanitizePaymentText(source.label) : "",
+          value: typeof source.value === "string" ? sanitizePaymentText(source.value) : "",
+        };
+      })
+    : [];
+
+const createEmptyProfiles = (): AppConfigProfiles => ({
+  sales: {
+    pdf: {},
+    template: {
+      templateSectionTitle: "PRODUCTOS Y SERVICIOS",
+      templateShowQuantity: true,
+    },
+  },
+  quotes: { pdf: {}, template: {} },
+});
+
+const isConfigScope = (value: unknown): value is TemplateScope => value === "sales" || value === "quotes";
+const isConfigFormat = (value: unknown): value is ConfigFormat => value === "pdf" || value === "template";
+
+const normalizeConfigPatch = (config: Partial<AppConfigBase> | null | undefined): Partial<AppConfigBase> => {
+  if (!config || typeof config !== "object") return {};
+  const normalized = normalizeAppConfig(config);
+  const patch: Record<string, unknown> = {};
+
+  (Object.keys(DEFAULT_APP_CONFIG) as Array<keyof AppConfigBase | "profiles">).forEach((key) => {
+    if (key === "profiles") return;
+    if (key in config) {
+      patch[key] = normalized[key];
+    }
+  });
+
+  return patch as Partial<AppConfigBase>;
+};
+
+const normalizeAppConfigProfiles = (profiles: unknown): AppConfigProfiles => {
+  const normalized = createEmptyProfiles();
+  if (!profiles || typeof profiles !== "object") return normalized;
+  const source = profiles as Record<string, unknown>;
+
+  (["sales", "quotes"] as const).forEach((scope) => {
+    const scopeSource = source[scope];
+    if (!scopeSource || typeof scopeSource !== "object") return;
+    const scopeRecord = scopeSource as Record<string, unknown>;
+
+    (["pdf", "template"] as const).forEach((format) => {
+      const profileSource = scopeRecord[format];
+      normalized[scope][format] = {
+        ...normalized[scope][format],
+        ...normalizeConfigPatch(
+          profileSource && typeof profileSource === "object"
+            ? (profileSource as Partial<AppConfigBase>)
+            : null,
+        ),
+      };
+    });
+  });
+
+  return normalized;
+};
+
 const normalizeAppConfig = (config: Partial<AppConfig> | null | undefined): AppConfig => ({
   companyName: typeof config?.companyName === "string" ? fixMojibake(config.companyName) : "",
   companyTagline: typeof config?.companyTagline === "string" ? fixMojibake(config.companyTagline) : "",
@@ -526,6 +685,25 @@ const normalizeAppConfig = (config: Partial<AppConfig> | null | undefined): AppC
     typeof config?.logoDataUrl === "string" && config.logoDataUrl.startsWith("data:image/")
       ? config.logoDataUrl
       : "",
+  templateIssuerName:
+    typeof config?.templateIssuerName === "string"
+      ? fixMojibake(config.templateIssuerName)
+      : typeof config?.companyName === "string"
+        ? fixMojibake(config.companyName)
+        : "",
+  templateIssuerTaxId: typeof config?.templateIssuerTaxId === "string" ? fixMojibake(config.templateIssuerTaxId) : "",
+  templateIssuerAddress:
+    typeof config?.templateIssuerAddress === "string" ? fixMojibake(config.templateIssuerAddress) : "",
+  templateIssuerCity: typeof config?.templateIssuerCity === "string" ? fixMojibake(config.templateIssuerCity) : "",
+  templatePaymentRows: normalizePaymentRows(config?.templatePaymentRows),
+  templateSectionTitle:
+    typeof config?.templateSectionTitle === "string" && config.templateSectionTitle.trim()
+      ? fixMojibake(config.templateSectionTitle)
+      : DEFAULT_APP_CONFIG.templateSectionTitle,
+  templateShowQuantity:
+    typeof config?.templateShowQuantity === "boolean"
+      ? config.templateShowQuantity
+      : DEFAULT_APP_CONFIG.templateShowQuantity,
   defaultNotes: typeof config?.defaultNotes === "string" ? fixMojibake(config.defaultNotes) : "",
   quoteFixedNotes:
     typeof config?.quoteFixedNotes === "string"
@@ -544,12 +722,54 @@ const normalizeAppConfig = (config: Partial<AppConfig> | null | undefined): AppC
       ? fixMojibake(config.quotePrepaymentText)
       : DEFAULT_APP_CONFIG.quotePrepaymentText,
   paymentDetails: typeof config?.paymentDetails === "string" ? fixMojibake(config.paymentDetails) : "",
+  pdfPaymentRows:
+    normalizePaymentRows(config?.pdfPaymentRows).length > 0
+      ? normalizePaymentRows(config?.pdfPaymentRows)
+      : typeof config?.paymentDetails === "string" && config.paymentDetails.trim()
+        ? [{ id: newId(), label: "Método de pago", value: fixMojibake(config.paymentDetails) }]
+        : [],
   accentColor: normalizeColor(config?.accentColor, DEFAULT_APP_CONFIG.accentColor),
   pageBackgroundColor: normalizeColor(config?.pageBackgroundColor, DEFAULT_APP_CONFIG.pageBackgroundColor),
   clientBoxBackgroundColor: normalizeColor(
     config?.clientBoxBackgroundColor,
     DEFAULT_APP_CONFIG.clientBoxBackgroundColor,
   ),
+  profiles: normalizeAppConfigProfiles(config?.profiles),
+});
+
+const resolveConfigProfile = (
+  config: AppConfig,
+  scope: TemplateScope,
+  format: ConfigFormat,
+): AppConfig => normalizeAppConfig({
+  ...config,
+  ...(config.profiles[scope]?.[format] ?? {}),
+  profiles: config.profiles,
+});
+
+const getConfigFormatForDocument = (documentType: DocumentType): ConfigFormat =>
+  isTemplateDocument(documentType) ? "template" : "pdf";
+
+const getConfigForDocument = (config: AppConfig, quote: Quote): AppConfig =>
+  resolveConfigProfile(config, quote.templateScope, getConfigFormatForDocument(quote.documentType));
+
+const updateConfigProfile = (
+  config: AppConfig,
+  scope: TemplateScope,
+  format: ConfigFormat,
+  patch: Partial<AppConfigBase>,
+): AppConfig => ({
+  ...config,
+  profiles: {
+    ...config.profiles,
+    [scope]: {
+      ...config.profiles[scope],
+      [format]: {
+        ...(config.profiles[scope]?.[format] ?? {}),
+        ...patch,
+      },
+    },
+  },
 });
 
 const hasStoredAppConfig = () => {
@@ -574,7 +794,20 @@ const normalizeQuote = (quote: Partial<Quote> | string): Quote => {
   const parsedQuote = (typeof quote === "string" ? parseJsonIfString<Partial<Quote>>(quote) : null) ?? quote;
   const safeQuote = (parsedQuote && typeof parsedQuote === "object" ? parsedQuote : {}) as Partial<Quote>;
   const documentType: DocumentType =
-    safeQuote.documentType === "pdfInvoice" ? "pdfInvoice" : safeQuote.documentType === "invoice" ? "invoice" : "quote";
+    safeQuote.documentType === "pdfInvoice"
+      ? "pdfInvoice"
+      : safeQuote.documentType === "pdfQuote"
+        ? "pdfQuote"
+        : safeQuote.documentType === "invoice"
+          ? "invoice"
+          : "quote";
+  const sourceKind: SalesTemplateDocumentKind =
+    safeQuote.sourceKind === "order" ||
+    safeQuote.sourceKind === "delivery-note" ||
+    safeQuote.sourceKind === "invoice" ||
+    safeQuote.sourceKind === "quote"
+      ? safeQuote.sourceKind
+      : sourceKindForDocument(documentType);
   const notes =
     typeof safeQuote.notes === "string" ? fixMojibake(safeQuote.notes) : getDocumentConfig(documentType).defaultNotes;
   const parsedItems = parseJsonIfString<Partial<QuoteItem>[]>(safeQuote.items);
@@ -598,6 +831,8 @@ const normalizeQuote = (quote: Partial<Quote> | string): Quote => {
     ...safeQuote,
     id: typeof safeQuote.id === "string" && safeQuote.id ? stripControlChars(safeQuote.id) : newId(),
     documentType,
+    templateScope: isConfigScope(safeQuote.templateScope) ? safeQuote.templateScope : "quotes",
+    sourceKind,
     createdAt:
       typeof safeQuote.createdAt === "string" && safeQuote.createdAt
         ? stripControlChars(safeQuote.createdAt)
@@ -639,7 +874,7 @@ const normalizeQuote = (quote: Partial<Quote> | string): Quote => {
           manualAmount:
             typeof item.manualAmount === "number" && Number.isFinite(item.manualAmount) ? item.manualAmount : 0,
         }))
-      : documentType === "pdfInvoice"
+      : isTemplateDocument(documentType)
         ? createPdfInvoiceItems()
         : [createItem()],
     taxEnabled: Boolean(safeQuote.taxEnabled),
@@ -688,7 +923,7 @@ const normalizeQuote = (quote: Partial<Quote> | string): Quote => {
           rate: typeof item.rate === "number" && Number.isFinite(item.rate) ? item.rate : 0,
           amount: typeof item.amount === "number" && Number.isFinite(item.amount) ? item.amount : 0,
         }))
-      : documentType === "pdfInvoice"
+      : isTemplateDocument(documentType)
         ? createPdfTaxItems()
         : [],
   };
@@ -727,7 +962,8 @@ const createInitialQuoteState = () => {
   const stored = readStoredQuotes();
   return {
     hadStoredQuotes: stored.length > 0,
-    quotes: stored.length > 0 ? stored : [createQuote(1, "quote", readStoredAppConfig())],
+    quotes: stored,
+    draftQuote: stored.length > 0 ? null : createQuote(1, "quote", readStoredAppConfig()),
   };
 };
 
@@ -737,9 +973,21 @@ type AppLayout = {
 };
 
 const DEFAULT_LAYOUT: AppLayout = {
-  left: 280,
+  left: 274,
   editor: 520,
 };
+
+const LAYOUT_FIXED_LEFT = 274;
+const LAYOUT_MIN_EDITOR = 360;
+const LAYOUT_MAX_EDITOR = 760;
+const LAYOUT_MIN_PREVIEW = 320;
+const LAYOUT_SHELL_PADDING = 36;
+const LAYOUT_GRID_GAPS = 20;
+const LAYOUT_RESIZER_WIDTHS = 10;
+const LAYOUT_FIXED_WIDTH = LAYOUT_SHELL_PADDING + LAYOUT_GRID_GAPS + LAYOUT_RESIZER_WIDTHS + LAYOUT_MIN_PREVIEW;
+
+const calcEditorMax = (leftWidth: number) =>
+  Math.max(LAYOUT_MIN_EDITOR, Math.min(LAYOUT_MAX_EDITOR, window.innerWidth - leftWidth - LAYOUT_FIXED_WIDTH));
 
 const readStoredLayout = (): AppLayout => {
   try {
@@ -747,8 +995,8 @@ const readStoredLayout = (): AppLayout => {
     if (!raw) return DEFAULT_LAYOUT;
     const parsed = JSON.parse(raw);
     return {
-      left: clamp(Number(parsed.left) || DEFAULT_LAYOUT.left, 220, 480),
-      editor: clamp(Number(parsed.editor) || DEFAULT_LAYOUT.editor, 360, 760),
+      left: LAYOUT_FIXED_LEFT,
+      editor: clamp(Number(parsed.editor) || DEFAULT_LAYOUT.editor, LAYOUT_MIN_EDITOR, calcEditorMax(LAYOUT_FIXED_LEFT)),
     };
   } catch {
     return DEFAULT_LAYOUT;
@@ -762,7 +1010,7 @@ export function QuotesWorkspace({ initialData }: { initialData: QuotesInitialDat
   const initialQuoteState = useMemo(() => {
     if (initialData.documents.length > 0) {
       const quotes = initialData.documents.map((row) => normalizeQuote(row.payload as Partial<Quote>));
-      return { hadStoredQuotes: true, quotes };
+      return { hadStoredQuotes: true, quotes, draftQuote: null };
     }
     return createInitialQuoteState();
   }, []);
@@ -776,9 +1024,23 @@ export function QuotesWorkspace({ initialData }: { initialData: QuotesInitialDat
 
   const [appConfig, setAppConfig] = useState<AppConfig>(initialConfig);
   const [quotes, setQuotes] = useState<Quote[]>(initialQuoteState.quotes);
+  const [draftQuote, setDraftQuote] = useState<Quote | null>(initialQuoteState.draftQuote);
+  const [openSidebarSections, setOpenSidebarSections] = useState({
+    template: false,
+    pdf: false,
+    history: false,
+  });
+  const [configTab, setConfigTab] = useState<"pdf" | "template" | "backup">("pdf");
+  const [configScope, setConfigScope] = useState<TemplateScope>("sales");
+  const [toolbarFeedback, setToolbarFeedback] = useState("");
   const [layout, setLayout] = useState<AppLayout>(readStoredLayout);
   const [activeQuoteId, setActiveQuoteId] = useState(() => quotes[0]?.id ?? "");
-  const [historyDialogType, setHistoryDialogType] = useState<DocumentType | null>(null);
+  const [historyDialogRoute, setHistoryDialogRoute] = useState<{
+    documentType: DocumentType;
+    templateScope: TemplateScope;
+    sourceKind: SalesTemplateDocumentKind;
+    label: string;
+  } | null>(null);
   const [historyNameFilter, setHistoryNameFilter] = useState("");
   const [historyDateFilter, setHistoryDateFilter] = useState("");
   const [hasCompletedConfig, setHasCompletedConfig] = useState(
@@ -791,32 +1053,43 @@ export function QuotesWorkspace({ initialData }: { initialData: QuotesInitialDat
   const [configDraft, setConfigDraft] = useState<AppConfig>(initialConfig);
   const importFileRef = useRef<HTMLInputElement>(null);
   const logoFileRef = useRef<HTMLInputElement>(null);
-  // quotes is seeded with a default document, so index 0 always exists.
-  const activeQuote = quotes.find((quote) => quote.id === activeQuoteId) ?? quotes[0]!;
+  const activeQuote = draftQuote ?? quotes.find((quote) => quote.id === activeQuoteId) ?? quotes[0]!;
+  const activeQuoteConfig = getConfigForDocument(appConfig, activeQuote);
+  const activeConfigFormat: ConfigFormat = configTab === "template" ? "template" : "pdf";
+  const activeConfigDraft = resolveConfigProfile(configDraft, configScope, activeConfigFormat);
   const activeDocumentConfig = getDocumentConfig(activeQuote.documentType);
   const totals = useMemo(() => calculateTotals(activeQuote), [activeQuote]);
   const pdfTotals = useMemo(() => calculatePdfInvoiceTotals(activeQuote), [activeQuote]);
+  const routeCount = (documentType: DocumentType, templateScope: TemplateScope, sourceKind: SalesTemplateDocumentKind) =>
+    quotes.filter((quote) =>
+      quote.documentType === documentType &&
+      quote.templateScope === templateScope &&
+      (quote.sourceKind ?? sourceKindForDocument(quote.documentType)) === sourceKind
+    ).length;
   const quoteCount = quotes.filter((quote) => quote.documentType === "quote").length;
   const invoiceCount = quotes.filter((quote) => quote.documentType === "invoice").length;
+  const pdfQuoteCount = quotes.filter((quote) => quote.documentType === "pdfQuote").length;
   const pdfInvoiceCount = quotes.filter((quote) => quote.documentType === "pdfInvoice").length;
   const activeNoteItemLines = activeQuote.noteItems.length;
   const activeTextNoteLines = countTextLines(activeQuote.notes);
   const activeNoteLineCount = activeNoteItemLines + activeTextNoteLines;
   const remainingNoteLines = Math.max(MAX_NOTE_LINES - activeNoteItemLines, 0);
-  const historyDialogConfig = historyDialogType ? getDocumentConfig(historyDialogType) : null;
+  const historyDialogConfig = historyDialogRoute ? getDocumentConfig(historyDialogRoute.documentType) : null;
   const filteredHistoryDocuments = useMemo(() => {
-    if (!historyDialogType) return [];
+    if (!historyDialogRoute) return [];
     const normalizedNameFilter = historyNameFilter.trim().toLocaleLowerCase("es-ES");
 
     return quotes.filter((quote) => {
-      if (quote.documentType !== historyDialogType) return false;
+      if (quote.documentType !== historyDialogRoute.documentType) return false;
+      if (quote.templateScope !== historyDialogRoute.templateScope) return false;
+      if ((quote.sourceKind ?? sourceKindForDocument(quote.documentType)) !== historyDialogRoute.sourceKind) return false;
       if (normalizedNameFilter && !quote.clientName.toLocaleLowerCase("es-ES").includes(normalizedNameFilter)) {
         return false;
       }
       if (historyDateFilter && quote.date !== historyDateFilter) return false;
       return true;
     });
-  }, [historyDateFilter, historyDialogType, historyNameFilter, quotes]);
+  }, [historyDateFilter, historyDialogRoute, historyNameFilter, quotes]);
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(quotes));
@@ -846,14 +1119,32 @@ export function QuotesWorkspace({ initialData }: { initialData: QuotesInitialDat
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    const onResize = () => {
+      setLayout((current) => {
+        const maxEditor = calcEditorMax(LAYOUT_FIXED_LEFT);
+        const nextEditor = Math.min(current.editor, maxEditor);
+        if (current.left === LAYOUT_FIXED_LEFT && current.editor === nextEditor) return current;
+        return { left: LAYOUT_FIXED_LEFT, editor: nextEditor };
+      });
+    };
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
   const nextSequence = (documentType: DocumentType) =>
     quotes.filter((quote) => quote.documentType === documentType).length + 1;
 
   const updateQuote = (patch: Partial<Quote>) => {
-    setHasDetectedData(true);
+    const updatedAt = new Date().toISOString();
+    if (draftQuote?.id === activeQuote.id) {
+      setDraftQuote({ ...draftQuote, ...patch, updatedAt });
+      return;
+    }
+
     setQuotes((current) =>
       current.map((quote) =>
-        quote.id === activeQuote.id ? { ...quote, ...patch, updatedAt: new Date().toISOString() } : quote,
+        quote.id === activeQuote.id ? { ...quote, ...patch, updatedAt } : quote,
       ),
     );
   };
@@ -949,10 +1240,13 @@ export function QuotesWorkspace({ initialData }: { initialData: QuotesInitialDat
     });
   };
 
-  const createNewQuote = (documentType: DocumentType = "quote") => {
-    const quote = createQuote(nextSequence(documentType), documentType, appConfig);
-    setHasDetectedData(true);
-    setQuotes((current) => [quote, ...current]);
+  const createNewQuote = (
+    documentType: DocumentType = "quote",
+    templateScope: TemplateScope = "quotes",
+    sourceKind: SalesTemplateDocumentKind = sourceKindForDocument(documentType),
+  ) => {
+    const quote = createQuote(nextSequence(documentType), documentType, appConfig, templateScope, sourceKind);
+    setDraftQuote(quote);
     setActiveQuoteId(quote.id);
   };
 
@@ -968,31 +1262,48 @@ export function QuotesWorkspace({ initialData }: { initialData: QuotesInitialDat
       taxItems: activeQuote.taxItems.map((item) => ({ ...item, id: newId() })),
       pdfFields: { ...activeQuote.pdfFields },
     };
-    setQuotes((current) => [duplicated, ...current]);
+    setDraftQuote(duplicated);
     setActiveQuoteId(duplicated.id);
   };
 
   const deleteQuote = () => {
-    const deletedId = activeQuote.id;
-    startTransition(() => { void deleteQuoteDocument(organizationId, deletedId); });
-
-    if (quotes.length === 1) {
+    if (draftQuote?.id === activeQuote.id) {
       const quote = createQuote(1, "quote", appConfig);
-      setQuotes([quote]);
+      setDraftQuote(quote);
       setActiveQuoteId(quote.id);
-      startTransition(() => { void upsertQuoteDocument(organizationId, quoteToDbRow(quote)); });
       return;
     }
 
+    startTransition(() => { void deleteQuoteDocument(organizationId, activeQuote.id); });
+
     const remaining = quotes.filter((quote) => quote.id !== activeQuote.id);
     setQuotes(remaining);
-    setActiveQuoteId(remaining[0]!.id);
+    if (remaining.length > 0) {
+      setActiveQuoteId(remaining[0]!.id);
+      return;
+    }
+
+    const quote = createQuote(1, "quote", appConfig);
+    setDraftQuote(quote);
+    setActiveQuoteId(quote.id);
+    setHasDetectedData(false);
   };
 
   const saveQuote = () => {
-    updateQuote({});
+    const now = new Date().toISOString();
+    const savedQuote = { ...activeQuote, updatedAt: now };
+
+    setQuotes((current) => {
+      const exists = current.some((quote) => quote.id === savedQuote.id);
+      return exists
+        ? current.map((quote) => (quote.id === savedQuote.id ? savedQuote : quote))
+        : [savedQuote, ...current];
+    });
+    setDraftQuote(null);
+    setActiveQuoteId(savedQuote.id);
+    setHasDetectedData(true);
     startTransition(() => {
-      void upsertQuoteDocument(organizationId, quoteToDbRow(activeQuote));
+      void upsertQuoteDocument(organizationId, quoteToDbRow(savedQuote));
     });
   };
 
@@ -1074,12 +1385,16 @@ export function QuotesWorkspace({ initialData }: { initialData: QuotesInitialDat
         });
       }
 
-      if (!Array.isArray(parsed) && parsed.layout && typeof parsed.layout === "object") {
-        setLayout({
-          left: clamp(Number(parsed.layout.left) || DEFAULT_LAYOUT.left, 220, 480),
-          editor: clamp(Number(parsed.layout.editor) || DEFAULT_LAYOUT.editor, 360, 760),
-        });
-      }
+        if (!Array.isArray(parsed) && parsed.layout && typeof parsed.layout === "object") {
+          setLayout({
+            left: LAYOUT_FIXED_LEFT,
+            editor: clamp(
+              Number(parsed.layout.editor) || DEFAULT_LAYOUT.editor,
+              LAYOUT_MIN_EDITOR,
+              calcEditorMax(LAYOUT_FIXED_LEFT),
+            ),
+          });
+        }
 
       window.alert(
         `Importación completada: ${normalizedIncoming.length} documento(s) procesado(s)${
@@ -1098,8 +1413,39 @@ export function QuotesWorkspace({ initialData }: { initialData: QuotesInitialDat
     setConfigDialogOpen(true);
   };
 
-  const updateConfigDraft = (patch: Partial<AppConfig>) => {
-    setConfigDraft((current) => ({ ...current, ...patch }));
+  const updateConfigDraft = (patch: Partial<AppConfigBase>) => {
+    setConfigDraft((current) => updateConfigProfile(current, configScope, activeConfigFormat, patch));
+  };
+
+  const addConfigPaymentRow = (key: "pdfPaymentRows" | "templatePaymentRows") => {
+    setConfigDraft((current) => {
+      const currentProfile = resolveConfigProfile(current, configScope, activeConfigFormat);
+      return updateConfigProfile(current, configScope, activeConfigFormat, {
+        [key]: [...currentProfile[key], { id: newId(), label: "", value: "" }],
+      });
+    });
+  };
+
+  const updateConfigPaymentRow = (
+    key: "pdfPaymentRows" | "templatePaymentRows",
+    rowId: string,
+    patch: Partial<PdfPaymentRow>,
+  ) => {
+    setConfigDraft((current) => {
+      const currentProfile = resolveConfigProfile(current, configScope, activeConfigFormat);
+      return updateConfigProfile(current, configScope, activeConfigFormat, {
+        [key]: currentProfile[key].map((row) => (row.id === rowId ? { ...row, ...patch } : row)),
+      });
+    });
+  };
+
+  const removeConfigPaymentRow = (key: "pdfPaymentRows" | "templatePaymentRows", rowId: string) => {
+    setConfigDraft((current) => {
+      const currentProfile = resolveConfigProfile(current, configScope, activeConfigFormat);
+      return updateConfigProfile(current, configScope, activeConfigFormat, {
+        [key]: currentProfile[key].filter((row) => row.id !== rowId),
+      });
+    });
   };
 
   const handleLogoFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -1126,23 +1472,43 @@ export function QuotesWorkspace({ initialData }: { initialData: QuotesInitialDat
     setAppConfig(nextConfig);
     setQuotes((current) =>
       current.map((quote) => {
-        if (quote.documentType === "pdfInvoice") {
+        if (isTemplateDocument(quote.documentType)) {
+          const documentConfig = getConfigForDocument(nextConfig, quote);
           return {
             ...quote,
             pdfFields: {
               ...quote.pdfFields,
-              issuerName: quote.pdfFields.issuerName || nextConfig.companyName,
-              paymentMethod: quote.pdfFields.paymentMethod || nextConfig.paymentDetails,
+              issuerName: quote.pdfFields.issuerName || documentConfig.templateIssuerName || documentConfig.companyName,
+              issuerTaxId: quote.pdfFields.issuerTaxId || documentConfig.templateIssuerTaxId,
+              issuerAddress: quote.pdfFields.issuerAddress || documentConfig.templateIssuerAddress,
+              issuerCity: quote.pdfFields.issuerCity || documentConfig.templateIssuerCity,
+              paymentMethod: quote.pdfFields.paymentMethod,
               paymentRows:
                 quote.pdfFields.paymentRows.length > 0
                   ? quote.pdfFields.paymentRows
-                  : createPdfPaymentRows(quote.pdfFields.paymentMethod || nextConfig.paymentDetails, quote.pdfFields.iban),
+                  : clonePaymentRows(documentConfig.templatePaymentRows),
             },
           };
         }
 
         return quote;
       }),
+    );
+    setDraftQuote((current) =>
+      current && isTemplateDocument(current.documentType)
+        ? {
+            ...current,
+            pdfFields: {
+              ...current.pdfFields,
+              issuerName: getConfigForDocument(nextConfig, current).templateIssuerName || getConfigForDocument(nextConfig, current).companyName,
+              issuerTaxId: getConfigForDocument(nextConfig, current).templateIssuerTaxId,
+              issuerAddress: getConfigForDocument(nextConfig, current).templateIssuerAddress,
+              issuerCity: getConfigForDocument(nextConfig, current).templateIssuerCity,
+              paymentMethod: "",
+              paymentRows: clonePaymentRows(getConfigForDocument(nextConfig, current).templatePaymentRows),
+            },
+          }
+        : current,
     );
     setConfigDialogOpen(false);
     setHasCompletedConfig(true);
@@ -1151,15 +1517,21 @@ export function QuotesWorkspace({ initialData }: { initialData: QuotesInitialDat
     });
   };
 
-  const openHistoryDialog = (documentType: DocumentType) => {
-    setHistoryDialogType(documentType);
+  const openHistoryDialog = (
+    documentType: DocumentType,
+    templateScope: TemplateScope,
+    sourceKind: SalesTemplateDocumentKind,
+    label: string,
+  ) => {
+    setHistoryDialogRoute({ documentType, templateScope, sourceKind, label });
     setHistoryNameFilter("");
     setHistoryDateFilter("");
   };
 
   const selectHistoryDocument = (quoteId: string) => {
+    setDraftQuote(null);
     setActiveQuoteId(quoteId);
-    setHistoryDialogType(null);
+    setHistoryDialogRoute(null);
   };
 
   const deleteHistoryDocument = (quoteId: string) => {
@@ -1175,34 +1547,41 @@ export function QuotesWorkspace({ initialData }: { initialData: QuotesInitialDat
     const remaining = quotes.filter((quote) => quote.id !== quoteId);
     if (remaining.length === 0) {
       const fallback = createQuote(1, "quote", appConfig);
-      setQuotes([fallback]);
+      setQuotes([]);
+      setDraftQuote(fallback);
       setActiveQuoteId(fallback.id);
-      setHistoryDialogType(null);
+      setHistoryDialogRoute(null);
       setHasDetectedData(false);
-      startTransition(() => { void upsertQuoteDocument(organizationId, quoteToDbRow(fallback)); });
       return;
     }
 
     setQuotes(remaining);
+    if (draftQuote?.id === quoteId) {
+      setDraftQuote(null);
+    }
     setActiveQuoteId((currentId) => (currentId === quoteId ? remaining[0]!.id : currentId));
   };
 
   const updateDocumentType = (documentType: DocumentType) => {
     if (documentType === activeQuote.documentType) return;
+    const documentConfig = resolveConfigProfile(appConfig, activeQuote.templateScope, getConfigFormatForDocument(documentType));
     updateQuote({
       documentType,
       quoteNumber: createDocumentNumber(documentType, nextSequence(documentType)),
       dueDate: getDefaultDueDate(activeQuote.date || today(), documentType),
-      items: documentType === "pdfInvoice" ? createPdfInvoiceItems() : activeQuote.items,
-      taxItems: documentType === "pdfInvoice" ? createPdfTaxItems() : [],
+      items: isTemplateDocument(documentType) ? createPdfInvoiceItems() : activeQuote.items,
+      taxItems: isTemplateDocument(documentType) ? createPdfTaxItems() : [],
       pdfFields:
-        documentType === "pdfInvoice"
-          ? {
-              ...DEFAULT_PDF_INVOICE_FIELDS,
-              issuerName: appConfig.companyName,
-              paymentMethod: appConfig.paymentDetails,
-              paymentRows: createPdfPaymentRows(appConfig.paymentDetails, ""),
-            }
+        isTemplateDocument(documentType)
+            ? {
+                ...DEFAULT_PDF_INVOICE_FIELDS,
+                issuerName: documentConfig.templateIssuerName || documentConfig.companyName,
+                issuerTaxId: documentConfig.templateIssuerTaxId,
+                issuerAddress: documentConfig.templateIssuerAddress,
+                issuerCity: documentConfig.templateIssuerCity,
+                paymentMethod: "",
+                paymentRows: clonePaymentRows(documentConfig.templatePaymentRows),
+              }
           : activeQuote.pdfFields,
       notes:
         activeQuote.notes === getDocumentConfig(activeQuote.documentType).defaultNotes
@@ -1215,7 +1594,8 @@ export function QuotesWorkspace({ initialData }: { initialData: QuotesInitialDat
     event.preventDefault();
     const startX = event.clientX;
     const startValue = layout[panel];
-    const limits = panel === "left" ? { min: 220, max: 480 } : { min: 360, max: 760 };
+    const dynamicEditorMax = panel === "editor" ? calcEditorMax(LAYOUT_FIXED_LEFT) : layout.editor;
+    const limits = { min: LAYOUT_MIN_EDITOR, max: dynamicEditorMax };
 
     const handlePointerMove = (moveEvent: PointerEvent) => {
       const nextValue = clamp(startValue + moveEvent.clientX - startX, limits.min, limits.max);
@@ -1235,6 +1615,21 @@ export function QuotesWorkspace({ initialData }: { initialData: QuotesInitialDat
 
   const resetLayout = () => setLayout(DEFAULT_LAYOUT);
 
+  const runToolbarAction = (actionName: string, action: () => void) => {
+    action();
+    setToolbarFeedback(actionName);
+    window.setTimeout(() => {
+      setToolbarFeedback((current) => (current === actionName ? "" : current));
+    }, 900);
+  };
+
+  const toggleSidebarSection = (section: keyof typeof openSidebarSections) => {
+    setOpenSidebarSections((current) => ({
+      ...current,
+      [section]: !current[section],
+    }));
+  };
+
   const layoutStyle = {
     "--left-panel-width": `${layout.left}px`,
     "--editor-panel-width": `${layout.editor}px`,
@@ -1242,55 +1637,118 @@ export function QuotesWorkspace({ initialData }: { initialData: QuotesInitialDat
 
   return (
     <div className="quotes-shell">
-    <main className="app-shell" style={layoutStyle}>
+      <main className="app-shell" style={layoutStyle}>
       <aside className="history-panel no-print" aria-label="Historial de documentos">
         <div className="brand-block">
-          {appConfig.companyName.trim() && <p>{appConfig.companyName}</p>}
+          <h1>Documentos</h1>
+          {activeQuoteConfig.companyName.trim() && <p>{activeQuoteConfig.companyName}</p>}
         </div>
 
-        <button className="config-action" type="button" onClick={openConfigDialog}>
-          <Settings aria-hidden="true" size={17} />
-          Configuración
-        </button>
-
-        <div className="new-document-actions">
-          <button className="primary-action" type="button" onClick={() => createNewQuote("quote")}>
-            Nuevo presupuesto
-          </button>
-          <button className="primary-action secondary-action" type="button" onClick={() => createNewQuote("invoice")}>
-            Nueva factura
+        <div className="template-section">
+          <div className="section-title">Configuración</div>
+          <button className="config-action" type="button" onClick={openConfigDialog}>
+            <Settings aria-hidden="true" size={17} />
+            Ajustes generales
           </button>
         </div>
 
         <div className="template-section">
-          <div className="section-title">Formato PDF</div>
-          <button className="history-category-card template-card" type="button" onClick={() => createNewQuote("pdfInvoice")}>
-            <span>Factura editable</span>
-            <strong>PDF</strong>
+          <button
+            className={`section-title section-toggle ${openSidebarSections.template ? "is-open" : ""}`}
+            type="button"
+            aria-expanded={openSidebarSections.template}
+            onClick={() => toggleSidebarSection("template")}
+          >
+            <span>Plantilla Ventas</span>
+            <span className="accordion-indicator" aria-hidden="true" />
           </button>
+          {openSidebarSections.template && (
+            <div className="sidebar-section-content">
+              {salesTemplateRoutes.map((route) => (
+                <button
+                  className="history-category-card template-card"
+                  key={`template-${route.kind}`}
+                  type="button"
+                  onClick={() => createNewQuote(route.templateType, "sales", route.kind)}
+                >
+                  <span>{route.label}</span>
+                  <strong>PL</strong>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="template-section">
+          <button
+            className={`section-title section-toggle ${openSidebarSections.pdf ? "is-open" : ""}`}
+            type="button"
+            aria-expanded={openSidebarSections.pdf}
+            onClick={() => toggleSidebarSection("pdf")}
+          >
+            <span>Formato PDF</span>
+            <span className="accordion-indicator" aria-hidden="true" />
+          </button>
+          {openSidebarSections.pdf && (
+            <div className="sidebar-section-content">
+              {salesTemplateRoutes.map((route) => (
+                <button
+                  className="history-category-card template-card"
+                  key={`pdf-${route.kind}`}
+                  type="button"
+                  onClick={() => createNewQuote(route.pdfType, "sales", route.kind)}
+                >
+                  <span>{route.label}</span>
+                  <strong>PDF</strong>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="history-list">
-          <div className="section-title">
-            Historial
-          </div>
-          <button className="history-category-card" type="button" onClick={() => openHistoryDialog("quote")}>
-            <span>Presupuestos</span>
-            <strong>{quoteCount}</strong>
+          <button
+            className={`section-title section-toggle ${openSidebarSections.history ? "is-open" : ""}`}
+            type="button"
+            aria-expanded={openSidebarSections.history}
+            onClick={() => toggleSidebarSection("history")}
+          >
+            <span>Historial</span>
+            <span className="accordion-indicator" aria-hidden="true" />
           </button>
-          <button className="history-category-card" type="button" onClick={() => openHistoryDialog("invoice")}>
-            <span>Facturas</span>
-            <strong>{invoiceCount}</strong>
-          </button>
-          <button className="history-category-card" type="button" onClick={() => openHistoryDialog("pdfInvoice")}>
-            <span>Facturas PDF</span>
-            <strong>{pdfInvoiceCount}</strong>
-          </button>
+          {openSidebarSections.history && (
+            <div className="sidebar-section-content">
+              <div className="sidebar-subgroup-title">Plantilla Ventas</div>
+              {salesTemplateRoutes.map((route) => (
+                <button
+                  className="history-category-card"
+                  key={`history-template-${route.kind}`}
+                  type="button"
+                  onClick={() => openHistoryDialog(route.templateType, "sales", route.kind, `Plantilla Ventas · ${route.label}`)}
+                >
+                  <span>{route.label}</span>
+                  <strong>{routeCount(route.templateType, "sales", route.kind)}</strong>
+                </button>
+              ))}
+              <div className="sidebar-subgroup-title">PDF</div>
+              {salesTemplateRoutes.map((route) => (
+                <button
+                  className="history-category-card"
+                  key={`history-pdf-${route.kind}`}
+                  type="button"
+                  onClick={() => openHistoryDialog(route.pdfType, "sales", route.kind, `PDF · ${route.label}`)}
+                >
+                  <span>{route.label}</span>
+                  <strong>{routeCount(route.pdfType, "sales", route.kind)}</strong>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       </aside>
 
-      {historyDialogType && historyDialogConfig && (
-        <div className="history-modal-backdrop no-print" role="presentation" onClick={() => setHistoryDialogType(null)}>
+      {historyDialogRoute && historyDialogConfig && (
+        <div className="history-modal-backdrop no-print" role="presentation" onClick={() => setHistoryDialogRoute(null)}>
           <section
             className="history-modal"
             role="dialog"
@@ -1301,9 +1759,9 @@ export function QuotesWorkspace({ initialData }: { initialData: QuotesInitialDat
             <div className="history-modal-header">
               <div>
                 <span>Historial</span>
-                <h2 id="history-modal-title">{historyDialogConfig.pluralTitle}</h2>
+                <h2 id="history-modal-title">{historyDialogRoute.label}</h2>
               </div>
-              <button type="button" onClick={() => setHistoryDialogType(null)} title="Cerrar">
+              <button type="button" onClick={() => setHistoryDialogRoute(null)} title="Cerrar">
                 <X aria-hidden="true" size={18} />
               </button>
             </div>
@@ -1387,217 +1845,411 @@ export function QuotesWorkspace({ initialData }: { initialData: QuotesInitialDat
               )}
             </div>
 
-            <div className="config-logo-row">
-              <div className="config-logo-preview">
-                {configDraft.logoDataUrl ? (
-                  <img src={configDraft.logoDataUrl} alt="" />
-                ) : (
-                  <OrbLogo size={62} />
-                )}
-              </div>
-              <div className="config-logo-actions">
-                <button type="button" onClick={() => logoFileRef.current?.click()}>
-                  <ImageIcon aria-hidden="true" size={17} />
-                  Subir logo
+            <div className="config-tabs" role="tablist" aria-label="Tipos de formato">
+              <button
+                className={configTab === "pdf" ? "is-active" : ""}
+                type="button"
+                role="tab"
+                aria-selected={configTab === "pdf"}
+                onClick={() => setConfigTab("pdf")}
+              >
+                Formato PDF
+              </button>
+              <button
+                className={configTab === "template" ? "is-active" : ""}
+                type="button"
+                role="tab"
+                aria-selected={configTab === "template"}
+                onClick={() => setConfigTab("template")}
+              >
+                Formato Plantilla
+              </button>
+              <button
+                className={configTab === "backup" ? "is-active" : ""}
+                type="button"
+                role="tab"
+                aria-selected={configTab === "backup"}
+                onClick={() => setConfigTab("backup")}
+              >
+                Backup
+              </button>
+            </div>
+
+            {configTab !== "backup" ? (
+              <div className="config-scope-tabs" role="tablist" aria-label="Destino de la plantilla">
+                <button
+                  className={configScope === "sales" ? "is-active" : ""}
+                  type="button"
+                  role="tab"
+                  aria-selected={configScope === "sales"}
+                  onClick={() => setConfigScope("sales")}
+                >
+                  Ventas
                 </button>
-                {configDraft.logoDataUrl && (
-                  <button type="button" onClick={() => updateConfigDraft({ logoDataUrl: "" })}>
-                    Quitar
-                  </button>
-                )}
+                <button
+                  className={configScope === "quotes" ? "is-active" : ""}
+                  type="button"
+                  role="tab"
+                  aria-selected={configScope === "quotes"}
+                  onClick={() => setConfigScope("quotes")}
+                >
+                  Presupuestos
+                </button>
               </div>
-              <input
-                ref={logoFileRef}
-                type="file"
-                accept="image/*"
-                className="no-print"
-                style={{ display: "none" }}
-                onChange={handleLogoFile}
-              />
-            </div>
+            ) : null}
 
-            <div className="form-grid">
-              <label>
-                Nombre de la empresa
-                <input
-                  autoFocus
-                  value={configDraft.companyName}
-                  onChange={(event) => updateConfigDraft({ companyName: event.target.value })}
-                />
-              </label>
-              <label>
-                Actividad o subtítulo
-                <input
-                  placeholder="Opcional"
-                  value={configDraft.companyTagline}
-                  onChange={(event) => updateConfigDraft({ companyTagline: event.target.value })}
-                />
-              </label>
-            </div>
-
-            <div className="config-fixed-notes-section">
-              <div className="card-heading">
-                <h2>Notas fijas</h2>
-              </div>
-              <label>
-                Para presupuestos
-                <textarea
-                  className="large-textarea"
-                  placeholder="Condiciones fijas que solo aparecerán en presupuestos."
-                  value={configDraft.quoteFixedNotes}
-                  onChange={(event) => updateConfigDraft({ quoteFixedNotes: event.target.value })}
-                />
-              </label>
-              <div className="prepayment-config">
-                <label className="switch-row">
-                  <input
-                    type="checkbox"
-                    checked={configDraft.quotePrepaymentEnabled}
-                    onChange={(event) => updateConfigDraft({ quotePrepaymentEnabled: event.target.checked })}
-                  />
-                  Mostrar porcentaje si vas a cobrar por adelantado en los presupuestos
-                </label>
-                {configDraft.quotePrepaymentEnabled && (
-                  <div className="prepayment-config-fields">
-                    <label className="compact-label">
-                      Porcentaje
-                      <input
-                        className="prepayment-rate-input"
-                        type="number"
-                        min="0"
-                        max="100"
-                        step="1"
-                        value={numericInputValue(configDraft.quotePrepaymentRate)}
-                        onChange={(event) =>
-                          updateConfigDraft({
-                            quotePrepaymentRate: normalizePercentage(
-                              parseNumericInput(event.target.value),
-                              DEFAULT_APP_CONFIG.quotePrepaymentRate,
-                            ),
-                          })
-                        }
-                      />
-                    </label>
-                    <label>
-                      Texto
-                      <textarea
-                        placeholder={DEFAULT_QUOTE_PREPAYMENT_TEXT}
-                        value={configDraft.quotePrepaymentText}
-                        onChange={(event) => updateConfigDraft({ quotePrepaymentText: event.target.value })}
-                      />
-                    </label>
+            {configTab === "pdf" ? (
+              <>
+                <div className="config-logo-row">
+                  <div className="config-logo-preview">
+                    {activeConfigDraft.logoDataUrl ? (
+                      <img src={activeConfigDraft.logoDataUrl} alt="" />
+                    ) : (
+                      <OrbLogo size={62} />
+                    )}
                   </div>
-                )}
-              </div>
-              <label>
-                Para facturas
-                <textarea
-                  placeholder="Texto fijo que solo aparecerá en facturas."
-                  value={configDraft.invoiceFixedNotes}
-                  onChange={(event) => updateConfigDraft({ invoiceFixedNotes: event.target.value })}
-                />
-              </label>
-            </div>
-
-            <label>
-              Método de pago
-              <textarea
-                placeholder="Transferencia, Bizum, instrucciones de pago..."
-                value={configDraft.paymentDetails}
-                onChange={(event) => updateConfigDraft({ paymentDetails: event.target.value })}
-              />
-            </label>
-
-            <div className="config-data-section">
-              <div className="card-heading">
-                <h2>Datos</h2>
-              </div>
-              <p>
-                {hasDetectedData
-                  ? `${quoteCount} presupuesto(s), ${invoiceCount} factura(s) y ${pdfInvoiceCount} factura(s) PDF guardadas.`
-                  : "No se ha detectado historial guardado en esta instalación."}
-              </p>
-              <div className="config-data-actions">
-                <button type="button" onClick={() => importFileRef.current?.click()}>
-                  Importar historial
-                </button>
-                <button type="button" onClick={exportHistory} disabled={quotes.length === 0}>
-                  Exportar copia
-                </button>
-              </div>
-            </div>
-
-            <div className="config-style-section">
-              <div className="card-heading">
-                <h2>Colores</h2>
-              </div>
-
-              <label>
-                Color del texto destacado
-                <div className="color-control-row">
+                  <div className="config-logo-actions">
+                    <button type="button" onClick={() => logoFileRef.current?.click()}>
+                      <ImageIcon aria-hidden="true" size={17} />
+                      Subir logo
+                    </button>
+                    {activeConfigDraft.logoDataUrl && (
+                      <button type="button" onClick={() => updateConfigDraft({ logoDataUrl: "" })}>
+                        Quitar
+                      </button>
+                    )}
+                  </div>
                   <input
-                    className="native-color-input"
-                    type="color"
-                    value={configDraft.accentColor}
-                    onChange={(event) => updateConfigDraft({ accentColor: event.target.value })}
-                  />
-                  <input
-                    value={configDraft.accentColor}
-                    onChange={(event) => updateConfigDraft({ accentColor: event.target.value })}
+                    ref={logoFileRef}
+                    type="file"
+                    accept="image/*"
+                    className="no-print"
+                    style={{ display: "none" }}
+                    onChange={handleLogoFile}
                   />
                 </div>
-              </label>
-              <div className="color-swatch-grid" aria-label="Gama cromática">
-                {ACCENT_COLOR_OPTIONS.map((color) => (
-                  <button
-                    className={configDraft.accentColor.toLowerCase() === color ? "is-selected" : ""}
-                    key={color}
-                    type="button"
-                    style={{ backgroundColor: color }}
-                    onClick={() => updateConfigDraft({ accentColor: color })}
-                    title={color}
-                  />
-                ))}
-              </div>
 
-              <div className="background-options-grid">
-                <fieldset>
-                  <legend>Fondo del documento</legend>
-                  <div className="background-swatch-list">
-                    {DOCUMENT_BACKGROUND_OPTIONS.map((option) => (
-                      <button
-                        className={configDraft.pageBackgroundColor.toLowerCase() === option.value ? "is-selected" : ""}
-                        key={option.value}
-                        type="button"
-                        onClick={() => updateConfigDraft({ pageBackgroundColor: option.value })}
-                      >
-                        <span style={{ backgroundColor: option.value }} />
-                        {option.label}
+                <div className="form-grid">
+                  <label>
+                    Nombre de la empresa
+                    <input
+                      autoFocus
+                      value={activeConfigDraft.companyName}
+                      onChange={(event) => updateConfigDraft({ companyName: event.target.value })}
+                    />
+                  </label>
+                  <label>
+                    Actividad o subtítulo
+                    <input
+                      placeholder="Opcional"
+                      value={activeConfigDraft.companyTagline}
+                      onChange={(event) => updateConfigDraft({ companyTagline: event.target.value })}
+                    />
+                  </label>
+                </div>
+
+                <div className="config-fixed-notes-section">
+                  <div className="card-heading">
+                    <h2>Notas fijas</h2>
+                  </div>
+                  <label>
+                    Para presupuestos
+                    <textarea
+                      className="large-textarea"
+                      placeholder="Condiciones fijas que solo aparecerán en presupuestos."
+                      value={activeConfigDraft.quoteFixedNotes}
+                      onChange={(event) => updateConfigDraft({ quoteFixedNotes: event.target.value })}
+                    />
+                  </label>
+                  <div className="prepayment-config">
+                    <label className="switch-row">
+                      <input
+                        type="checkbox"
+                        checked={activeConfigDraft.quotePrepaymentEnabled}
+                        onChange={(event) => updateConfigDraft({ quotePrepaymentEnabled: event.target.checked })}
+                      />
+                      Mostrar porcentaje si vas a cobrar por adelantado en los presupuestos
+                    </label>
+                    {activeConfigDraft.quotePrepaymentEnabled && (
+                      <div className="prepayment-config-fields">
+                        <label className="compact-label">
+                          Porcentaje
+                          <input
+                            className="prepayment-rate-input"
+                            type="number"
+                            min="0"
+                            max="100"
+                            step="1"
+                            value={numericInputValue(activeConfigDraft.quotePrepaymentRate)}
+                            onChange={(event) =>
+                              updateConfigDraft({
+                                quotePrepaymentRate: normalizePercentage(
+                                  parseNumericInput(event.target.value),
+                                  DEFAULT_APP_CONFIG.quotePrepaymentRate,
+                                ),
+                              })
+                            }
+                          />
+                        </label>
+                        <label>
+                          Texto
+                          <textarea
+                            placeholder={DEFAULT_QUOTE_PREPAYMENT_TEXT}
+                            value={activeConfigDraft.quotePrepaymentText}
+                            onChange={(event) => updateConfigDraft({ quotePrepaymentText: event.target.value })}
+                          />
+                        </label>
+                      </div>
+                    )}
+                  </div>
+                  <label>
+                    Para facturas
+                    <textarea
+                      placeholder="Texto fijo que solo aparecerá en facturas."
+                      value={activeConfigDraft.invoiceFixedNotes}
+                      onChange={(event) => updateConfigDraft({ invoiceFixedNotes: event.target.value })}
+                    />
+                  </label>
+                </div>
+
+                <div className="config-payment-section">
+                  <div className="card-heading">
+                    <h2>Método de pago</h2>
+                    <div className="inline-actions">
+                      <button type="button" onClick={() => addConfigPaymentRow("pdfPaymentRows")} aria-label="Añadir método de pago PDF">
+                        +
                       </button>
+                    </div>
+                  </div>
+                  <div className="pdf-payment-rows-editor">
+                    {activeConfigDraft.pdfPaymentRows.map((row) => (
+                      <div className="pdf-payment-row-editor" key={row.id}>
+                        <label>
+                          Tipo
+                          <input
+                            placeholder="Bizum, Cuenta bancaria..."
+                            value={row.label}
+                            onChange={(event) =>
+                              updateConfigPaymentRow("pdfPaymentRows", row.id, { label: event.target.value })
+                            }
+                          />
+                        </label>
+                        <label>
+                          Número o valor fijo
+                          <input
+                            placeholder="Número de Bizum, IBAN..."
+                            value={row.value}
+                            onChange={(event) =>
+                              updateConfigPaymentRow("pdfPaymentRows", row.id, { value: event.target.value })
+                            }
+                          />
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => removeConfigPaymentRow("pdfPaymentRows", row.id)}
+                          title="Eliminar fila"
+                        >
+                          <Trash2 aria-hidden="true" size={16} />
+                        </button>
+                      </div>
+                    ))}
+                    {activeConfigDraft.pdfPaymentRows.length === 0 && (
+                      <p className="empty-helper-text">No hay métodos configurados. Pulsa + para añadir uno.</p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="config-style-section">
+                  <div className="card-heading">
+                    <h2>Colores</h2>
+                  </div>
+
+                  <label>
+                    Color del texto destacado
+                    <div className="color-control-row">
+                      <input
+                        className="native-color-input"
+                        type="color"
+                        value={activeConfigDraft.accentColor}
+                        onChange={(event) => updateConfigDraft({ accentColor: event.target.value })}
+                      />
+                      <input
+                        value={activeConfigDraft.accentColor}
+                        onChange={(event) => updateConfigDraft({ accentColor: event.target.value })}
+                      />
+                    </div>
+                  </label>
+                  <div className="color-swatch-grid" aria-label="Gama cromática">
+                    {ACCENT_COLOR_OPTIONS.map((color) => (
+                      <button
+                        className={activeConfigDraft.accentColor.toLowerCase() === color ? "is-selected" : ""}
+                        key={color}
+                        type="button"
+                        style={{ backgroundColor: color }}
+                        onClick={() => updateConfigDraft({ accentColor: color })}
+                        title={color}
+                      />
                     ))}
                   </div>
-                </fieldset>
 
-                <fieldset>
-                  <legend>Caja del cliente</legend>
-                  <div className="background-swatch-list">
-                    {CLIENT_BOX_BACKGROUND_OPTIONS.map((option) => (
-                      <button
-                        className={
-                          configDraft.clientBoxBackgroundColor.toLowerCase() === option.value ? "is-selected" : ""
-                        }
-                        key={option.value}
-                        type="button"
-                        onClick={() => updateConfigDraft({ clientBoxBackgroundColor: option.value })}
-                      >
-                        <span style={{ backgroundColor: option.value }} />
-                        {option.label}
-                      </button>
-                    ))}
+                  <div className="background-options-grid">
+                    <fieldset>
+                      <legend>Fondo del documento</legend>
+                      <div className="background-swatch-list">
+                        {DOCUMENT_BACKGROUND_OPTIONS.map((option) => (
+                          <button
+                            className={activeConfigDraft.pageBackgroundColor.toLowerCase() === option.value ? "is-selected" : ""}
+                            key={option.value}
+                            type="button"
+                            onClick={() => updateConfigDraft({ pageBackgroundColor: option.value })}
+                          >
+                            <span style={{ backgroundColor: option.value }} />
+                            {option.label}
+                          </button>
+                        ))}
+                      </div>
+                    </fieldset>
+
+                    <fieldset>
+                      <legend>Caja del cliente</legend>
+                      <div className="background-swatch-list">
+                        {CLIENT_BOX_BACKGROUND_OPTIONS.map((option) => (
+                          <button
+                            className={
+                              activeConfigDraft.clientBoxBackgroundColor.toLowerCase() === option.value ? "is-selected" : ""
+                            }
+                            key={option.value}
+                            type="button"
+                            onClick={() => updateConfigDraft({ clientBoxBackgroundColor: option.value })}
+                          >
+                            <span style={{ backgroundColor: option.value }} />
+                            {option.label}
+                          </button>
+                        ))}
+                      </div>
+                    </fieldset>
                   </div>
-                </fieldset>
+                </div>
+              </>
+            ) : configTab === "template" ? (
+              <div className="config-template-section">
+                <div className="form-grid">
+                  <label>
+                    Título del bloque central
+                    <input
+                      placeholder="PRESUPUESTO"
+                      value={activeConfigDraft.templateSectionTitle}
+                      onChange={(event) => updateConfigDraft({ templateSectionTitle: event.target.value })}
+                    />
+                  </label>
+                  <label className="switch-row template-quantity-toggle">
+                    <input
+                      type="checkbox"
+                      checked={activeConfigDraft.templateShowQuantity}
+                      onChange={(event) => updateConfigDraft({ templateShowQuantity: event.target.checked })}
+                    />
+                    Mostrar cantidad en el bloque central
+                  </label>
+                </div>
+                <div className="form-grid">
+                  <label>
+                    Quién emite la factura
+                    <input
+                      value={activeConfigDraft.templateIssuerName}
+                      onChange={(event) => updateConfigDraft({ templateIssuerName: event.target.value })}
+                    />
+                  </label>
+                  <label>
+                    CIF
+                    <input
+                      value={activeConfigDraft.templateIssuerTaxId}
+                      onChange={(event) => updateConfigDraft({ templateIssuerTaxId: event.target.value })}
+                    />
+                  </label>
+                  <label>
+                    Domicilio
+                    <input
+                      value={activeConfigDraft.templateIssuerAddress}
+                      onChange={(event) => updateConfigDraft({ templateIssuerAddress: event.target.value })}
+                    />
+                  </label>
+                  <label>
+                    Ciudad
+                    <input
+                      value={activeConfigDraft.templateIssuerCity}
+                      onChange={(event) => updateConfigDraft({ templateIssuerCity: event.target.value })}
+                    />
+                  </label>
+                </div>
+                <div className="card-heading">
+                  <h2>Cuentas bancarias</h2>
+                  <div className="inline-actions">
+                    <button
+                      type="button"
+                      onClick={() => addConfigPaymentRow("templatePaymentRows")}
+                      aria-label="Añadir cuenta bancaria"
+                    >
+                      +
+                    </button>
+                  </div>
+                </div>
+                <div className="pdf-payment-rows-editor">
+                  {activeConfigDraft.templatePaymentRows.map((row) => (
+                    <div className="pdf-payment-row-editor" key={row.id}>
+                      <label>
+                        Tipo
+                        <input
+                          placeholder="Bizum, Cuenta bancaria..."
+                          value={row.label}
+                          onChange={(event) =>
+                            updateConfigPaymentRow("templatePaymentRows", row.id, { label: event.target.value })
+                          }
+                        />
+                      </label>
+                      <label>
+                        Número o valor fijo
+                        <input
+                          placeholder="Número de Bizum, IBAN..."
+                          value={row.value}
+                          onChange={(event) =>
+                            updateConfigPaymentRow("templatePaymentRows", row.id, { value: event.target.value })
+                          }
+                        />
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => removeConfigPaymentRow("templatePaymentRows", row.id)}
+                        title="Eliminar fila"
+                      >
+                        <Trash2 aria-hidden="true" size={16} />
+                      </button>
+                    </div>
+                  ))}
+                  {activeConfigDraft.templatePaymentRows.length === 0 && (
+                    <p className="empty-helper-text">No hay cuentas configuradas. Pulsa + para añadir una.</p>
+                  )}
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="config-data-section">
+                <div className="card-heading">
+                  <h2>Backup</h2>
+                </div>
+                <p>
+                  {hasDetectedData
+                    ? `${pdfQuoteCount} presupuesto(s) plantilla, ${quoteCount} presupuesto(s) PDF, ${pdfInvoiceCount} factura(s) plantilla y ${invoiceCount} factura(s) PDF guardadas.`
+                    : "No se ha detectado historial guardado en esta instalación."}
+                </p>
+                <div className="config-data-actions">
+                  <button type="button" onClick={() => importFileRef.current?.click()}>
+                    Importar historial
+                  </button>
+                  <button type="button" onClick={exportHistory} disabled={quotes.length === 0}>
+                    Exportar copia
+                  </button>
+                </div>
+              </div>
+            )}
 
             <div className="config-modal-actions">
               <button className="primary-action" type="button" onClick={saveAppConfig}>
@@ -1608,33 +2260,54 @@ export function QuotesWorkspace({ initialData }: { initialData: QuotesInitialDat
         </div>
       )}
 
-      <button
-        className="layout-resizer layout-resizer-left no-print"
-        type="button"
-        aria-label="Cambiar ancho del historial"
-        title="Arrastra para cambiar el ancho. Doble clic para restablecer."
-        onPointerDown={startResize("left")}
-        onDoubleClick={resetLayout}
-      />
-
       <section className="editor-panel no-print" aria-label="Editor del documento">
         <div className="toolbar">
-          <button type="button" onClick={saveQuote} title="Guardar documento">
+          <button
+            className={toolbarFeedback === "guardar" ? "is-confirmed" : ""}
+            type="button"
+            onClick={() => runToolbarAction("guardar", saveQuote)}
+            title="Guardar documento"
+          >
             Guardar
           </button>
-          <button type="button" onClick={duplicateQuote} title="Duplicar documento">
+          <button
+            className={toolbarFeedback === "duplicar" ? "is-confirmed" : ""}
+            type="button"
+            onClick={() => runToolbarAction("duplicar", duplicateQuote)}
+            title="Duplicar documento"
+          >
             Duplicar
           </button>
-          <button type="button" onClick={exportHistory} title="Exportar historial en JSON">
+          <button
+            className={toolbarFeedback === "exportar" ? "is-confirmed" : ""}
+            type="button"
+            onClick={() => runToolbarAction("exportar", exportHistory)}
+            title="Exportar historial en JSON"
+          >
             Exportar
           </button>
-          <button type="button" onClick={() => importFileRef.current?.click()} title="Importar historial en JSON">
+          <button
+            className={toolbarFeedback === "importar" ? "is-confirmed" : ""}
+            type="button"
+            onClick={() => runToolbarAction("importar", () => importFileRef.current?.click())}
+            title="Importar historial en JSON"
+          >
             Importar
           </button>
-          <button type="button" onClick={() => window.print()} title="Imprimir o guardar en PDF">
-            Imprimir/PDF
+          <button
+            className={toolbarFeedback === "imprimir" ? "is-confirmed" : ""}
+            type="button"
+            onClick={() => runToolbarAction("imprimir", () => window.print())}
+            title="Imprimir o guardar en PDF"
+          >
+            Imprimir
           </button>
-          <button className="danger-button" type="button" onClick={deleteQuote} title="Eliminar documento">
+          <button
+            className={`danger-button ${toolbarFeedback === "eliminar" ? "is-confirmed" : ""}`}
+            type="button"
+            onClick={() => runToolbarAction("eliminar", deleteQuote)}
+            title="Eliminar documento"
+          >
             <Trash2 aria-hidden="true" size={18} />
             Eliminar
           </button>
@@ -1648,7 +2321,7 @@ export function QuotesWorkspace({ initialData }: { initialData: QuotesInitialDat
           />
         </div>
 
-        {activeQuote.documentType === "pdfInvoice" ? (
+        {isTemplateDocument(activeQuote.documentType) ? (
           <>
             <div className="form-card">
               <div className="card-heading">
@@ -1667,8 +2340,8 @@ export function QuotesWorkspace({ initialData }: { initialData: QuotesInitialDat
                   <input
                     value={activeQuote.clientDetails.split("\n")[0] ?? ""}
                     onChange={(event) => {
-                      const [, ...rest] = activeQuote.clientDetails.split("\n");
-                      updateQuote({ clientDetails: [event.target.value, ...rest].join("\n") });
+                      const [, address = "", city = "", phone = "", email = ""] = activeQuote.clientDetails.split("\n");
+                      updateQuote({ clientDetails: [event.target.value, address, city, phone, email].join("\n") });
                     }}
                   />
                 </label>
@@ -1677,8 +2350,8 @@ export function QuotesWorkspace({ initialData }: { initialData: QuotesInitialDat
                   <input
                     value={activeQuote.clientDetails.split("\n")[1] ?? ""}
                     onChange={(event) => {
-                      const [taxId = "", , ...rest] = activeQuote.clientDetails.split("\n");
-                      updateQuote({ clientDetails: [taxId, event.target.value, ...rest].join("\n") });
+                      const [taxId = "", , city = "", phone = "", email = ""] = activeQuote.clientDetails.split("\n");
+                      updateQuote({ clientDetails: [taxId, event.target.value, city, phone, email].join("\n") });
                     }}
                   />
                 </label>
@@ -1687,8 +2360,28 @@ export function QuotesWorkspace({ initialData }: { initialData: QuotesInitialDat
                   <input
                     value={activeQuote.clientDetails.split("\n")[2] ?? ""}
                     onChange={(event) => {
-                      const [taxId = "", address = ""] = activeQuote.clientDetails.split("\n");
-                      updateQuote({ clientDetails: [taxId, address, event.target.value].join("\n") });
+                      const [taxId = "", address = "", , phone = "", email = ""] = activeQuote.clientDetails.split("\n");
+                      updateQuote({ clientDetails: [taxId, address, event.target.value, phone, email].join("\n") });
+                    }}
+                  />
+                </label>
+                <label>
+                  Teléfono
+                  <input
+                    value={activeQuote.clientDetails.split("\n")[3] ?? ""}
+                    onChange={(event) => {
+                      const [taxId = "", address = "", city = "", , email = ""] = activeQuote.clientDetails.split("\n");
+                      updateQuote({ clientDetails: [taxId, address, city, event.target.value, email].join("\n") });
+                    }}
+                  />
+                </label>
+                <label>
+                  E-mail
+                  <input
+                    value={activeQuote.clientDetails.split("\n")[4] ?? ""}
+                    onChange={(event) => {
+                      const [taxId = "", address = "", city = "", phone = ""] = activeQuote.clientDetails.split("\n");
+                      updateQuote({ clientDetails: [taxId, address, city, phone, event.target.value].join("\n") });
                     }}
                   />
                 </label>
@@ -1697,18 +2390,18 @@ export function QuotesWorkspace({ initialData }: { initialData: QuotesInitialDat
 
             <div className="form-card">
               <div className="card-heading">
-                <h2>Factura</h2>
+                <h2>{activeDocumentConfig.title}</h2>
               </div>
               <div className="form-grid">
                 <label>
-                  Nº factura
+                  {activeDocumentConfig.numberLabel}
                   <input
                     value={activeQuote.quoteNumber}
                     onChange={(event) => updateQuote({ quoteNumber: event.target.value })}
                   />
                 </label>
                 <label>
-                  Fecha emisión
+                  {isInvoiceDocument(activeQuote.documentType) ? "Fecha emisión" : "Fecha presupuesto"}
                   <input
                     type="date"
                     value={activeQuote.date}
@@ -1828,87 +2521,21 @@ export function QuotesWorkspace({ initialData }: { initialData: QuotesInitialDat
                   </div>
                 ))}
               </div>
+              <label className="pdf-suplido-field">
+                Suplido
+                <input
+                  type="number"
+                  step="0.01"
+                  value={numericInputValue(activeQuote.pdfFields.suplido)}
+                  onChange={(event) => updatePdfFields({ suplido: parseNumericInput(event.target.value) })}
+                />
+              </label>
               <div className="pdf-total-row">
                 <span>Total neto</span>
                 <strong>{formatCurrency(pdfTotals.netTotal)}</strong>
               </div>
             </div>
 
-            <div className="form-card">
-              <div className="card-heading">
-                <h2>Emisor y pago</h2>
-              </div>
-              <div className="form-grid">
-                <label>
-                  Emisor
-                  <input
-                    value={activeQuote.pdfFields.issuerName}
-                    onChange={(event) => updatePdfFields({ issuerName: event.target.value })}
-                  />
-                </label>
-                <label>
-                  CIF/NIF
-                  <input
-                    value={activeQuote.pdfFields.issuerTaxId}
-                    onChange={(event) => updatePdfFields({ issuerTaxId: event.target.value })}
-                  />
-                </label>
-                <label>
-                  Dirección
-                  <input
-                    value={activeQuote.pdfFields.issuerAddress}
-                    onChange={(event) => updatePdfFields({ issuerAddress: event.target.value })}
-                  />
-                </label>
-                <label>
-                  Ciudad
-                  <input
-                    value={activeQuote.pdfFields.issuerCity}
-                    onChange={(event) => updatePdfFields({ issuerCity: event.target.value })}
-                  />
-                </label>
-                <label>
-                  Suplido
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={numericInputValue(activeQuote.pdfFields.suplido)}
-                    onChange={(event) => updatePdfFields({ suplido: parseNumericInput(event.target.value) })}
-                  />
-                </label>
-              </div>
-              <div className="card-heading">
-                <h2>Forma de pago</h2>
-                <div className="inline-actions">
-                  <button type="button" onClick={addPdfPaymentRow}>
-                    Añadir
-                  </button>
-                </div>
-              </div>
-              <div className="pdf-payment-rows-editor">
-                {activeQuote.pdfFields.paymentRows.map((row) => (
-                  <div className="pdf-payment-row-editor" key={row.id}>
-                    <label>
-                      Texto
-                      <input
-                        value={row.label}
-                        onChange={(event) => updatePdfPaymentRow(row.id, { label: event.target.value })}
-                      />
-                    </label>
-                    <label>
-                      Valor
-                      <input
-                        value={row.value}
-                        onChange={(event) => updatePdfPaymentRow(row.id, { value: event.target.value })}
-                      />
-                    </label>
-                    <button type="button" onClick={() => removePdfPaymentRow(row.id)} title="Eliminar fila">
-                      <Trash2 aria-hidden="true" size={16} />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
           </>
         ) : (
           <>
@@ -1920,8 +2547,10 @@ export function QuotesWorkspace({ initialData }: { initialData: QuotesInitialDat
                 value={activeQuote.documentType}
                 onChange={(event) => updateDocumentType(event.target.value as DocumentType)}
               >
-                <option value="quote">Presupuesto</option>
-                <option value="invoice">Factura</option>
+                <option value="pdfQuote">Presupuesto Plantilla</option>
+                <option value="pdfInvoice">Factura Plantilla</option>
+                <option value="quote">Presupuesto PDF</option>
+                <option value="invoice">Factura PDF</option>
               </select>
             </label>
             <label>
@@ -1945,7 +2574,7 @@ export function QuotesWorkspace({ initialData }: { initialData: QuotesInitialDat
                 }}
               />
             </label>
-            {activeQuote.documentType === "quote" && (
+            {isQuoteDocument(activeQuote.documentType) && (
               <label>
                 Validez hasta
                 <input
@@ -2169,15 +2798,15 @@ export function QuotesWorkspace({ initialData }: { initialData: QuotesInitialDat
       />
 
       <section className="preview-panel" aria-label="Vista previa imprimible">
-        <QuotePreview quote={activeQuote} totals={totals} config={appConfig} />
+        <QuotePreview quote={activeQuote} totals={totals} config={activeQuoteConfig} />
       </section>
-    </main>
+      </main>
     </div>
   );
 }
 
 const renderFixedNotes = (quote: Quote, totals: ReturnType<typeof calculateTotals>, config: AppConfig) => {
-  const fixedNotes = (quote.documentType === "invoice" ? config.invoiceFixedNotes : config.quoteFixedNotes).trim();
+  const fixedNotes = (isInvoiceDocument(quote.documentType) ? config.invoiceFixedNotes : config.quoteFixedNotes).trim();
 
   if (!fixedNotes) return "";
 
@@ -2188,7 +2817,7 @@ const renderFixedNotes = (quote: Quote, totals: ReturnType<typeof calculateTotal
 };
 
 const renderPrepaymentNote = (quote: Quote, totals: ReturnType<typeof calculateTotals>, config: AppConfig) => {
-  if (quote.documentType !== "quote" || !config.quotePrepaymentEnabled) return "";
+  if (!isQuoteDocument(quote.documentType) || !config.quotePrepaymentEnabled) return "";
 
   const text = config.quotePrepaymentText.trim() || DEFAULT_QUOTE_PREPAYMENT_TEXT;
   const amount = formatCurrency(totals.total * (config.quotePrepaymentRate / 100));
@@ -2214,12 +2843,12 @@ function QuotePreview({
     "--document-client-box-bg": config.clientBoxBackgroundColor,
   } as CSSProperties;
 
-  if (quote.documentType === "pdfInvoice") {
-    return <PdfInvoicePreview quote={quote} totals={calculatePdfInvoiceTotals(quote)} />;
+  if (isTemplateDocument(quote.documentType)) {
+    return <PdfInvoicePreview config={config} quote={quote} totals={calculatePdfInvoiceTotals(quote)} />;
   }
 
   return (
-    <article className={`quote-page ${quote.documentType === "invoice" ? "is-invoice" : "is-quote"}`} style={previewStyle}>
+    <article className={`quote-page ${isInvoiceDocument(quote.documentType) ? "is-invoice" : "is-quote"}`} style={previewStyle}>
       <header className="quote-header">
         <div className="quote-header-left">
           <div className="orb-lockup">
@@ -2234,7 +2863,7 @@ function QuotePreview({
         <div className="quote-meta">
           <span>{quote.quoteNumber}</span>
           <span>{formatDate(quote.date)}</span>
-          {quote.documentType === "quote" && <span>Valido hasta {formatDate(quote.dueDate)}</span>}
+          {isQuoteDocument(quote.documentType) && <span>Valido hasta {formatDate(quote.dueDate)}</span>}
         </div>
       </header>
 
@@ -2249,7 +2878,7 @@ function QuotePreview({
       <section className="quote-section">
         <div className="quote-table">
           <div className="quote-table-row quote-table-head">
-            <span>{quote.documentType === "invoice" ? "Concepto" : "Servicio"}</span>
+            <span>{isInvoiceDocument(quote.documentType) ? "Concepto" : "Servicio"}</span>
             <span>Horas</span>
             <span>Tarifa</span>
             <span>Importe</span>
@@ -2325,10 +2954,15 @@ function QuotePreview({
         <div className="quote-terms">
           {prepaymentNote && <p className="fixed-notes-text">{prepaymentNote}</p>}
           {fixedNotes && <p className="fixed-notes-text">{fixedNotes}</p>}
-          {config.paymentDetails.trim() && (
+          {config.pdfPaymentRows.length > 0 && (
             <div className="payment-block">
               <span>Metodo de pago</span>
-              <p>{config.paymentDetails}</p>
+              {config.pdfPaymentRows.map((row) => (
+                <p key={row.id}>
+                  {row.label.trim() && <strong>{row.label.trim()}: </strong>}
+                  {row.value}
+                </p>
+              ))}
               {!quote.taxEnabled && <small>Precios sin IVA.</small>}
             </div>
           )}
@@ -2339,13 +2973,19 @@ function QuotePreview({
 }
 
 function PdfInvoicePreview({
+  config,
   quote,
   totals,
 }: {
+  config: AppConfig;
   quote: Quote;
   totals: ReturnType<typeof calculatePdfInvoiceTotals>;
 }) {
-  const [clientTaxId = "", clientAddress = "", clientCity = ""] = quote.clientDetails.split("\n");
+  const [clientTaxId = "", clientAddress = "", clientCity = "", clientPhone = "", clientEmail = ""] =
+    quote.clientDetails.split("\n");
+  const documentConfig = getDocumentConfig(quote.documentType);
+  const documentLabels = templateDocumentLabels(quote.sourceKind ?? sourceKindForDocument(quote.documentType));
+  const isInvoice = isInvoiceDocument(quote.documentType);
 
   return (
     <article className="quote-page pdf-invoice-page">
@@ -2355,18 +2995,20 @@ function PdfInvoicePreview({
           <span>CIF: {clientTaxId}</span>
           <span>{clientAddress}</span>
           <span>{clientCity}</span>
+          {clientPhone.trim() && <span>Tel: {clientPhone}</span>}
+          {clientEmail.trim() && <span>{clientEmail}</span>}
         </section>
 
         <section className="pdf-meta-table">
-          <div>Nº FACTURA</div>
+          <div>{documentLabels.number}</div>
           <strong>{quote.quoteNumber}</strong>
-          <div>FECHA EMISIÓN</div>
+          <div>FECHA</div>
           <strong>{formatPdfDate(quote.date)}</strong>
         </section>
       </header>
 
-      <section className="pdf-description-table">
-        <h2>DESCRIPCIÓN</h2>
+      <section className={`pdf-description-table${config.templateShowQuantity ? " has-quantity" : ""}`}>
+        <h2>{config.templateSectionTitle.trim() || (isInvoice ? "DESCRIPCIÓN" : documentLabels.upper)}</h2>
         <div className="pdf-description-body">
           {quote.items.map((item) => (
             <div className="pdf-description-line" key={item.id}>
@@ -2374,6 +3016,7 @@ function PdfInvoicePreview({
                 <strong>{item.serviceType || "CONCEPTO"}</strong>
                 {item.description.trim() ? <span>{item.description}</span> : null}
               </div>
+              {config.templateShowQuantity ? <span className="pdf-line-quantity">{numericInputValue(item.hours || 1)}</span> : null}
               <strong>{formatCurrency(calculateLineAmount(item))}</strong>
             </div>
           ))}
@@ -2381,14 +3024,13 @@ function PdfInvoicePreview({
       </section>
 
       <section className="pdf-invoice-total-row">
-        <strong>TOTAL IMPORTE FACTURADO</strong>
+        <strong>{documentLabels.total}</strong>
         <span>{formatCurrency(totals.invoiceTotal)}</span>
       </section>
 
       <section className="pdf-taxes-section">
-        <h2>IMPUESTOS</h2>
         <div className="pdf-tax-table">
-          <div className="pdf-tax-head">DESCRIPCIÓN</div>
+          <div className="pdf-tax-head">IMPUESTOS</div>
           <div className="pdf-tax-head">BASE IMPONIBLE</div>
           <div className="pdf-tax-head">%</div>
           <div className="pdf-tax-head"></div>
@@ -2414,15 +3056,9 @@ function PdfInvoicePreview({
       <footer className="pdf-invoice-footer">
         <section className="pdf-client-block">
           <strong>{quote.pdfFields.issuerName || "EMISOR"}</strong>
-          <p>
-            {[
-              quote.pdfFields.issuerTaxId ? `CIF: ${quote.pdfFields.issuerTaxId}` : "",
-              quote.pdfFields.issuerAddress,
-              quote.pdfFields.issuerCity,
-            ]
-              .filter(Boolean)
-              .join("\n")}
-          </p>
+          {quote.pdfFields.issuerTaxId ? <p>CIF: {quote.pdfFields.issuerTaxId}</p> : null}
+          {quote.pdfFields.issuerAddress ? <p>{quote.pdfFields.issuerAddress}</p> : null}
+          {quote.pdfFields.issuerCity ? <p>{quote.pdfFields.issuerCity}</p> : null}
         </section>
 
         <strong className="pdf-payment-heading">Forma de Pago:</strong>
@@ -2437,4 +3073,3 @@ function PdfInvoicePreview({
     </article>
   );
 }
-
