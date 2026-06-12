@@ -6,7 +6,7 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "dev": "next dev",
-    "build": "next build",
+    "build": "node --max-old-space-size=1024 ./node_modules/next/dist/bin/next build",
     "start": "next start",
     "worker:documents": "tsx src/workers/document-worker/index.ts",
     "worker:extract-local": "tsx src/workers/document-worker/extract-local-pdf.ts",
