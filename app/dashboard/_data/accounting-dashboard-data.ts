@@ -36,6 +36,14 @@ type EntryLineRow = {
   credit: number;
 };
 
+type AmountRow = {
+  total_amount: number | null;
+};
+
+function sumAmountRows(rows: AmountRow[] | null | undefined): number {
+  return (rows ?? []).reduce((sum, row) => sum + Number(row.total_amount ?? 0), 0);
+}
+
 export async function readAccountingDashboardData(
   organizationId: string
 ): Promise<AccountingDashboardData> {
@@ -45,8 +53,15 @@ export async function readAccountingDashboardData(
     const yearStart = `${currentYear}-01-01`;
     const yearEnd = `${currentYear}-12-31`;
 
-    const [linesResult, assetsResult, salesFallbackResult, purchasesFallbackResult] =
-      await Promise.all([
+    const [
+      linesResult,
+      assetsResult,
+      acceptedQuotesResult,
+      acceptedOrdersResult,
+      acceptedDeliveryNotesResult,
+      issuedInvoicesResult,
+      purchasesResult
+    ] = await Promise.all([
         supabase
           .from("accounting_entry_lines")
           .select("account_code, debit, credit, accounting_entries!entry_id!inner(entry_date)")
@@ -62,18 +77,45 @@ export async function readAccountingDashboardData(
           .eq("organization_id", organizationId)
           .eq("status", "active"),
         supabase
+          .from("sales_quotes")
+          .select("total_amount")
+          .eq("organization_id", organizationId)
+          .eq("status", "accepted")
+          .is("converted_sales_invoice_id", null)
+          .is("deleted_at", null),
+        supabase
+          .from("sales_orders")
+          .select("total_amount")
+          .eq("organization_id", organizationId)
+          .eq("status", "accepted")
+          .is("deleted_at", null),
+        supabase
+          .from("sales_delivery_notes")
+          .select("total_amount")
+          .eq("organization_id", organizationId)
+          .eq("status", "accepted")
+          .is("deleted_at", null),
+        supabase
           .from("sales_invoices")
           .select("total_amount")
           .eq("organization_id", organizationId)
-          .in("status", ["sent", "paid"]),
+          .in("status", ["open", "sent", "booked", "overdue", "paid"])
+          .is("deleted_at", null),
         supabase
           .from("purchase_invoices")
           .select("total_amount")
           .eq("organization_id", organizationId)
-          .in("status", ["approved", "paid"])
+          .in("status", ["open", "overdue", "booked", "paid"])
+          .is("deleted_at", null)
       ]);
 
     const postedLines: EntryLineRow[] = linesResult.data ?? [];
+    const commercialSales =
+      sumAmountRows(acceptedQuotesResult.data as AmountRow[] | null) +
+      sumAmountRows(acceptedOrdersResult.data as AmountRow[] | null) +
+      sumAmountRows(acceptedDeliveryNotesResult.data as AmountRow[] | null) +
+      sumAmountRows(issuedInvoicesResult.data as AmountRow[] | null);
+    const commercialPurchases = sumAmountRows(purchasesResult.data as AmountRow[] | null);
 
     let sales = 0;
     let purchases = 0;
@@ -105,17 +147,10 @@ export async function readAccountingDashboardData(
           netWorth += credit - debit;
         }
       }
-    } else {
-      // No posted lines — approximate from commercial invoices
-      sales = ((salesFallbackResult.data ?? []) as { total_amount: number }[]).reduce(
-        (sum, r) => sum + (r.total_amount ?? 0),
-        0
-      );
-      purchases = ((purchasesFallbackResult.data ?? []) as { total_amount: number }[]).reduce(
-        (sum, r) => sum + (r.total_amount ?? 0),
-        0
-      );
     }
+
+    sales = Math.max(sales, commercialSales);
+    purchases = Math.max(purchases, commercialPurchases);
 
     const assets = ((assetsResult.data ?? []) as { acquisition_value: number }[]).reduce(
       (sum, r) => sum + (r.acquisition_value ?? 0),
