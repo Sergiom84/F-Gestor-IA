@@ -5,6 +5,7 @@ import {
   CalendarDays,
   ChevronDown,
   Filter,
+  MoreVertical,
   PenLine,
   Plus,
   Search,
@@ -12,8 +13,16 @@ import {
   Trash2,
   X
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
-import { createDiscountGroup, createPriceList, createProductService } from "../../commercial-actions";
+import { type Dispatch, type SetStateAction, useEffect, useRef, useState } from "react";
+import {
+  createDiscountGroup,
+  createPriceList,
+  createProductService,
+  duplicateProductService,
+  softDeleteProductService,
+  toggleProductServiceActive,
+  updateProductService
+} from "../../commercial-actions";
 import { formatMoney } from "../../_lib/formatters";
 import type { DiscountGroupItem, PriceListItem, ProductItem } from "../../_data/commercial-data";
 
@@ -146,10 +155,14 @@ export function ProductsWorkspace({
   const [products, setProducts] = useState<ProductItem[]>(initialProducts ?? []);
   const [priceLists, setPriceLists] = useState<PriceListItem[]>(initialPriceLists ?? []);
   const [discountGroups, setDiscountGroups] = useState<DiscountGroupItem[]>(initialDiscountGroups ?? []);
+  const [editingProduct, setEditingProduct] = useState<ProductItem | null>(null);
 
   const activeSectionId = resolveProductsSectionId(view);
   const activeSection = productsSections.find((section) => section.id === activeSectionId) ?? productsSections[0]!;
-  const openProduct = () => setView("product-list");
+  const openProduct = () => {
+    setEditingProduct(null);
+    setView("product-list");
+  };
   const openTariffs = () => setView("tariffs");
   const openDiscountGroups = () => setView("discount-groups");
   const openSection = (sectionId: ProductsSectionId) => {
@@ -163,6 +176,7 @@ export function ProductsWorkspace({
   };
   const openCreate = (sectionId: ProductsSectionId) => {
     if (sectionId === "products") {
+      setEditingProduct(null);
       setView("product");
     } else if (sectionId === "tariffs") {
       setView("tariff-form");
@@ -208,14 +222,29 @@ export function ProductsWorkspace({
             priceListRows={priceLists}
             discountGroupRows={discountGroups}
             onHeroAction={handleHeroAction}
+            organizationId={organizationId}
             onSectionChange={openSection}
+            onEditProduct={(product) => {
+              setEditingProduct(product);
+              setView("product");
+            }}
+            onProductsChange={setProducts}
+            onNotice={setNotice}
           />
         ) : view === "product" ? (
           <ProductServiceForm
+            initialProduct={editingProduct}
             organizationId={organizationId}
-            onCancel={() => setView("product-list")}
-            onCreated={(product) => {
-              setProducts((current) => [...current, product].sort((a, b) => a.name.localeCompare(b.name)));
+            onCancel={openProduct}
+            onSaved={(product) => {
+              setProducts((current) => {
+                const exists = current.some((item) => item.id === product.id);
+                const next = exists
+                  ? current.map((item) => item.id === product.id ? product : item)
+                  : [...current, product];
+                return next.sort((a, b) => a.name.localeCompare(b.name));
+              });
+              setEditingProduct(null);
               setView("product-list");
               setNotice(`${product.kind === "service" ? "Servicio" : "Producto"} ${product.name} guardado.`);
             }}
@@ -228,7 +257,14 @@ export function ProductsWorkspace({
             priceListRows={priceLists}
             discountGroupRows={discountGroups}
             onHeroAction={handleHeroAction}
+            organizationId={organizationId}
             onSectionChange={openSection}
+            onEditProduct={(product) => {
+              setEditingProduct(product);
+              setView("product");
+            }}
+            onProductsChange={setProducts}
+            onNotice={setNotice}
           />
         ) : view === "tariff-form" ? (
           <TariffForm
@@ -248,7 +284,14 @@ export function ProductsWorkspace({
             priceListRows={priceLists}
             discountGroupRows={discountGroups}
             onHeroAction={handleHeroAction}
+            organizationId={organizationId}
             onSectionChange={openSection}
+            onEditProduct={(product) => {
+              setEditingProduct(product);
+              setView("product");
+            }}
+            onProductsChange={setProducts}
+            onNotice={setNotice}
           />
         ) : (
           <DiscountGroupForm
@@ -269,23 +312,33 @@ export function ProductsWorkspace({
 function ProductsTemplateView({
   activeSection,
   activeSectionId,
+  organizationId,
   productRows,
   priceListRows,
   discountGroupRows,
   onHeroAction,
-  onSectionChange
+  onSectionChange,
+  onEditProduct,
+  onProductsChange,
+  onNotice
 }: {
   activeSection: ProductsSection;
   activeSectionId: ProductsSectionId;
+  organizationId: string;
   productRows: ProductItem[];
   priceListRows: PriceListItem[];
   discountGroupRows: DiscountGroupItem[];
   onHeroAction: (kind: ProductsHeroAction) => void;
   onSectionChange: (sectionId: ProductsSectionId) => void;
+  onEditProduct: (product: ProductItem) => void;
+  onProductsChange: Dispatch<SetStateAction<ProductItem[]>>;
+  onNotice: (notice: string | null) => void;
 }) {
   const [query, setQuery] = useState("");
   const [showFilters, setShowFilters] = useState(false);
   const [showColumns, setShowColumns] = useState(false);
+  const [openActionMenu, setOpenActionMenu] = useState<{ id: string; left: number; top: number } | null>(null);
+  const [pendingActionId, setPendingActionId] = useState<string | null>(null);
   const isProductsSection = activeSectionId === "products";
   const isTariffsSection = activeSectionId === "tariffs";
   const normalizedQuery = query.trim().toLowerCase();
@@ -310,11 +363,115 @@ function ProductsTemplateView({
       || dg.code.toLowerCase().includes(normalizedQuery)
     ))
     : [];
+
+  useEffect(() => {
+    if (!openActionMenu) return;
+
+    const closeOnOutsideInteraction = (event: PointerEvent) => {
+      const target = event.target;
+
+      if (target instanceof Element && target.closest(".products-row-actions, .products-actions-popover")) {
+        return;
+      }
+
+      setOpenActionMenu(null);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setOpenActionMenu(null);
+      }
+    };
+
+    document.addEventListener("pointerdown", closeOnOutsideInteraction);
+    document.addEventListener("keydown", closeOnEscape);
+
+    return () => {
+      document.removeEventListener("pointerdown", closeOnOutsideInteraction);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [openActionMenu]);
+
+  const toggleProductActionMenu = (productId: string, button: HTMLButtonElement) => {
+    setOpenActionMenu((current) => {
+      if (current?.id === productId) return null;
+
+      const rect = button.getBoundingClientRect();
+      const menuWidth = 170;
+      const menuHeight = 178;
+      const gap = 8;
+      const safeMargin = 12;
+      const preferredLeft = rect.left + (rect.width / 2) - (menuWidth / 2);
+      const left = Math.min(
+        Math.max(preferredLeft, safeMargin),
+        window.innerWidth - menuWidth - safeMargin
+      );
+      const hasSpaceBelow = rect.bottom + gap + menuHeight <= window.innerHeight - safeMargin;
+      const top = hasSpaceBelow
+        ? rect.bottom + gap
+        : Math.max(rect.top - menuHeight - gap, safeMargin);
+
+      return { id: productId, left, top };
+    });
+  };
+
   const adjustmentTypeLabel = (type: string) => {
     if (type === "fixed_price") return "Precio fijo";
     if (type === "percentage_discount") return "Descuento porcentual";
     if (type === "tiered") return "Precio por tramo";
     return type;
+  };
+  const mapDuplicatedProduct = (product: NonNullable<Awaited<ReturnType<typeof duplicateProductService>>["product"]>): ProductItem => {
+    const unitMeasureOptions = ["day", "hour", "month", "none", "percentage"] as const;
+    const unitMeasure = unitMeasureOptions.includes(product.unit_measure as ProductUnitMeasure)
+      ? product.unit_measure as ProductUnitMeasure
+      : "hour";
+
+    return {
+      id: product.id,
+      code: product.code ?? "",
+      name: product.name,
+      kind: product.kind,
+      description: product.description ?? "",
+      unitMeasure,
+      unitPrice: Number(product.unit_price),
+      taxRate: product.tax_rate === null ? null : Number(product.tax_rate),
+      isActive: product.is_active
+    };
+  };
+  const runProductAction = async (
+    product: ProductItem,
+    action: () => Promise<{ error?: string }>,
+    successMessage: string
+  ) => {
+    setPendingActionId(product.id);
+    setOpenActionMenu(null);
+
+    const result = await action();
+    setPendingActionId(null);
+
+    if (result.error) {
+      onNotice(`No se pudo actualizar ${product.name}: ${result.error}`);
+      return false;
+    }
+
+    onNotice(successMessage);
+    return true;
+  };
+  const handleDuplicateProduct = async (product: ProductItem) => {
+    setPendingActionId(product.id);
+    setOpenActionMenu(null);
+
+    const result = await duplicateProductService(organizationId, product.id);
+    setPendingActionId(null);
+
+    if (result.error || !result.product) {
+      onNotice(`No se pudo duplicar ${product.name}: ${result.error ?? "error desconocido"}`);
+      return;
+    }
+
+    const duplicatedProduct = mapDuplicatedProduct(result.product);
+    onProductsChange((current) => [...current, duplicatedProduct].sort((a, b) => a.name.localeCompare(b.name)));
+    onNotice(`${duplicatedProduct.kind === "service" ? "Servicio" : "Producto"} ${duplicatedProduct.name} duplicado.`);
   };
   const metrics = isProductsSection
     ? [
@@ -409,7 +566,73 @@ function ProductsTemplateView({
                   <td>{product.taxRate === null ? "—" : `${product.taxRate} %`}</td>
                   <td>{formatMoney(product.unitPrice)}</td>
                   <td>{product.isActive ? "Activo" : "Inactivo"}</td>
-                  <td>—</td>
+                  <td>
+                    <div className="products-row-actions">
+                      <button
+                        aria-expanded={openActionMenu?.id === product.id}
+                        aria-label={`Acciones de ${product.name}`}
+                        className="sage-table-button"
+                        disabled={pendingActionId === product.id}
+                        onClick={(event) => toggleProductActionMenu(product.id, event.currentTarget)}
+                        type="button"
+                      >
+                        <MoreVertical aria-hidden="true" size={22} />
+                      </button>
+                      {openActionMenu?.id === product.id ? (
+                        <div
+                          className="sales-popover products-actions-popover"
+                          role="menu"
+                          style={{ left: `${openActionMenu.left}px`, top: `${openActionMenu.top}px` }}
+                        >
+                          <button
+                            onClick={() => {
+                              setOpenActionMenu(null);
+                              onEditProduct(product);
+                            }}
+                            type="button"
+                          >
+                            Editar
+                          </button>
+                          <button onClick={() => { void handleDuplicateProduct(product); }} type="button">
+                            Duplicar
+                          </button>
+                          <button
+                            onClick={() => {
+                              void runProductAction(
+                                product,
+                                () => toggleProductServiceActive(organizationId, product.id, !product.isActive),
+                                `${product.name} ${product.isActive ? "desactivado" : "activado"}.`
+                              ).then((ok) => {
+                                if (!ok) return;
+                                onProductsChange((current) => current.map((item) => (
+                                  item.id === product.id ? { ...item, isActive: !item.isActive } : item
+                                )));
+                              });
+                            }}
+                            type="button"
+                          >
+                            {product.isActive ? "Desactivar" : "Activar"}
+                          </button>
+                          <button
+                            className="danger"
+                            onClick={() => {
+                              void runProductAction(
+                                product,
+                                () => softDeleteProductService(organizationId, product.id),
+                                `${product.name} eliminado.`
+                              ).then((ok) => {
+                                if (!ok) return;
+                                onProductsChange((current) => current.filter((item) => item.id !== product.id));
+                              });
+                            }}
+                            type="button"
+                          >
+                            Eliminar
+                          </button>
+                        </div>
+                      ) : null}
+                    </div>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -550,25 +773,29 @@ const taxGroupOptions = [
 ];
 
 function ProductServiceForm({
+  initialProduct,
   organizationId,
   onCancel,
-  onCreated
+  onSaved
 }: {
+  initialProduct?: ProductItem | null;
   organizationId: string;
   onCancel: () => void;
-  onCreated: (product: ProductItem) => void;
+  onSaved: (product: ProductItem) => void;
 }) {
   const [activeTab, setActiveTab] = useState<ProductFormTab>("basic");
-  const [category, setCategory] = useState<ProductCategory>("product");
-  const [code, setCode] = useState("");
-  const [name, setName] = useState("");
-  const [unitMeasure, setUnitMeasure] = useState<ProductUnitMeasure>("hour");
-  const [description, setDescription] = useState("");
+  const [category, setCategory] = useState<ProductCategory>(initialProduct?.kind ?? "product");
+  const [code, setCode] = useState(initialProduct?.code ?? "");
+  const [name, setName] = useState(initialProduct?.name ?? "");
+  const [unitMeasure, setUnitMeasure] = useState<ProductUnitMeasure>(initialProduct?.unitMeasure ?? "hour");
+  const [description, setDescription] = useState(initialProduct?.description ?? "");
   const [internalComments, setInternalComments] = useState("");
-  const [price, setPrice] = useState("");
+  const [price, setPrice] = useState(initialProduct ? String(initialProduct.unitPrice).replace(".", ",") : "");
   const [discountPercent, setDiscountPercent] = useState("");
-  const [taxGroup, setTaxGroup] = useState(taxGroupOptions[0]!.label);
-  const [inactive, setInactive] = useState(false);
+  const [taxGroup, setTaxGroup] = useState(
+    taxGroupOptions.find((option) => option.rate === (initialProduct?.taxRate ?? 21))?.label ?? taxGroupOptions[0]!.label
+  );
+  const [inactive, setInactive] = useState(initialProduct ? !initialProduct.isActive : false);
   const [blockOrders, setBlockOrders] = useState(false);
   const [blockDeliveryNotes, setBlockDeliveryNotes] = useState(false);
   const [blockInvoices, setBlockInvoices] = useState(false);
@@ -581,11 +808,12 @@ function ProductServiceForm({
   const discountedPrice = Math.max(priceValue - discountAmount, 0);
   const taxAmount = discountedPrice * (taxRate / 100);
   const priceWithTax = discountedPrice + taxAmount;
+  const isEditing = Boolean(initialProduct);
   const canCreate = code.trim().length > 0 && name.trim().length > 0 && !isSaving;
 
   const requestCreate = () => {
     if (activeTab === "basic") {
-      window.alert("Dirígete a Precios y descuento de venta para continuar con la creación del Servicio.");
+      window.alert(`Dirígete a Precios y descuento de venta para continuar con la ${isEditing ? "edición" : "creación"} del Servicio.`);
       setActiveTab("pricing");
       return;
     }
@@ -597,31 +825,51 @@ function ProductServiceForm({
     const formData = new FormData();
 
     formData.set("organization_id", organizationId);
+    if (initialProduct) {
+      formData.set("product_id", initialProduct.id);
+    }
     formData.set("code", code.trim());
     formData.set("name", name.trim());
     formData.set("kind", category);
     formData.set("unit_measure", unitMeasure);
     formData.set("unit_price", String(priceValue));
     formData.set("tax_rate", String(taxRate));
-    formData.set("description", [description.trim(), internalComments.trim()].filter(Boolean).join("\n\n"));
+    formData.set("is_active", String(!inactive));
+    formData.set("description", description.trim());
 
     setSubmitError(null);
     setIsSaving(true);
 
-    const result = await createProductService(formData);
+    const savedProductId = initialProduct?.id ?? "";
 
-    setIsSaving(false);
+    if (initialProduct) {
+      const result = await updateProductService(formData);
 
-    if (result.error || !result.product) {
-      setSubmitError(result.error ?? "No se pudo guardar el producto o servicio.");
-      return;
+      setIsSaving(false);
+
+      if (result.error) {
+        setSubmitError(result.error);
+        return;
+      }
+    } else {
+      const result = await createProductService(formData);
+
+      setIsSaving(false);
+
+      if (result.error || !result.product) {
+        setSubmitError(result.error ?? "No se pudo guardar el producto o servicio.");
+        return;
+      }
+
+      formData.set("product_id", result.product.id);
     }
 
-    onCreated({
-      id: result.product.id,
+    onSaved({
+      id: initialProduct?.id ?? String(formData.get("product_id") ?? savedProductId),
       code: code.trim(),
       name: name.trim(),
       kind: category,
+      description: description.trim(),
       unitMeasure,
       unitPrice: priceValue,
       taxRate,
@@ -800,6 +1048,7 @@ function ProductServiceForm({
         isPending={isSaving}
         onCancel={onCancel}
         onCreate={requestCreate}
+        submitLabel={isEditing ? "Guardar" : "Crear"}
         summaries={[
           { label: "Precio", value: priceValue },
           { label: "Precio con IVA y descuento", value: priceWithTax }
@@ -1168,12 +1417,14 @@ function ProductStickyBar({
   isPending = false,
   onCancel,
   onCreate,
+  submitLabel = "Crear",
   summaries = []
 }: {
   canCreate: boolean;
   isPending?: boolean;
   onCancel?: () => void;
   onCreate?: () => void;
+  submitLabel?: string;
   summaries?: Array<{ label: string; value: number }>;
 }) {
   return (
@@ -1182,7 +1433,9 @@ function ProductStickyBar({
         <SummaryBox key={summary.label} label={summary.label} value={summary.value} />
       ))}
       <button className="quote-cancel-action" onClick={onCancel} type="button">Cancelar</button>
-      <button className="quote-create-action" disabled={!canCreate} onClick={canCreate ? onCreate : undefined} type="button">{isPending ? "Creando..." : "Crear"}</button>
+      <button className="quote-create-action" disabled={!canCreate} onClick={canCreate ? onCreate : undefined} type="button">
+        {isPending ? "Guardando..." : submitLabel}
+      </button>
       <button className="quote-create-more" disabled={!canCreate} type="button" aria-label="Mas opciones de creacion">
         <ChevronDown aria-hidden="true" size={18} />
       </button>

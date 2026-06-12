@@ -104,6 +104,7 @@ type DbProductRow = {
   code: string | null;
   name: string;
   kind: string;
+  description: string | null;
   unit_measure: string | null;
   unit_price: number;
   tax_rate: number | null;
@@ -400,7 +401,7 @@ export async function readSalesData(organizationId: string): Promise<SalesData> 
       .maybeSingle(),
     supabase
       .from("products_services")
-      .select("id, code, name, kind, unit_measure, unit_price, tax_rate, is_active")
+      .select("id, code, name, kind, description, unit_measure, unit_price, tax_rate, is_active")
       .eq("organization_id", organizationId)
       .eq("is_active", true)
       .is("deleted_at", null)
@@ -507,6 +508,7 @@ export type ProductItem = {
   code: string;
   name: string;
   kind: "product" | "service";
+  description: string;
   unitMeasure: "day" | "hour" | "month" | "none" | "percentage";
   unitPrice: number;
   taxRate: number | null;
@@ -544,7 +546,7 @@ export async function readProductsData(organizationId: string): Promise<Products
   const [productsResult, priceListsResult, discountGroupsResult] = await Promise.all([
     supabase
       .from("products_services")
-      .select("id, code, name, kind, unit_measure, unit_price, tax_rate, is_active")
+      .select("id, code, name, kind, description, unit_measure, unit_price, tax_rate, is_active")
       .eq("organization_id", organizationId)
       .is("deleted_at", null)
       .order("name", { ascending: true })
@@ -586,6 +588,7 @@ function mapProductRow(row: DbProductRow): ProductItem {
     code: row.code ?? "",
     name: row.name,
     kind: row.kind as "product" | "service",
+    description: row.description ?? "",
     unitMeasure,
     unitPrice: Number(row.unit_price),
     taxRate: row.tax_rate === null ? null : Number(row.tax_rate),

@@ -714,6 +714,184 @@ export async function createProductService(formData: FormData): Promise<{ error?
   return { product: { id: data.id as string } };
 }
 
+export async function updateProductService(formData: FormData): Promise<{ error?: string }> {
+  const organizationId = String(formData.get("organization_id") ?? "").trim();
+  const productId = String(formData.get("product_id") ?? "").trim();
+
+  if (!isUuid(organizationId) || !isUuid(productId)) {
+    return { error: "Producto u organización inválidos." };
+  }
+
+  const { supabase } = await getAuthenticatedUser();
+  const name = String(formData.get("name") ?? "").trim();
+
+  if (!name) {
+    return { error: "El nombre es obligatorio." };
+  }
+
+  const kind = String(formData.get("kind") ?? "service").trim();
+  const validKinds = ["product", "service"] as const;
+  const productKind = validKinds.includes(kind as "product" | "service") ? (kind as "product" | "service") : "service";
+  const unitMeasureRaw = String(formData.get("unit_measure") ?? "hour").trim();
+  const validUnitMeasures = ["day", "hour", "month", "none", "percentage"] as const;
+  const unitMeasure = validUnitMeasures.includes(unitMeasureRaw as typeof validUnitMeasures[number])
+    ? unitMeasureRaw
+    : "hour";
+  const unitPriceRaw = Number(String(formData.get("unit_price") ?? "0").replace(",", "."));
+  const unitPrice = Number.isFinite(unitPriceRaw) ? unitPriceRaw : 0;
+  const taxRateRaw = String(formData.get("tax_rate") ?? "").trim();
+  const taxRate = taxRateRaw ? Number(taxRateRaw.replace(",", ".")) : null;
+
+  const { error } = await supabase
+    .from("products_services")
+    .update({
+      code: String(formData.get("code") ?? "").trim() || null,
+      name,
+      kind: productKind,
+      description: String(formData.get("description") ?? "").trim() || null,
+      unit_measure: unitMeasure,
+      unit_price: unitPrice,
+      tax_rate: taxRate,
+      is_active: String(formData.get("is_active") ?? "true") === "true",
+      updated_at: new Date().toISOString()
+    })
+    .eq("id", productId)
+    .eq("organization_id", organizationId)
+    .is("deleted_at", null);
+
+  if (error) {
+    return { error: error.message };
+  }
+
+  revalidatePath("/dashboard");
+  return {};
+}
+
+export async function toggleProductServiceActive(
+  organizationId: string,
+  productId: string,
+  isActive: boolean
+): Promise<{ error?: string }> {
+  if (!isUuid(organizationId) || !isUuid(productId)) {
+    return { error: "Producto u organización inválidos." };
+  }
+
+  const { supabase } = await getAuthenticatedUser();
+  const { error } = await supabase
+    .from("products_services")
+    .update({ is_active: isActive, updated_at: new Date().toISOString() })
+    .eq("id", productId)
+    .eq("organization_id", organizationId)
+    .is("deleted_at", null);
+
+  if (error) {
+    return { error: error.message };
+  }
+
+  revalidatePath("/dashboard");
+  return {};
+}
+
+export async function softDeleteProductService(
+  organizationId: string,
+  productId: string
+): Promise<{ error?: string }> {
+  if (!isUuid(organizationId) || !isUuid(productId)) {
+    return { error: "Producto u organización inválidos." };
+  }
+
+  const { supabase } = await getAuthenticatedUser();
+  const { error } = await supabase
+    .from("products_services")
+    .update({ deleted_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+    .eq("id", productId)
+    .eq("organization_id", organizationId)
+    .is("deleted_at", null);
+
+  if (error) {
+    return { error: error.message };
+  }
+
+  revalidatePath("/dashboard");
+  return {};
+}
+
+export async function duplicateProductService(
+  organizationId: string,
+  productId: string
+): Promise<{
+  error?: string;
+  product?: {
+    id: string;
+    code: string | null;
+    name: string;
+    kind: "product" | "service";
+    description: string | null;
+    unit_measure: string | null;
+    unit_price: number;
+    tax_rate: number | null;
+    is_active: boolean;
+  };
+}> {
+  if (!isUuid(organizationId) || !isUuid(productId)) {
+    return { error: "Producto u organización inválidos." };
+  }
+
+  const { supabase, user } = await getAuthenticatedUser();
+  const { data: source, error: sourceError } = await supabase
+    .from("products_services")
+    .select("code, name, kind, description, unit_measure, unit_price, tax_rate, is_active")
+    .eq("id", productId)
+    .eq("organization_id", organizationId)
+    .is("deleted_at", null)
+    .single();
+
+  if (sourceError || !source) {
+    return { error: sourceError?.message ?? "No se encontró el producto o servicio." };
+  }
+
+  let copyCode = source.code ? `${source.code}-COPIA` : null;
+
+  if (copyCode) {
+    for (let index = 2; index <= 99; index += 1) {
+      const { data: existing } = await supabase
+        .from("products_services")
+        .select("id")
+        .eq("organization_id", organizationId)
+        .ilike("code", copyCode)
+        .is("deleted_at", null)
+        .maybeSingle();
+
+      if (!existing) break;
+      copyCode = `${source.code}-COPIA-${index}`;
+    }
+  }
+
+  const { data, error } = await supabase
+    .from("products_services")
+    .insert({
+      organization_id: organizationId,
+      code: copyCode,
+      name: `${source.name} copia`,
+      kind: source.kind,
+      description: source.description,
+      unit_measure: source.unit_measure ?? "hour",
+      unit_price: source.unit_price,
+      tax_rate: source.tax_rate,
+      is_active: source.is_active,
+      created_by: user.id
+    })
+    .select("id, code, name, kind, description, unit_measure, unit_price, tax_rate, is_active")
+    .single();
+
+  if (error || !data) {
+    return { error: error?.message ?? "No se pudo duplicar el producto o servicio." };
+  }
+
+  revalidatePath("/dashboard");
+  return { product: data as NonNullable<Awaited<ReturnType<typeof duplicateProductService>>["product"]> };
+}
+
 export async function createSalesQuote(formData: FormData): Promise<{ error?: string; quote?: { id: string; number: string; total: number } }> {
   const organizationId = String(formData.get("organization_id") ?? "").trim();
 

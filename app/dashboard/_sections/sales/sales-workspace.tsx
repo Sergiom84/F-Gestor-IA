@@ -17,7 +17,6 @@ import {
   ListChecks,
   Mail,
   MoreVertical,
-  PackageSearch,
   PenLine,
   Plus,
   Search,
@@ -2413,17 +2412,25 @@ function QuoteForm({
   const updateLine = (id: number, patch: Partial<QuoteLine>) => {
     if (typeof patch.product === "string") {
       const matched = products.find((item) => (
-        item.name === patch.product || (item.code !== "" && item.code === patch.product)
+        item.name === patch.product
+        || (item.code !== "" && item.code === patch.product)
+        || (item.code !== "" && `${item.code} - ${item.name}` === patch.product)
       ));
 
       if (matched) {
         const line = lines.find((item) => item.id === id);
+        const matchedDisplayName = matched.code ? `${matched.code} - ${matched.name}` : matched.name;
+        const isDifferentProduct = !line || (
+          line.product !== matched.name
+          && line.product !== matched.code
+          && line.product !== matchedDisplayName
+        );
 
         patch = {
           ...patch,
-          product: matched.name,
-          unitPrice: line && line.unitPrice > 0 ? line.unitPrice : matched.unitPrice,
-          description: line?.description ? line.description : matched.name
+          product: matchedDisplayName,
+          unitPrice: isDifferentProduct ? matched.unitPrice : line && line.unitPrice > 0 ? line.unitPrice : matched.unitPrice,
+          description: matched.description.trim() || matched.name
         };
       }
     }
@@ -2716,12 +2723,93 @@ function ProductsTab({
   onRemoveLine: (id: number) => void;
   onUpdateLine: (id: number, patch: Partial<QuoteLine>) => void;
 }) {
-  const [lineMenuId, setLineMenuId] = useState<number | null>(null);
+  const [lineActionMenu, setLineActionMenu] = useState<{ lineId: number; left: number; top: number } | null>(null);
+  const [productMenu, setProductMenu] = useState<{ lineId: number; left: number; top: number; width: number; query: string } | null>(null);
 
   const runLineAction = (action: () => void) => {
     action();
-    setLineMenuId(null);
+    setLineActionMenu(null);
   };
+  const openLineActionMenu = (lineId: number, button: HTMLButtonElement) => {
+    const rect = button.getBoundingClientRect();
+    const menuWidth = 190;
+    const menuHeight = 142;
+    const gap = 8;
+    const safeMargin = 12;
+    const preferredLeft = rect.left + (rect.width / 2) - (menuWidth / 2);
+    const left = Math.min(
+      Math.max(preferredLeft, safeMargin),
+      window.innerWidth - menuWidth - safeMargin
+    );
+    const hasSpaceBelow = rect.bottom + gap + menuHeight <= window.innerHeight - safeMargin;
+    const top = hasSpaceBelow
+      ? rect.bottom + gap
+      : Math.max(rect.top - menuHeight - gap, safeMargin);
+
+    setLineActionMenu((current) => current?.lineId === lineId ? null : { lineId, left, top });
+  };
+  const openProductMenu = (lineId: number, input: HTMLInputElement, query = "") => {
+    const rect = input.getBoundingClientRect();
+    const menuWidth = Math.max(rect.width, 292);
+    const menuHeight = 238;
+    const gap = 7;
+    const safeMargin = 12;
+    const left = Math.min(
+      Math.max(rect.left, safeMargin),
+      window.innerWidth - menuWidth - safeMargin
+    );
+    const hasSpaceBelow = rect.bottom + gap + menuHeight <= window.innerHeight - safeMargin;
+    const top = hasSpaceBelow
+      ? rect.bottom + gap
+      : Math.max(rect.top - menuHeight - gap, safeMargin);
+
+    setProductMenu({ lineId, left, top, width: menuWidth, query });
+  };
+  const selectProduct = (lineId: number, product: ProductItem) => {
+    onUpdateLine(lineId, { product: product.code ? `${product.code} - ${product.name}` : product.name });
+    setProductMenu(null);
+  };
+  const findSelectedProduct = (lineProduct: string) => products.find((product) => (
+    product.name === lineProduct
+    || (product.code !== "" && product.code === lineProduct)
+    || (product.code !== "" && `${product.code} - ${product.name}` === lineProduct)
+  ));
+  const unitMeasureAbbreviation = (unitMeasure?: ProductItem["unitMeasure"]) => {
+    if (unitMeasure === "day") return "ds.";
+    if (unitMeasure === "month") return "ms.";
+    if (unitMeasure === "percentage") return "%";
+    if (unitMeasure === "none") return "";
+    return "h";
+  };
+
+  useEffect(() => {
+    if (!productMenu && !lineActionMenu) return;
+
+    const closeOnOutsideInteraction = (event: PointerEvent) => {
+      const target = event.target;
+
+      if (target instanceof Element && target.closest(".quote-product-picker, .quote-product-picker-menu, .quote-line-actions, .quote-line-popover")) {
+        return;
+      }
+
+      setProductMenu(null);
+      setLineActionMenu(null);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setProductMenu(null);
+        setLineActionMenu(null);
+      }
+    };
+
+    document.addEventListener("pointerdown", closeOnOutsideInteraction);
+    document.addEventListener("keydown", closeOnEscape);
+
+    return () => {
+      document.removeEventListener("pointerdown", closeOnOutsideInteraction);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [productMenu, lineActionMenu]);
 
   return (
     <div className="quote-products-panel">
@@ -2730,50 +2818,83 @@ function ProductsTab({
         Anadir
       </button>
 
-      {products.length > 0 ? (
-        <datalist id="quote-product-options">
-          {products.map((product) => (
-            <option key={product.id} value={product.name}>
-              {product.code ? `${product.code} · ` : ""}{formatMoney(product.unitPrice)}
-            </option>
-          ))}
-        </datalist>
-      ) : null}
-
       <div className="quote-lines-wrap">
         <table className="quote-lines-table">
           <thead>
             <tr>
-              <th aria-label="Seleccion" />
               <th>Producto o servicio</th>
               <th>Descripcion</th>
               <th>Cantidad</th>
-              <th>Precio unita...</th>
+              <th>Precio unitario</th>
               <th>Descuento</th>
-              <th>Eliminar</th>
+              <th>Base imponible</th>
+              <th>% IVA</th>
+              <th>Estado</th>
               <th>Acciones</th>
             </tr>
           </thead>
           <tbody>
-            {lines.length > 0 ? lines.map((line) => (
+            {lines.length > 0 ? lines.map((line) => {
+              const productQuery = productMenu?.lineId === line.id
+                ? productMenu.query.trim().toLowerCase()
+                : line.product.trim().toLowerCase();
+              const selectedProduct = findSelectedProduct(line.product);
+              const rawLineTotal = line.quantity * line.unitPrice;
+              const lineBase = rawLineTotal - (rawLineTotal * (line.discount / 100));
+              const lineStatus = line.product.trim() && line.description.trim() && line.quantity > 0 ? "Completa" : "Pendiente";
+              const visibleProducts = products.filter((product) => (
+                !productQuery
+                || product.name.toLowerCase().includes(productQuery)
+                || product.code.toLowerCase().includes(productQuery)
+                || `${product.code} - ${product.name}`.toLowerCase().includes(productQuery)
+              ));
+
+              return (
               <tr key={line.id}>
-                <td><PackageSearch aria-hidden="true" size={20} /></td>
                 <td>
-                  <input
-                    aria-label="Producto o servicio"
-                    list="quote-product-options"
-                    onChange={(event) => onUpdateLine(line.id, { product: event.target.value })}
-                    value={line.product}
-                  />
+                  <div className="quote-product-picker">
+                    <input
+                      aria-expanded={productMenu?.lineId === line.id}
+                      aria-label="Producto o servicio"
+                      onChange={(event) => {
+                        onUpdateLine(line.id, { product: event.target.value });
+                        openProductMenu(line.id, event.currentTarget, event.target.value);
+                      }}
+                      onClick={(event) => openProductMenu(line.id, event.currentTarget)}
+                      onFocus={(event) => openProductMenu(line.id, event.currentTarget)}
+                      value={line.product}
+                    />
+                    <ChevronDown aria-hidden="true" size={16} />
+                    {productMenu?.lineId === line.id ? (
+                      <div
+                        className="quote-product-picker-menu"
+                        role="listbox"
+                        style={{ left: `${productMenu.left}px`, top: `${productMenu.top}px`, width: `${productMenu.width}px` }}
+                      >
+                        {visibleProducts.length > 0 ? visibleProducts.map((product) => (
+                          <button
+                            key={product.id}
+                            onClick={() => selectProduct(line.id, product)}
+                            type="button"
+                          >
+                            <strong>{product.name}</strong>
+                            <span>{product.code || "Sin codigo"} · {formatMoney(product.unitPrice)}</span>
+                          </button>
+                        )) : (
+                          <span className="quote-product-picker-empty">Sin resultados</span>
+                        )}
+                      </div>
+                    ) : null}
+                  </div>
                 </td>
                 <td>
-                  <input
+                  <textarea
                     aria-label="Descripcion"
                     onChange={(event) => onUpdateLine(line.id, { description: event.target.value })}
                     value={line.description}
                   />
                 </td>
-                <td>
+                <td className="quote-line-quantity-cell">
                   <input
                     aria-label="Cantidad"
                     min="0"
@@ -2781,6 +2902,7 @@ function ProductsTab({
                     type="number"
                     value={editableNumberValue(line.quantity)}
                   />
+                  {unitMeasureAbbreviation(selectedProduct?.unitMeasure) ? <span>{unitMeasureAbbreviation(selectedProduct?.unitMeasure)}</span> : null}
                 </td>
                 <td>
                   <input
@@ -2802,34 +2924,41 @@ function ProductsTab({
                   />
                 </td>
                 <td>
-                  <button className="sage-table-button danger" onClick={() => onRemoveLine(line.id)} type="button">
-                    <Trash2 aria-hidden="true" size={22} fill="currentColor" />
-                  </button>
+                  {formatMoney(Math.max(lineBase, 0))}
+                </td>
+                <td>21,00%</td>
+                <td>
+                  <span className={`quote-line-status ${lineStatus === "Completa" ? "is-complete" : "is-pending"}`}>{lineStatus}</span>
                 </td>
                 <td>
                   <div className="quote-line-actions">
                     <button
-                      aria-expanded={lineMenuId === line.id}
+                      aria-expanded={lineActionMenu?.lineId === line.id}
                       className="sage-table-button"
-                      onClick={() => setLineMenuId((current) => current === line.id ? null : line.id)}
+                      onClick={(event) => openLineActionMenu(line.id, event.currentTarget)}
                       type="button"
                       aria-label="Mas acciones"
                     >
                       <MoreVertical aria-hidden="true" size={22} />
                     </button>
-                    {lineMenuId === line.id ? (
-                      <div className="sales-popover quote-line-popover" role="menu">
+                    {lineActionMenu?.lineId === line.id ? (
+                      <div
+                        className="sales-popover quote-line-popover"
+                        role="menu"
+                        style={{ left: `${lineActionMenu.left}px`, top: `${lineActionMenu.top}px` }}
+                      >
                         <button onClick={() => runLineAction(() => onDuplicateLine(line))} type="button">Duplicar linea</button>
                         <button onClick={() => runLineAction(() => onUpdateLine(line.id, { discount: 0 }))} type="button">Quitar descuento</button>
-                        <button onClick={() => runLineAction(() => onRemoveLine(line.id))} type="button">Eliminar linea</button>
+                        <button className="danger" onClick={() => runLineAction(() => onRemoveLine(line.id))} type="button">Eliminar</button>
                       </div>
                     ) : null}
                   </div>
                 </td>
               </tr>
-            )) : (
+              );
+            }) : (
               <tr>
-                <td colSpan={8}>
+                <td colSpan={9}>
                   <div className="quote-line-empty">
                     <ListChecks aria-hidden="true" size={42} />
                     <span>Anade productos o servicios para activar la creacion.</span>
