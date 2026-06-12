@@ -1354,8 +1354,10 @@ textarea {
 }
 
 .contacts-list {
+  align-content: start;
   border-top: 1px solid var(--gf-line);
   display: grid;
+  grid-auto-rows: max-content;
 }
 
 .contacts-list-row {
