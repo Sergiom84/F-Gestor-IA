@@ -41,7 +41,20 @@ type DbSalesClientSnapshot = {
 
 type DbSupplierRow = {
   id: string;
+  contact_email: string | null;
+  contact_phone: string | null;
   name: string;
+  tax_id: string | null;
+};
+
+type DbEmployeeRow = {
+  id: string;
+  code: string | null;
+  contact_email: string | null;
+  contact_phone: string | null;
+  department: string | null;
+  name: string;
+  role: string | null;
   tax_id: string | null;
 };
 
@@ -301,13 +314,14 @@ function mapSalesAmounts(row: {
 
 export type ContactsData = {
   clients: ArtificialContactListItem[];
+  employees: ArtificialContactListItem[];
   suppliers: ArtificialContactListItem[];
 };
 
 export async function readContactsData(organizationId: string): Promise<ContactsData> {
   const supabase = await createClient();
 
-  const [clientRows, fiscalEntityClientsResult, suppliersResult] = await Promise.all([
+  const [clientRows, fiscalEntityClientsResult, suppliersResult, employeesResult] = await Promise.all([
     readClientRows(supabase, organizationId),
     supabase
       .from("fiscal_entities")
@@ -317,11 +331,18 @@ export async function readContactsData(organizationId: string): Promise<Contacts
       .returns<Array<{ client_id: string }>>(),
     supabase
       .from("suppliers")
-      .select("id, name, tax_id")
+      .select("id, name, tax_id, contact_email, contact_phone")
       .eq("organization_id", organizationId)
       .is("deleted_at", null)
       .order("name", { ascending: true })
-      .returns<DbSupplierRow[]>()
+      .returns<DbSupplierRow[]>(),
+    supabase
+      .from("employees")
+      .select("id, code, name, tax_id, contact_email, contact_phone, role, department")
+      .eq("organization_id", organizationId)
+      .is("deleted_at", null)
+      .order("name", { ascending: true })
+      .returns<DbEmployeeRow[]>()
   ]);
 
   const fiscalEntityClientIds = new Set((fiscalEntityClientsResult.data ?? []).map((row) => row.client_id));
@@ -346,10 +367,23 @@ export async function readContactsData(organizationId: string): Promise<Contacts
     id: s.id,
     name: s.name,
     code: shortId(s.id),
-    taxId: s.tax_id ?? ""
+    taxId: s.tax_id ?? "",
+    contactEmail: s.contact_email ?? "",
+    contactPhone: s.contact_phone ?? ""
   }));
 
-  return { clients, suppliers };
+  const employees: ArtificialContactListItem[] = (employeesResult.data ?? []).map((employee) => ({
+    id: employee.id,
+    name: employee.name,
+    code: employee.code ?? shortId(employee.id),
+    taxId: employee.tax_id ?? "",
+    contactEmail: employee.contact_email ?? "",
+    contactPhone: employee.contact_phone ?? "",
+    role: employee.role ?? "",
+    department: employee.department ?? ""
+  }));
+
+  return { clients, employees, suppliers };
 }
 
 export type PurchasesData = {

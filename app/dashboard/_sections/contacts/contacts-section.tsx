@@ -9,6 +9,7 @@ export async function ContactsSection({ organizationId, organizationName }: { or
       organizationId={organizationId}
       organizationName={organizationName}
       initialClients={data.clients}
+      initialEmployees={data.employees}
       initialSuppliers={data.suppliers}
     />
   );

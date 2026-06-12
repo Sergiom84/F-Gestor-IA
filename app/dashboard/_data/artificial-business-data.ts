@@ -74,9 +74,11 @@ export type ArtificialContactListItem = {
   contactPhone?: string;
   country?: string;
   defaultIrpfRate?: number;
+  department?: string;
   fiscalAddress?: string;
   postalCode?: string;
   province?: string;
+  role?: string;
 };
 
 export const artificialClientRows: ArtificialContactListItem[] = [];

@@ -2,8 +2,11 @@
 
 import {
   AlertTriangle,
+  BriefcaseBusiness,
+  Building2,
   CheckCircle2,
   ChevronDown,
+  Filter,
   MoreVertical,
   Paperclip,
   Pencil,
@@ -20,6 +23,8 @@ import { useEffect, useMemo, useState } from "react";
 import {
   createClientAddress,
   createContactClient,
+  createEmployee,
+  createSupplier,
   deleteClientAddress,
   getContactClientDeleteSummary,
   listClientAddresses,
@@ -39,6 +44,7 @@ type ContactsWorkspaceProps = {
   organizationId: string;
   organizationName: string;
   initialClients?: ArtificialContactListItem[];
+  initialEmployees?: ArtificialContactListItem[];
   initialSuppliers?: ArtificialContactListItem[];
 };
 import { formatMoney } from "../../_lib/formatters";
@@ -64,20 +70,26 @@ const clientTabs = [
   { id: "delete", label: "Eliminar" }
 ] satisfies Array<{ id: ClientTabId; label: string }>;
 
-const employeeRows: ContactListItem[] = artificialEmployeeRows;
+function contactSectionSingular(sectionId: ContactSectionId): string {
+  if (sectionId === "clients") return "cliente";
+  if (sectionId === "suppliers") return "proveedor";
+  return "empleado";
+}
 
-export function ContactsWorkspace({ organizationId, organizationName, initialClients, initialSuppliers }: ContactsWorkspaceProps) {
+export function ContactsWorkspace({ organizationId, organizationName, initialClients, initialEmployees, initialSuppliers }: ContactsWorkspaceProps) {
   const [clientRows, setClientRows] = useState<ContactListItem[]>(initialClients ?? artificialClientRows);
-  const supplierRows: ContactListItem[] = initialSuppliers ?? artificialSupplierRows;
+  const [supplierRows, setSupplierRows] = useState<ContactListItem[]>(initialSuppliers ?? artificialSupplierRows);
+  const [employeeRows, setEmployeeRows] = useState<ContactListItem[]>(initialEmployees ?? artificialEmployeeRows);
   const [activeSection, setActiveSection] = useState<ContactSectionId>("clients");
   const [isSectionMenuOpen, setIsSectionMenuOpen] = useState(false);
   const [isActionsOpen, setIsActionsOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
+  const [selectedContactId, setSelectedContactId] = useState<string | null>(null);
   const [activeClientTab, setActiveClientTab] = useState<ClientTabId>("info");
   const [notice, setNotice] = useState<ContactNotice | null>(null);
   const [isCreatingContact, setIsCreatingContact] = useState(false);
   const [contactsNotice, setContactsNotice] = useState<string | null>(null);
+  const [showFilters, setShowFilters] = useState(false);
   const currentSection = contactSections.find((section) => section.id === activeSection) ?? contactSections[0]!;
   const rows = activeSection === "clients"
     ? clientRows
@@ -97,13 +109,14 @@ export function ContactsWorkspace({ organizationId, organizationName, initialCli
       || row.taxId.toLowerCase().includes(normalizedQuery)
     ));
   }, [query, rows]);
-  const selectedClient = selectedClientId
-    ? clientRows.find((client) => client.id === selectedClientId) ?? null
+  const selectedContact = selectedContactId
+    ? rows.find((contact) => contact.id === selectedContactId) ?? null
     : null;
+  const selectedClient = activeSection === "clients" ? selectedContact : null;
 
   const selectSection = (sectionId: ContactSectionId) => {
     setActiveSection(sectionId);
-    setSelectedClientId(null);
+    setSelectedContactId(null);
     setActiveClientTab("info");
     setQuery("");
     setIsSectionMenuOpen(false);
@@ -111,7 +124,7 @@ export function ContactsWorkspace({ organizationId, organizationName, initialCli
 
   const handleAdd = () => {
     setIsCreatingContact(true);
-    setSelectedClientId(null);
+    setSelectedContactId(null);
     setActiveClientTab("info");
   };
 
@@ -130,8 +143,47 @@ export function ContactsWorkspace({ organizationId, organizationName, initialCli
     setIsActionsOpen(false);
   };
 
+  const totalContacts = clientRows.length + supplierRows.length + employeeRows.length;
+  const activeCount = rows.length;
+  const withTaxIdCount = rows.filter((row) => row.taxId.trim().length > 0).length;
+  const withEmailCount = rows.filter((row) => (row.contactEmail ?? "").trim().length > 0).length;
+  const activeSingular = contactSectionSingular(activeSection);
+  const activePlural = currentSection.label.toLowerCase();
+
   return (
-    <section className="contacts-workspace" aria-label="Contactos">
+    <section className="contacts-module-shell" aria-label="Contactos">
+      <header className="sales-operation-header contacts-operation-header">
+        <div className="sales-operation-title">
+          <nav className="fiscal-tabs sales-section-tabs contacts-section-tabs" aria-label="Secciones de contactos">
+            {contactSections.map((section) => (
+              <button
+                aria-selected={activeSection === section.id}
+                className={`tab${activeSection === section.id ? " active" : ""}`}
+                key={section.id}
+                onClick={() => selectSection(section.id)}
+                type="button"
+              >
+                {section.label}
+              </button>
+            ))}
+          </nav>
+        </div>
+        <div className="sales-settings-menu">
+          <button className="sales-settings-button" onClick={() => setIsActionsOpen((current) => !current)} type="button">
+            <Sparkles aria-hidden="true" size={27} fill="currentColor" />
+            <span>Configuracion</span>
+            <ChevronDown aria-hidden="true" size={15} />
+          </button>
+          {isActionsOpen ? (
+            <div className="sales-popover settings-popover" role="menu">
+              <button onClick={handleImport} type="button">Importar contactos</button>
+              <button onClick={handleExport} type="button">Exportar lista</button>
+              <button onClick={handleCombine} type="button">Combinar duplicados</button>
+            </div>
+          ) : null}
+        </div>
+      </header>
+
       {notice ? (
         <div className={`sales-live-notice ${notice.tone}`} role="status">
           {notice.tone === "success"
@@ -144,6 +196,68 @@ export function ContactsWorkspace({ organizationId, organizationName, initialCli
         </div>
       ) : null}
 
+      <section className="contacts-hero-panel">
+        <h1>Contactos</h1>
+        <div className="contacts-hero-actions">
+          <button className="sage-outline-button" onClick={handleAdd} type="button">
+            <Plus aria-hidden="true" size={20} />
+            Crear {activeSingular}
+          </button>
+        </div>
+      </section>
+
+      <section className="sales-template-metrics contacts-metric-grid" aria-label="Indicadores de contactos">
+        <article className="sales-template-metric">
+          <span className="sales-template-metric-icon teal"><Building2 aria-hidden="true" size={20} /></span>
+          <strong>{activeCount}</strong>
+          <span>{currentSection.label}</span>
+        </article>
+        <article className="sales-template-metric">
+          <span className="sales-template-metric-icon indigo"><BriefcaseBusiness aria-hidden="true" size={20} /></span>
+          <strong>{totalContacts}</strong>
+          <span>Contactos totales</span>
+        </article>
+        <article className="sales-template-metric">
+          <span className="sales-template-metric-icon green"><CheckCircle2 aria-hidden="true" size={20} /></span>
+          <strong>{withEmailCount}</strong>
+          <span>Con email</span>
+        </article>
+      </section>
+
+      <div className="sales-list-toolbar contacts-list-toolbar">
+        <span aria-hidden="true" />
+        <div className="sales-toolbar-actions">
+          <label className="sales-search-control">
+            <Search aria-hidden="true" size={25} />
+            <input
+              aria-label={`Buscar ${currentSection.label}`}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Buscar..."
+              type="search"
+              value={query}
+            />
+          </label>
+          <button className="sage-outline-button" onClick={() => setShowFilters((current) => !current)} type="button">
+            <Filter aria-hidden="true" size={20} fill="currentColor" />
+            Filtrar
+          </button>
+          <button className="sage-outline-button" onClick={() => setNotice({ tone: "success", text: `Vista de ${activePlural} personalizada.` })} type="button">
+            Personalizar
+            <ChevronDown aria-hidden="true" size={15} />
+          </button>
+        </div>
+      </div>
+
+      {showFilters ? (
+        <div className="sales-filter-strip">
+          <span>Filtros activos</span>
+          <span>{withTaxIdCount} con NIF/CIF</span>
+          <span>{withEmailCount} con email</span>
+          <button onClick={() => setShowFilters(false)} type="button">Ocultar filtros</button>
+        </div>
+      ) : null}
+
+      <div className="contacts-workspace">
       <aside className="contacts-list-pane" aria-label={currentSection.label}>
         <header className="contacts-list-header">
           <div className="contacts-section-picker">
@@ -168,17 +282,10 @@ export function ContactsWorkspace({ organizationId, organizationName, initialCli
               Anadir
             </button>
             <div className="contacts-actions-menu">
-              <button className="contacts-actions-button" onClick={() => setIsActionsOpen((current) => !current)} type="button">
+              <button className="contacts-actions-button" onClick={() => setNotice({ tone: "success", text: "Usa Configuracion para importar, exportar o combinar contactos." })} type="button">
                 <MoreVertical aria-hidden="true" size={26} />
                 Acciones
               </button>
-              {isActionsOpen ? (
-                <div className="contacts-section-menu contacts-actions-popover">
-                  <button onClick={handleImport} type="button">Importar contactos</button>
-                  <button onClick={handleExport} type="button">Exportar lista</button>
-                  <button onClick={handleCombine} type="button">Combinar duplicados</button>
-                </div>
-              ) : null}
             </div>
           </div>
 
@@ -196,18 +303,16 @@ export function ContactsWorkspace({ organizationId, organizationName, initialCli
 
         <div className="contacts-list">
           {filteredRows.map((row) => {
-            const isSelected = activeSection === "clients" && row.id === selectedClientId;
+            const isSelected = row.id === selectedContactId;
 
             return (
               <button
                 className={`contacts-list-row${isSelected ? " active" : ""}`}
                 key={row.id}
                 onClick={() => {
-                  if (activeSection === "clients") {
-                    setSelectedClientId(row.id);
-                    setActiveClientTab("info");
-                    setIsCreatingContact(false);
-                  }
+                  setSelectedContactId(row.id);
+                  setActiveClientTab("info");
+                  setIsCreatingContact(false);
                 }}
                 type="button"
               >
@@ -236,20 +341,29 @@ export function ContactsWorkspace({ organizationId, organizationName, initialCli
         {isCreatingContact ? (
           <NewContactForm
             organizationId={organizationId}
+            sectionId={activeSection}
             sectionLabel={currentSection.label}
             onCancel={() => setIsCreatingContact(false)}
-            onCreated={(client) => {
-              setClientRows((current) => [client, ...current]);
+            onCreated={(contact) => {
+              if (activeSection === "clients") {
+                setClientRows((current) => [contact, ...current]);
+              } else if (activeSection === "suppliers") {
+                setSupplierRows((current) => [contact, ...current]);
+              } else {
+                setEmployeeRows((current) => [contact, ...current]);
+              }
               setQuery("");
-              setSelectedClientId(client.id);
+              setSelectedContactId(contact.id);
               setActiveClientTab("info");
               setIsCreatingContact(false);
-              setContactsNotice(`${client.name} creado.`);
+              setContactsNotice(`${contact.name} creado.`);
             }}
             onPersistenceError={(message) => {
-              setContactsNotice(`Cliente creado en la vista, pero no se pudo guardar: ${message}`);
+              setContactsNotice(`No se pudo guardar: ${message}`);
             }}
           />
+        ) : activeSection !== "clients" && selectedContact ? (
+          <GenericContactDetail contact={selectedContact} sectionLabel={currentSection.label} />
         ) : activeSection !== "clients" ? (
           <ContactCategoryPlaceholder sectionLabel={currentSection.label} />
         ) : selectedClient ? (
@@ -262,7 +376,7 @@ export function ContactsWorkspace({ organizationId, organizationName, initialCli
             onNotice={setNotice}
             onDeleteClient={(clientId, clientName) => {
               setClientRows((current) => current.filter((item) => item.id !== clientId));
-              setSelectedClientId(null);
+              setSelectedContactId(null);
               setActiveClientTab("info");
               setNotice({ tone: "success", text: `${clientName} eliminado.` });
             }}
@@ -274,6 +388,7 @@ export function ContactsWorkspace({ organizationId, organizationName, initialCli
           <ContactEmptyState />
         )}
       </section>
+      </div>
     </section>
   );
 }
@@ -297,6 +412,50 @@ function ContactCategoryPlaceholder({ sectionLabel }: { sectionLabel: string }) 
       </div>
       <strong>{sectionLabel.toUpperCase()} LISTOS PARA CONECTAR.</strong>
     </div>
+  );
+}
+
+function GenericContactDetail({ contact, sectionLabel }: { contact: ContactListItem; sectionLabel: string }) {
+  const isEmployee = sectionLabel === "Empleados";
+
+  return (
+    <section className="client-detail" aria-label={contact.name}>
+      <header className="client-detail-header">
+        <div className="client-title-row">
+          <h1>{contact.name}</h1>
+        </div>
+      </header>
+      <div className="client-balance-row">
+        <ClientMetric label={sectionLabel} valueLabel={contact.code || "Sin codigo"} />
+        <ClientMetric label="NIF/CIF" valueLabel={contact.taxId || "Sin dato"} />
+      </div>
+      <section className="client-tab-panel">
+        <div className="client-info-grid">
+          <section>
+            <h2>Informacion principal</h2>
+            <InfoField label="Nombre" value={contact.name} />
+            <InfoField label="Codigo" value={contact.code} />
+            <InfoField label="NIF/CIF" value={contact.taxId} />
+          </section>
+          <section>
+            <h2>Contacto</h2>
+            <InfoField label="Email" value={contact.contactEmail} />
+            <InfoField label="Telefono" value={contact.contactPhone} />
+            {isEmployee ? <InfoField label="Cargo" value={contact.role} /> : null}
+            {isEmployee ? <InfoField label="Departamento" value={contact.department} /> : null}
+          </section>
+        </div>
+      </section>
+    </section>
+  );
+}
+
+function InfoField({ label, value }: { label: string; value: string | undefined }) {
+  return (
+    <label className="sage-field">
+      <span>{label}</span>
+      <input readOnly value={value || "Sin dato"} />
+    </label>
   );
 }
 
@@ -1085,22 +1244,27 @@ function ClientBlockToggle({ title, description }: { title: string; description:
 
 function NewContactForm({
   organizationId,
+  sectionId,
   sectionLabel,
   onCancel,
   onCreated,
   onPersistenceError
 }: {
   organizationId: string;
+  sectionId: ContactSectionId;
   sectionLabel: string;
   onCancel: () => void;
-  onCreated: (client: ContactListItem) => void;
+  onCreated: (contact: ContactListItem) => void;
   onPersistenceError: (message: string) => void;
 }) {
   const [name, setName] = useState("");
+  const [code, setCode] = useState("");
   const [clientKind, setClientKind] = useState<"self_employed" | "individual">("self_employed");
   const [taxId, setTaxId] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
+  const [role, setRole] = useState("");
+  const [department, setDepartment] = useState("");
   const [address, setAddress] = useState("");
   const [city, setCity] = useState("");
   const [province, setProvince] = useState("");
@@ -1109,24 +1273,32 @@ function NewContactForm({
   const [irpfRate, setIrpfRate] = useState("15");
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-  const canCreate = [
-    name.trim(),
-    taxId.trim(),
-    email.trim(),
-    phone.trim(),
-    address.trim(),
-    city.trim(),
-    province.trim(),
-    postalCode.trim()
-  ].every(Boolean) && !isSaving;
+  const isClientForm = sectionId === "clients";
+  const isEmployeeForm = sectionId === "employees";
+  const singularLabel = contactSectionSingular(sectionId);
+  const canCreate = isClientForm
+    ? [
+      name.trim(),
+      taxId.trim(),
+      email.trim(),
+      phone.trim(),
+      address.trim(),
+      city.trim(),
+      province.trim(),
+      postalCode.trim()
+    ].every(Boolean) && !isSaving
+    : name.trim().length > 0 && !isSaving;
   const handleCreate = async () => {
     const formData = new FormData();
 
     formData.set("organization_id", organizationId);
     formData.set("name", name);
+    formData.set("code", code);
     formData.set("tax_id", taxId);
     formData.set("contact_email", email);
     formData.set("contact_phone", phone);
+    formData.set("role", role);
+    formData.set("department", department);
     formData.set("fiscal_address", address);
     formData.set("city", city);
     formData.set("province", province);
@@ -1142,6 +1314,30 @@ function NewContactForm({
     setIsSaving(true);
 
     try {
+      if (sectionId === "suppliers") {
+        const result = await createSupplier(formData);
+
+        if (result.error || !result.supplier) {
+          setError(result.error ?? "No se pudo crear el proveedor.");
+          return;
+        }
+
+        onCreated(result.supplier);
+        return;
+      }
+
+      if (sectionId === "employees") {
+        const result = await createEmployee(formData);
+
+        if (result.error || !result.employee) {
+          setError(result.error ?? "No se pudo crear el empleado.");
+          return;
+        }
+
+        onCreated(result.employee);
+        return;
+      }
+
       const result = await createContactClient(formData);
 
       if (result.error || !result.client) {
@@ -1151,7 +1347,7 @@ function NewContactForm({
 
       onCreated(result.client);
     } catch (createError) {
-      const message = createError instanceof Error ? createError.message : "No se pudo crear el cliente.";
+      const message = createError instanceof Error ? createError.message : `No se pudo crear ${singularLabel}.`;
       setError(message);
       onPersistenceError(message);
     } finally {
@@ -1160,16 +1356,16 @@ function NewContactForm({
   };
 
   return (
-    <section className="new-contact-form" aria-label={`Nuevo ${sectionLabel.toLowerCase().replace(/s$/, "")}`}>
+    <section className="new-contact-form" aria-label={`Nuevo ${singularLabel}`}>
       <header className="client-detail-header">
         <div className="client-title-row">
-          <h1>Nuevo {sectionLabel.toLowerCase().replace(/s$/, "")}</h1>
+          <h1>Nuevo {singularLabel}</h1>
         </div>
       </header>
       <div className="client-info-grid new-contact-grid">
         <section>
-          <h2>Informacion de empresa</h2>
-          <fieldset className="client-radio-group">
+          <h2>Informacion principal</h2>
+          {isClientForm ? <fieldset className="client-radio-group">
             <legend>Tipo de cliente</legend>
             <label>
               <input
@@ -1195,11 +1391,17 @@ function NewContactForm({
                 <small>Cliente consumidor final</small>
               </span>
             </label>
-          </fieldset>
+          </fieldset> : null}
           <label className="sage-field">
             <span>Razon social o nombre *</span>
             <input value={name} onChange={(e) => setName(e.target.value)} />
           </label>
+          {!isClientForm ? (
+            <label className="sage-field">
+              <span>Codigo</span>
+              <input value={code} onChange={(e) => setCode(e.target.value)} />
+            </label>
+          ) : null}
           <label className="sage-field">
             <span>NIF/CIF</span>
             <input value={taxId} onChange={(e) => setTaxId(e.target.value)} />
@@ -1220,8 +1422,20 @@ function NewContactForm({
               <option>FR - FR</option>
             </select>
           </label>
+          {isEmployeeForm ? (
+            <>
+              <label className="sage-field">
+                <span>Cargo</span>
+                <input value={role} onChange={(e) => setRole(e.target.value)} />
+              </label>
+              <label className="sage-field">
+                <span>Departamento</span>
+                <input value={department} onChange={(e) => setDepartment(e.target.value)} />
+              </label>
+            </>
+          ) : null}
         </section>
-        <section>
+        {isClientForm ? <section>
           <h2>Domicilio del cliente</h2>
           <label className="sage-field">
             <span>Domicilio</span>
@@ -1259,7 +1473,7 @@ function NewContactForm({
               value={irpfRate}
             />
           </label>
-        </section>
+        </section> : null}
       </div>
       {error ? <div className="sales-live-notice warning contacts-notice" role="alert">{error}</div> : null}
       <footer className="client-sticky-bar">

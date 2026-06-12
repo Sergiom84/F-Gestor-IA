@@ -1253,6 +1253,65 @@ textarea {
   padding: 0;
 }
 
+.contacts-module-shell {
+  display: grid;
+  gap: 18px;
+  padding: 0;
+}
+
+.contacts-operation-header {
+  align-items: center;
+}
+
+.contacts-section-tabs {
+  width: fit-content;
+}
+
+.contacts-hero-panel {
+  align-items: center;
+  background:
+    radial-gradient(circle at 94% 50%, rgba(255, 255, 255, 0.12) 0 74px, transparent 75px),
+    linear-gradient(100deg, #118578 0%, #277ca4 48%, #5646e8 100%);
+  border: 1px solid rgba(19, 90, 132, 0.5);
+  border-radius: 18px;
+  color: #ffffff;
+  display: flex;
+  justify-content: space-between;
+  min-height: 98px;
+  overflow: hidden;
+  padding: 22px 28px;
+}
+
+.contacts-hero-panel h1 {
+  color: #ffffff;
+  font-family: var(--font-display);
+  font-size: 1.7rem;
+  font-weight: 900;
+  line-height: 1.1;
+  margin: 0;
+}
+
+.contacts-hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.contacts-hero-actions .sage-outline-button {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.72);
+  color: #ffffff;
+}
+
+.contacts-list-toolbar {
+  margin-top: 16px;
+}
+
+.contacts-metric-grid {
+  margin-top: 4px;
+}
+
 .contacts-list-pane {
   align-self: start;
   background: #ffffff;

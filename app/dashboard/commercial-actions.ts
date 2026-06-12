@@ -10,6 +10,10 @@ function isUuid(value: string): boolean {
   return UUID_PATTERN.test(value);
 }
 
+function shortId(uuid: string): string {
+  return uuid.slice(0, 8).toUpperCase();
+}
+
 async function getAuthenticatedUser() {
   const supabase = await createSupabaseClient();
   const {
@@ -625,7 +629,14 @@ export async function deleteClientAddress(addressId: string): Promise<{ error?: 
   return {};
 }
 
-export async function createSupplier(formData: FormData): Promise<{ error?: string }> {
+export async function createSupplier(formData: FormData): Promise<{ error?: string; supplier?: {
+  id: string;
+  contactEmail: string;
+  contactPhone: string;
+  code: string;
+  name: string;
+  taxId: string;
+} }> {
   const organizationId = String(formData.get("organization_id") ?? "").trim();
 
   if (!isUuid(organizationId)) {
@@ -640,7 +651,7 @@ export async function createSupplier(formData: FormData): Promise<{ error?: stri
     return { error: "El nombre es obligatorio." };
   }
 
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("suppliers")
     .insert({
       organization_id: organizationId,
@@ -649,14 +660,85 @@ export async function createSupplier(formData: FormData): Promise<{ error?: stri
       contact_email: String(formData.get("contact_email") ?? "").trim() || null,
       contact_phone: String(formData.get("contact_phone") ?? "").trim() || null,
       created_by: user.id
-    });
+    })
+    .select("id, name, tax_id, contact_email, contact_phone")
+    .single();
 
-  if (error) {
-    return { error: error.message };
+  if (error || !data) {
+    return { error: error?.message ?? "No se pudo crear el proveedor." };
   }
 
   revalidatePath("/dashboard");
-  return {};
+  return {
+    supplier: {
+      id: data.id as string,
+      code: shortId(data.id as string),
+      name: String(data.name ?? name),
+      taxId: String(data.tax_id ?? ""),
+      contactEmail: String(data.contact_email ?? ""),
+      contactPhone: String(data.contact_phone ?? "")
+    }
+  };
+}
+
+export async function createEmployee(formData: FormData): Promise<{ error?: string; employee?: {
+  id: string;
+  code: string;
+  contactEmail: string;
+  contactPhone: string;
+  department: string;
+  name: string;
+  role: string;
+  taxId: string;
+} }> {
+  const organizationId = String(formData.get("organization_id") ?? "").trim();
+
+  if (!isUuid(organizationId)) {
+    return { error: "Organización inválida." };
+  }
+
+  const { supabase, user } = await getAuthenticatedUser();
+  const name = String(formData.get("name") ?? "").trim();
+
+  if (!name) {
+    return { error: "El nombre es obligatorio." };
+  }
+
+  const code = String(formData.get("code") ?? "").trim() || null;
+
+  const { data, error } = await supabase
+    .from("employees")
+    .insert({
+      organization_id: organizationId,
+      code,
+      name,
+      tax_id: String(formData.get("tax_id") ?? "").trim() || null,
+      contact_email: String(formData.get("contact_email") ?? "").trim() || null,
+      contact_phone: String(formData.get("contact_phone") ?? "").trim() || null,
+      role: String(formData.get("role") ?? "").trim() || null,
+      department: String(formData.get("department") ?? "").trim() || null,
+      created_by: user.id
+    })
+    .select("id, code, name, tax_id, contact_email, contact_phone, role, department")
+    .single();
+
+  if (error || !data) {
+    return { error: error?.message ?? "No se pudo crear el empleado." };
+  }
+
+  revalidatePath("/dashboard");
+  return {
+    employee: {
+      id: data.id as string,
+      code: String(data.code ?? shortId(data.id as string)),
+      name: String(data.name ?? name),
+      taxId: String(data.tax_id ?? ""),
+      contactEmail: String(data.contact_email ?? ""),
+      contactPhone: String(data.contact_phone ?? ""),
+      role: String(data.role ?? ""),
+      department: String(data.department ?? "")
+    }
+  };
 }
 
 export async function createProductService(formData: FormData): Promise<{ error?: string; product?: { id: string } }> {
