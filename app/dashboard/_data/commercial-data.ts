@@ -104,6 +104,7 @@ type DbProductRow = {
   code: string | null;
   name: string;
   kind: string;
+  unit_measure: string | null;
   unit_price: number;
   tax_rate: number | null;
   is_active: boolean;
@@ -399,7 +400,7 @@ export async function readSalesData(organizationId: string): Promise<SalesData> 
       .maybeSingle(),
     supabase
       .from("products_services")
-      .select("id, code, name, kind, unit_price, tax_rate, is_active")
+      .select("id, code, name, kind, unit_measure, unit_price, tax_rate, is_active")
       .eq("organization_id", organizationId)
       .eq("is_active", true)
       .is("deleted_at", null)
@@ -506,6 +507,7 @@ export type ProductItem = {
   code: string;
   name: string;
   kind: "product" | "service";
+  unitMeasure: "day" | "hour" | "month" | "none" | "percentage";
   unitPrice: number;
   taxRate: number | null;
   isActive: boolean;
@@ -542,7 +544,7 @@ export async function readProductsData(organizationId: string): Promise<Products
   const [productsResult, priceListsResult, discountGroupsResult] = await Promise.all([
     supabase
       .from("products_services")
-      .select("id, code, name, kind, unit_price, tax_rate, is_active")
+      .select("id, code, name, kind, unit_measure, unit_price, tax_rate, is_active")
       .eq("organization_id", organizationId)
       .is("deleted_at", null)
       .order("name", { ascending: true })
@@ -574,11 +576,17 @@ export async function readProductsData(organizationId: string): Promise<Products
 }
 
 function mapProductRow(row: DbProductRow): ProductItem {
+  const unitMeasureOptions = ["day", "hour", "month", "none", "percentage"] as const;
+  const unitMeasure = unitMeasureOptions.includes(row.unit_measure as ProductItem["unitMeasure"])
+    ? row.unit_measure as ProductItem["unitMeasure"]
+    : "hour";
+
   return {
     id: row.id,
     code: row.code ?? "",
     name: row.name,
     kind: row.kind as "product" | "service",
+    unitMeasure,
     unitPrice: Number(row.unit_price),
     taxRate: row.tax_rate === null ? null : Number(row.tax_rate),
     isActive: row.is_active

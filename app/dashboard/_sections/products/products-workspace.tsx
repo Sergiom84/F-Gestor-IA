@@ -12,7 +12,7 @@ import {
   Trash2,
   X
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createDiscountGroup, createPriceList, createProductService } from "../../commercial-actions";
 import { formatMoney } from "../../_lib/formatters";
 import type { DiscountGroupItem, PriceListItem, ProductItem } from "../../_data/commercial-data";
@@ -22,6 +22,20 @@ type ProductsSectionId = "products" | "tariffs" | "discount-groups";
 type ProductsHeroAction = ProductsSectionId | "create" | "create-tariff" | "create-discount-group";
 type ProductFormTab = "basic" | "pricing";
 type ProductCategory = "product" | "service";
+type ProductUnitMeasure = ProductItem["unitMeasure"];
+
+const productUnitMeasureOptions: Array<{ value: ProductUnitMeasure; name: string; abbreviation: string }> = [
+  { value: "day", name: "Día", abbreviation: "ds." },
+  { value: "hour", name: "Hora", abbreviation: "h" },
+  { value: "month", name: "Mes", abbreviation: "ms." },
+  { value: "none", name: "No aplica", abbreviation: "" },
+  { value: "percentage", name: "Porcentaje", abbreviation: "%" }
+];
+
+const productUnitMeasureLabel = (value: ProductUnitMeasure) => {
+  const option = productUnitMeasureOptions.find((item) => item.value === value) ?? productUnitMeasureOptions[1]!;
+  return option.abbreviation ? `${option.name} - ${option.abbreviation}` : option.name;
+};
 
 const productTabs = [
   { id: "basic", label: "Informacion basica" },
@@ -64,7 +78,7 @@ const productsSections: ProductsSection[] = [
     tableTitle: "Productos y servicios",
     emptyTitle: "No hay productos ni servicios.",
     emptyDescription: "Crea el primer producto o servicio.",
-    columns: ["Codigo", "Nombre", "Categoria", "Grupo de impuestos", "Precio", "Estado", "Acciones"],
+    columns: ["Codigo", "Nombre", "Categoria", "Unidad de medida", "Grupo de impuestos", "Precio", "Estado", "Acciones"],
     metrics: [
       { label: "Productos", tone: "teal", value: "0" },
       { label: "Servicios", tone: "indigo", value: "0" },
@@ -391,6 +405,7 @@ function ProductsTemplateView({
                   <td>{product.code || "—"}</td>
                   <td>{product.name}</td>
                   <td>{product.kind === "service" ? "Servicio" : "Producto"}</td>
+                  <td>{productUnitMeasureLabel(product.unitMeasure)}</td>
                   <td>{product.taxRate === null ? "—" : `${product.taxRate} %`}</td>
                   <td>{formatMoney(product.unitPrice)}</td>
                   <td>{product.isActive ? "Activo" : "Inactivo"}</td>
@@ -547,6 +562,7 @@ function ProductServiceForm({
   const [category, setCategory] = useState<ProductCategory>("product");
   const [code, setCode] = useState("");
   const [name, setName] = useState("");
+  const [unitMeasure, setUnitMeasure] = useState<ProductUnitMeasure>("hour");
   const [description, setDescription] = useState("");
   const [internalComments, setInternalComments] = useState("");
   const [price, setPrice] = useState("0,00");
@@ -574,6 +590,7 @@ function ProductServiceForm({
     formData.set("code", code.trim());
     formData.set("name", name.trim());
     formData.set("kind", category);
+    formData.set("unit_measure", unitMeasure);
     formData.set("unit_price", String(priceValue));
     formData.set("tax_rate", String(taxRate));
     formData.set("description", [description.trim(), internalComments.trim()].filter(Boolean).join("\n\n"));
@@ -595,6 +612,7 @@ function ProductServiceForm({
       code: code.trim(),
       name: name.trim(),
       kind: category,
+      unitMeasure,
       unitPrice: priceValue,
       taxRate,
       isActive: !inactive
@@ -658,11 +676,7 @@ function ProductServiceForm({
 
           <label className="sage-field product-unit-field">
             <span>Unidad de medida</span>
-            <select defaultValue="Unidad - uds.">
-              <option>Unidad - uds.</option>
-              <option>Hora - h</option>
-              <option>Dia - d</option>
-            </select>
+            <ProductUnitMeasurePicker value={unitMeasure} onChange={setUnitMeasure} />
           </label>
 
           <label className="sage-field product-date-field">
@@ -1174,6 +1188,76 @@ function SummaryBox({ label, value }: { label: string; value: number }) {
 
 function RequiredMark() {
   return <em className="required-mark">*</em>;
+}
+
+function ProductUnitMeasurePicker({
+  value,
+  onChange
+}: {
+  value: ProductUnitMeasure;
+  onChange: (value: ProductUnitMeasure) => void;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const pickerRef = useRef<HTMLDivElement | null>(null);
+  const selectedOption = productUnitMeasureOptions.find((option) => option.value === value) ?? productUnitMeasureOptions[1]!;
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const closeOnOutsideClick = (event: PointerEvent) => {
+      if (!pickerRef.current?.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+
+    document.addEventListener("pointerdown", closeOnOutsideClick);
+    return () => document.removeEventListener("pointerdown", closeOnOutsideClick);
+  }, [isOpen]);
+
+  return (
+    <div className="product-unit-picker" ref={pickerRef}>
+      <button
+        aria-expanded={isOpen}
+        aria-haspopup="listbox"
+        className="product-unit-trigger"
+        onClick={() => setIsOpen((current) => !current)}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") {
+            setIsOpen(false);
+          }
+        }}
+        type="button"
+      >
+        <span>{productUnitMeasureLabel(selectedOption.value)}</span>
+        <ChevronDown aria-hidden="true" size={18} />
+      </button>
+
+      {isOpen ? (
+        <div className="product-unit-menu" role="listbox" aria-label="Unidad de medida">
+          <div className="product-unit-menu-head" aria-hidden="true">
+            <span>Nombre</span>
+            <span>Abreviatura</span>
+          </div>
+          {productUnitMeasureOptions.map((option) => (
+            <button
+              aria-selected={option.value === value}
+              className={option.value === value ? "is-selected" : ""}
+              key={option.value}
+              onClick={() => {
+                onChange(option.value);
+                setIsOpen(false);
+              }}
+              role="option"
+              type="button"
+            >
+              <span>{option.name}</span>
+              <span>{option.abbreviation || "—"}</span>
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 function parseSpanishNumber(value: string): number {

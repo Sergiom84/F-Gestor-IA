@@ -677,6 +677,11 @@ export async function createProductService(formData: FormData): Promise<{ error?
   const kind = String(formData.get("kind") ?? "service").trim();
   const validKinds = ["product", "service"] as const;
   const productKind = validKinds.includes(kind as "product" | "service") ? (kind as "product" | "service") : "service";
+  const unitMeasureRaw = String(formData.get("unit_measure") ?? "hour").trim();
+  const validUnitMeasures = ["day", "hour", "month", "none", "percentage"] as const;
+  const unitMeasure = validUnitMeasures.includes(unitMeasureRaw as typeof validUnitMeasures[number])
+    ? unitMeasureRaw
+    : "hour";
 
   const unitPriceRaw = Number(String(formData.get("unit_price") ?? "0").replace(",", "."));
   const unitPrice = Number.isFinite(unitPriceRaw) ? unitPriceRaw : 0;
@@ -692,6 +697,7 @@ export async function createProductService(formData: FormData): Promise<{ error?
       name,
       kind: productKind,
       description: String(formData.get("description") ?? "").trim() || null,
+      unit_measure: unitMeasure,
       unit_price: unitPrice,
       tax_rate: taxRate,
       is_active: true,
