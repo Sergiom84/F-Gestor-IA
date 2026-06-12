@@ -6379,6 +6379,10 @@ a {
     visibility: hidden !important;
   }
 
+  body:has(> .sales-print-modal-backdrop) > *:not(.sales-print-modal-backdrop) {
+    display: none !important;
+  }
+
   body:has(.sales-print-printable) .sales-print-printable,
   body:has(.sales-print-printable) .sales-print-printable * {
     visibility: visible !important;

@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { type CSSProperties, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   createSalesDeliveryNote,
   createSalesInvoice,
@@ -1749,7 +1750,9 @@ function SalesPrintDialog({
 
   if (!isOpen) return null;
 
-  return (
+  if (typeof document === "undefined") return null;
+
+  return createPortal(
     <div className="sales-print-modal-backdrop" role="presentation">
       <section className="sales-print-modal" role="dialog" aria-modal="true" aria-label={title}>
         <header className="sales-print-dialog-chrome sales-print-modal-header">
@@ -1791,7 +1794,8 @@ function SalesPrintDialog({
           </button>
         </footer>
       </section>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
