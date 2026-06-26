@@ -356,7 +356,7 @@ export function ContactsWorkspace({ organizationId, organizationName, initialCli
               setSelectedContactId(contact.id);
               setActiveClientTab("info");
               setIsCreatingContact(false);
-              setContactsNotice(`${contact.name} creado.`);
+              setContactsNotice(`${contact.code ? `${contact.code} - ` : ""}${contact.name} creado.`);
             }}
             onPersistenceError={(message) => {
               setContactsNotice(`No se pudo guardar: ${message}`);
@@ -1242,6 +1242,25 @@ function ClientBlockToggle({ title, description }: { title: string; description:
   );
 }
 
+const provinceByPostalPrefix: Record<string, string> = {
+  "01": "Araba/Álava", "02": "Albacete", "03": "Alicante", "04": "Almería", "05": "Ávila",
+  "06": "Badajoz", "07": "Illes Balears", "08": "Barcelona", "09": "Burgos", "10": "Cáceres",
+  "11": "Cádiz", "12": "Castellón", "13": "Ciudad Real", "14": "Córdoba", "15": "A Coruña",
+  "16": "Cuenca", "17": "Girona", "18": "Granada", "19": "Guadalajara", "20": "Gipuzkoa",
+  "21": "Huelva", "22": "Huesca", "23": "Jaén", "24": "León", "25": "Lleida",
+  "26": "La Rioja", "27": "Lugo", "28": "Madrid", "29": "Málaga", "30": "Murcia",
+  "31": "Navarra", "32": "Ourense", "33": "Asturias", "34": "Palencia", "35": "Las Palmas",
+  "36": "Pontevedra", "37": "Salamanca", "38": "Santa Cruz de Tenerife", "39": "Cantabria", "40": "Segovia",
+  "41": "Sevilla", "42": "Soria", "43": "Tarragona", "44": "Teruel", "45": "Toledo",
+  "46": "Valencia", "47": "Valladolid", "48": "Bizkaia", "49": "Zamora", "50": "Zaragoza",
+  "51": "Ceuta", "52": "Melilla"
+};
+
+function provinceFromPostalCode(postalCode: string): string {
+  const prefix = postalCode.trim().slice(0, 2);
+  return provinceByPostalPrefix[prefix] ?? "";
+}
+
 function NewContactForm({
   organizationId,
   sectionId,
@@ -1259,8 +1278,10 @@ function NewContactForm({
 }) {
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
-  const [clientKind, setClientKind] = useState<"self_employed" | "individual">("self_employed");
+  const [clientKind, setClientKind] = useState<"self_employed" | "company" | "individual">("self_employed");
   const [taxId, setTaxId] = useState("");
+  const [vatNumber, setVatNumber] = useState("");
+  const [isVatManual, setIsVatManual] = useState(false);
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [role, setRole] = useState("");
@@ -1280,14 +1301,28 @@ function NewContactForm({
     ? [
       name.trim(),
       taxId.trim(),
-      email.trim(),
-      phone.trim(),
       address.trim(),
       city.trim(),
       province.trim(),
       postalCode.trim()
     ].every(Boolean) && !isSaving
     : name.trim().length > 0 && !isSaving;
+
+  // NIF-IVA intracomunitario: se autocompleta como ES + NIF mientras no se edite a mano.
+  useEffect(() => {
+    if (isVatManual) return;
+    const cleanTaxId = taxId.trim().toUpperCase().replace(/\s+/g, "");
+    setVatNumber(cleanTaxId ? `ES${cleanTaxId}` : "");
+  }, [taxId, isVatManual]);
+
+  // Al escribir el codigo postal autocompletamos la provincia (2 primeros digitos).
+  const handlePostalCodeChange = (value: string) => {
+    setPostalCode(value);
+    const matchedProvince = provinceFromPostalCode(value);
+    if (matchedProvince && (province.trim() === "" || province === provinceFromPostalCode(postalCode))) {
+      setProvince(matchedProvince);
+    }
+  };
   const handleCreate = async () => {
     const formData = new FormData();
 
@@ -1295,6 +1330,7 @@ function NewContactForm({
     formData.set("name", name);
     formData.set("code", code);
     formData.set("tax_id", taxId);
+    formData.set("vat_number", vatNumber.trim());
     formData.set("contact_email", email);
     formData.set("contact_phone", phone);
     formData.set("role", role);
@@ -1305,6 +1341,7 @@ function NewContactForm({
     formData.set("postal_code", postalCode);
     formData.set("country", "ES");
     formData.set("type", clientKind === "individual" ? "individual" : "company");
+    formData.set("client_kind", clientKind);
     if (applyIrpf) {
       formData.set("apply_irpf_by_default", "on");
       formData.set("default_irpf_rate", irpfRate);
@@ -1381,6 +1418,18 @@ function NewContactForm({
             </label>
             <label>
               <input
+                checked={clientKind === "company"}
+                name="new-client-type"
+                onChange={() => setClientKind("company")}
+                type="radio"
+              />
+              <span>
+                <strong>Sociedad</strong>
+                <small>Empresa o persona juridica</small>
+              </span>
+            </label>
+            <label>
+              <input
                 checked={clientKind === "individual"}
                 name="new-client-type"
                 onChange={() => setClientKind("individual")}
@@ -1406,6 +1455,27 @@ function NewContactForm({
             <span>NIF/CIF</span>
             <input value={taxId} onChange={(e) => setTaxId(e.target.value)} />
           </label>
+          {isClientForm ? (
+            <label className="sage-field">
+              <span>NIF-IVA</span>
+              <div className="date-input-shell">
+                <input
+                  readOnly={!isVatManual}
+                  value={vatNumber}
+                  onChange={(e) => setVatNumber(e.target.value.toUpperCase())}
+                  placeholder="ES..."
+                />
+                <button
+                  aria-label={isVatManual ? "Volver a NIF-IVA automatico" : "Editar NIF-IVA"}
+                  className="quote-inline-icon-button"
+                  onClick={() => setIsVatManual((current) => !current)}
+                  type="button"
+                >
+                  <Pencil aria-hidden="true" size={16} />
+                </button>
+              </div>
+            </label>
+          ) : null}
           <label className="sage-field">
             <span>E-mail</span>
             <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" />
@@ -1438,20 +1508,20 @@ function NewContactForm({
         {isClientForm ? <section>
           <h2>Domicilio del cliente</h2>
           <label className="sage-field">
-            <span>Domicilio</span>
-            <input value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Calle, numero, piso" />
-          </label>
-          <label className="sage-field">
-            <span>Poblacion</span>
-            <input value={city} onChange={(e) => setCity(e.target.value)} />
+            <span>Codigo postal</span>
+            <input value={postalCode} onChange={(e) => handlePostalCodeChange(e.target.value)} inputMode="numeric" placeholder="Ej. 28001" />
           </label>
           <label className="sage-field">
             <span>Provincia</span>
             <input value={province} onChange={(e) => setProvince(e.target.value)} />
           </label>
           <label className="sage-field">
-            <span>Codigo postal</span>
-            <input value={postalCode} onChange={(e) => setPostalCode(e.target.value)} inputMode="numeric" />
+            <span>Poblacion</span>
+            <input value={city} onChange={(e) => setCity(e.target.value)} />
+          </label>
+          <label className="sage-field">
+            <span>Domicilio</span>
+            <input value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Calle, numero, piso" />
           </label>
 
           <h2>Retencion IRPF</h2>
@@ -1478,7 +1548,7 @@ function NewContactForm({
       {error ? <div className="sales-live-notice warning contacts-notice" role="alert">{error}</div> : null}
       <footer className="client-sticky-bar">
         <button className="quote-cancel-action" onClick={onCancel} type="button">Cancelar</button>
-        <button className="client-update-action" disabled={!canCreate} onClick={handleCreate} type="button">
+        <button className={`client-update-action${canCreate ? " is-ready" : ""}`} disabled={!canCreate} onClick={handleCreate} type="button">
           {isSaving ? "Creando..." : "Crear"}
         </button>
       </footer>

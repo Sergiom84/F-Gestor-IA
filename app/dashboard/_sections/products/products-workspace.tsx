@@ -28,7 +28,7 @@ import type { DiscountGroupItem, PriceListItem, ProductItem } from "../../_data/
 
 type ProductsView = "product-list" | "product" | "tariffs" | "tariff-form" | "discount-groups" | "discount-form";
 type ProductsSectionId = "products" | "tariffs" | "discount-groups";
-type ProductsHeroAction = ProductsSectionId | "create" | "create-tariff" | "create-discount-group";
+type ProductsHeroAction = ProductsSectionId | "create" | "create-service" | "create-tariff" | "create-discount-group";
 type ProductFormTab = "basic" | "pricing";
 type ProductCategory = "product" | "service";
 type ProductUnitMeasure = ProductItem["unitMeasure"];
@@ -94,7 +94,8 @@ const productsSections: ProductsSection[] = [
       { label: "Valor catalogo", tone: "green", value: "0,00 €" }
     ],
     actions: [
-      { kind: "create", label: "Crear producto" }
+      { kind: "create", label: "Crear producto" },
+      { kind: "create-service", label: "Crear servicio" }
     ]
   },
   {
@@ -156,6 +157,7 @@ export function ProductsWorkspace({
   const [priceLists, setPriceLists] = useState<PriceListItem[]>(initialPriceLists ?? []);
   const [discountGroups, setDiscountGroups] = useState<DiscountGroupItem[]>(initialDiscountGroups ?? []);
   const [editingProduct, setEditingProduct] = useState<ProductItem | null>(null);
+  const [createCategory, setCreateCategory] = useState<ProductCategory>("product");
 
   const activeSectionId = resolveProductsSectionId(view);
   const activeSection = productsSections.find((section) => section.id === activeSectionId) ?? productsSections[0]!;
@@ -186,7 +188,15 @@ export function ProductsWorkspace({
   };
   const handleHeroAction = (kind: ProductsHeroAction) => {
     if (kind === "create") {
+      setCreateCategory("product");
       openCreate(activeSectionId);
+      return;
+    }
+
+    if (kind === "create-service") {
+      setCreateCategory("service");
+      setEditingProduct(null);
+      setView("product");
       return;
     }
 
@@ -234,6 +244,8 @@ export function ProductsWorkspace({
         ) : view === "product" ? (
           <ProductServiceForm
             initialProduct={editingProduct}
+            initialCategory={createCategory}
+            suggestedCode={suggestNextProductCode(products)}
             organizationId={organizationId}
             onCancel={openProduct}
             onSaved={(product) => {
@@ -246,7 +258,7 @@ export function ProductsWorkspace({
               });
               setEditingProduct(null);
               setView("product-list");
-              setNotice(`${product.kind === "service" ? "Servicio" : "Producto"} ${product.name} guardado.`);
+              setNotice(`${product.kind === "service" ? "Servicio" : "Producto"} ${product.code} - ${product.name} guardado.`);
             }}
           />
         ) : view === "tariffs" ? (
@@ -772,20 +784,34 @@ const taxGroupOptions = [
   { label: "Exento - 0 %", rate: 0 }
 ];
 
+// Propone el siguiente codigo correlativo (001, 002...) a partir de los codigos numericos existentes.
+function suggestNextProductCode(products: ProductItem[]): string {
+  const maxNumeric = products.reduce((max, product) => {
+    const numeric = Number(String(product.code).replace(/\D/g, ""));
+    return Number.isFinite(numeric) && numeric > max ? numeric : max;
+  }, 0);
+
+  return String(maxNumeric + 1).padStart(3, "0");
+}
+
 function ProductServiceForm({
   initialProduct,
+  initialCategory = "product",
+  suggestedCode = "",
   organizationId,
   onCancel,
   onSaved
 }: {
   initialProduct?: ProductItem | null;
+  initialCategory?: ProductCategory;
+  suggestedCode?: string;
   organizationId: string;
   onCancel: () => void;
   onSaved: (product: ProductItem) => void;
 }) {
   const [activeTab, setActiveTab] = useState<ProductFormTab>("basic");
-  const [category, setCategory] = useState<ProductCategory>(initialProduct?.kind ?? "product");
-  const [code, setCode] = useState(initialProduct?.code ?? "");
+  const [category, setCategory] = useState<ProductCategory>(initialProduct?.kind ?? initialCategory);
+  const [code, setCode] = useState(initialProduct?.code ?? suggestedCode);
   const [name, setName] = useState(initialProduct?.name ?? "");
   const [unitMeasure, setUnitMeasure] = useState<ProductUnitMeasure>(initialProduct?.unitMeasure ?? "hour");
   const [description, setDescription] = useState(initialProduct?.description ?? "");

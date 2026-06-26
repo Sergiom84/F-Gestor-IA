@@ -206,6 +206,7 @@ export async function createContactClient(formData: FormData): Promise<{
   const irpfRate = applyIrpf ? parseAmount(formData, "default_irpf_rate", 15) : 0;
   const contactEmail = String(formData.get("contact_email") ?? "").trim() || null;
   const contactPhone = String(formData.get("contact_phone") ?? "").trim() || null;
+  const vatNumber = String(formData.get("vat_number") ?? "").trim().toUpperCase() || null;
 
   const { data, error } = await supabase.rpc("create_contact_client", {
     p_apply_irpf_by_default: applyIrpf,
@@ -227,6 +228,15 @@ export async function createContactClient(formData: FormData): Promise<{
 
   if (error || !created) {
     return { error: error?.message ?? "No se pudo crear el cliente." };
+  }
+
+  // El NIF-IVA intracomunitario se persiste aparte: la RPC no lo recibe y la
+  // columna clients.vat_number es aditiva. Si falla (columna ausente) no rompe el alta.
+  if (vatNumber) {
+    await supabase
+      .from("clients")
+      .update({ vat_number: vatNumber })
+      .eq("id", String(created.id));
   }
 
   revalidatePath("/dashboard");
@@ -1001,9 +1011,8 @@ export async function createSalesQuote(formData: FormData): Promise<{ error?: st
   }
 
   const quoteDateRaw = String(formData.get("quote_date") ?? "").trim();
-  const { subtotalAmount, taxAmount } = calculateSalesLinesTotals(lines);
-  const retentionRate = clampPercent(parseAmount(formData, "retention_rate", 0));
-  const retentionAmount = roundMoney(subtotalAmount * retentionRate / 100);
+  const { subtotalAmount, taxAmount, retentionAmount } = calculateSalesLinesTotals(lines);
+  const retentionRate = subtotalAmount > 0 ? roundMoney(retentionAmount * 100 / subtotalAmount) : 0;
   const suplidoAmount = Math.max(parseAmount(formData, "suplido_amount", 0), 0);
   const totalAmount = roundMoney(subtotalAmount + taxAmount - retentionAmount + suplidoAmount);
   const numberResult = await supabase.rpc("next_document_number", {
@@ -1101,9 +1110,8 @@ export async function createSalesOrder(formData: FormData): Promise<{ error?: st
   }
 
   const orderDateRaw = String(formData.get("order_date") ?? "").trim();
-  const { subtotalAmount, taxAmount } = calculateSalesLinesTotals(lines);
-  const retentionRate = clampPercent(parseAmount(formData, "retention_rate", 0));
-  const retentionAmount = roundMoney(subtotalAmount * retentionRate / 100);
+  const { subtotalAmount, taxAmount, retentionAmount } = calculateSalesLinesTotals(lines);
+  const retentionRate = subtotalAmount > 0 ? roundMoney(retentionAmount * 100 / subtotalAmount) : 0;
   const suplidoAmount = Math.max(parseAmount(formData, "suplido_amount", 0), 0);
   const totalAmount = roundMoney(subtotalAmount + taxAmount - retentionAmount + suplidoAmount);
   const numberResult = await supabase.rpc("next_document_number", {
@@ -1179,6 +1187,7 @@ type SalesInvoiceLineInput = {
   productId?: string;
   quantity?: number;
   taxRate?: number;
+  retentionRate?: number;
   unitPrice?: number;
 };
 
@@ -1208,9 +1217,8 @@ export async function createSalesInvoice(formData: FormData): Promise<{ error?: 
     return { error: "Añade al menos una línea de producto o servicio." };
   }
 
-  const { subtotalAmount, taxAmount } = calculateSalesLinesTotals(lines);
-  const retentionRate = clampPercent(parseAmount(formData, "retention_rate", 0));
-  const retentionAmount = roundMoney(subtotalAmount * retentionRate / 100);
+  const { subtotalAmount, taxAmount, retentionAmount } = calculateSalesLinesTotals(lines);
+  const retentionRate = subtotalAmount > 0 ? roundMoney(retentionAmount * 100 / subtotalAmount) : 0;
   const suplidoAmount = Math.max(parseAmount(formData, "suplido_amount", 0), 0);
   const totalAmount = roundMoney(subtotalAmount + taxAmount - retentionAmount + suplidoAmount);
   const numberResult = await supabase.rpc("next_document_number", {
@@ -1538,7 +1546,13 @@ function lineTaxRate(line: SalesInvoiceLineInput): number {
   return clampPercent(numberOrDefault(line.taxRate, 21));
 }
 
-function calculateSalesLinesTotals(lines: SalesInvoiceLineInput[]): { subtotalAmount: number; taxAmount: number } {
+function lineRetentionRate(line: SalesInvoiceLineInput): number {
+  return clampPercent(numberOrDefault(line.retentionRate, 0));
+}
+
+// El IRPF se calcula por linea: pueden coexistir lineas con retencion y sin ella
+// en la misma factura, asi que la retencion total es la suma por linea.
+function calculateSalesLinesTotals(lines: SalesInvoiceLineInput[]): { subtotalAmount: number; taxAmount: number; retentionAmount: number } {
   return lines.reduce((totals, line) => {
     const quantity = numberOrDefault(line.quantity, 1);
     const unitPrice = numberOrDefault(line.unitPrice, 0);
@@ -1546,12 +1560,14 @@ function calculateSalesLinesTotals(lines: SalesInvoiceLineInput[]): { subtotalAm
     const gross = quantity * unitPrice;
     const lineTotal = roundMoney(gross - (gross * discountRate / 100));
     const lineTaxAmount = roundMoney(lineTotal * (lineTaxRate(line) / 100));
+    const lineRetentionAmount = roundMoney(lineTotal * (lineRetentionRate(line) / 100));
 
     return {
       subtotalAmount: roundMoney(totals.subtotalAmount + lineTotal),
-      taxAmount: roundMoney(totals.taxAmount + lineTaxAmount)
+      taxAmount: roundMoney(totals.taxAmount + lineTaxAmount),
+      retentionAmount: roundMoney(totals.retentionAmount + lineRetentionAmount)
     };
-  }, { subtotalAmount: 0, taxAmount: 0 });
+  }, { subtotalAmount: 0, taxAmount: 0, retentionAmount: 0 });
 }
 
 function buildSalesLineRow(organizationId: string, line: SalesInvoiceLineInput, index: number) {
@@ -2308,9 +2324,8 @@ export async function createSalesDeliveryNote(formData: FormData): Promise<{ err
   }
 
   const noteDateRaw = String(formData.get("note_date") ?? "").trim();
-  const { subtotalAmount, taxAmount } = calculateSalesLinesTotals(lines);
-  const retentionRate = clampPercent(parseAmount(formData, "retention_rate", 0));
-  const retentionAmount = roundMoney(subtotalAmount * retentionRate / 100);
+  const { subtotalAmount, taxAmount, retentionAmount } = calculateSalesLinesTotals(lines);
+  const retentionRate = subtotalAmount > 0 ? roundMoney(retentionAmount * 100 / subtotalAmount) : 0;
   const suplidoAmount = Math.max(parseAmount(formData, "suplido_amount", 0), 0);
   const totalAmount = roundMoney(subtotalAmount + taxAmount - retentionAmount + suplidoAmount);
   const numberResult = await supabase.rpc("next_document_number", {
@@ -2406,9 +2421,8 @@ export async function createSalesRecurringInvoice(formData: FormData): Promise<{
 
   const nextIssueDateRaw = String(formData.get("next_issue_date") ?? "").trim();
   const frequency = String(formData.get("frequency") ?? "monthly").trim();
-  const { subtotalAmount, taxAmount } = calculateSalesLinesTotals(lines);
-  const retentionRate = clampPercent(parseAmount(formData, "retention_rate", 0));
-  const retentionAmount = roundMoney(subtotalAmount * retentionRate / 100);
+  const { subtotalAmount, taxAmount, retentionAmount } = calculateSalesLinesTotals(lines);
+  const retentionRate = subtotalAmount > 0 ? roundMoney(retentionAmount * 100 / subtotalAmount) : 0;
   const suplidoAmount = Math.max(parseAmount(formData, "suplido_amount", 0), 0);
   const totalAmount = roundMoney(subtotalAmount + taxAmount - retentionAmount + suplidoAmount);
   const numberResult = await supabase.rpc("next_document_number", {

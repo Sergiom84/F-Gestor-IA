@@ -4357,6 +4357,44 @@ a {
   min-width: 50px;
 }
 
+/* Boton Crear iluminado en verde cuando el formulario es valido. */
+.client-update-action.is-ready,
+.quote-create-action.is-ready {
+  background: #008a45;
+  color: #ffffff;
+}
+
+/* Selector de % (IVA/IRPF) por linea con lapiz para valor libre. */
+.quote-rate-picker {
+  align-items: center;
+  display: inline-flex;
+  gap: 4px;
+}
+
+.quote-rate-picker select,
+.quote-rate-input {
+  border: 1px solid #d4dde2;
+  border-radius: 8px;
+  font: inherit;
+  min-height: 34px;
+  padding: 4px 6px;
+  width: 100%;
+}
+
+.quote-rate-input {
+  max-width: 72px;
+}
+
+/* Botonera de acciones tras crear un documento. */
+.post-create-actions {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.post-create-actions a.sage-outline-button {
+  text-decoration: none;
+}
+
 .products-module-shell {
   background: #eef2f4;
   display: grid;
