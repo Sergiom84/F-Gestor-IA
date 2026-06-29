@@ -1566,6 +1566,13 @@ function SalesDocumentPanel({
     setIsLoadingPrintConfig(true);
 
     try {
+      // Si la factura se creo con una plantilla nombrada, se reaplica su config
+      // (en vez de recargar la config global de Presupuestos).
+      if (row.templateConfig) {
+        setPrintConfig(normalizeQuotesTemplateConfig(row.templateConfig, organizationName));
+        setPrintConfigFormat(format);
+        return;
+      }
       const initialData = await loadQuotesInitialData(organizationId);
       setPrintConfig(normalizeQuotesTemplateConfig(selectQuotesPrintConfig(initialData.config, format), organizationName));
       setPrintConfigFormat(format);
@@ -1580,7 +1587,7 @@ function SalesDocumentPanel({
 
   const openTemplatePrintPreview = () => {
     setIsPrintDialogOpen(true);
-    void openPrintPreview("template");
+    void openPrintPreview(row.templateFormat ?? "template");
   };
 
   const saveTemplatePrintHistory = async () => {
@@ -1762,6 +1769,9 @@ function SalesDocumentPanel({
         kind={kind}
         lines={documentLines}
         loadError={printError}
+        onFormatChange={(nextFormat) => {
+          void openPrintPreview(nextFormat);
+        }}
         onClose={() => {
           setIsPrintDialogOpen(false);
           setPrintFormat(null);
@@ -1781,6 +1791,7 @@ function SalesPrintDialog({
   kind,
   lines,
   loadError,
+  onFormatChange,
   onClose,
   onPrint,
   row
@@ -1792,6 +1803,7 @@ function SalesPrintDialog({
   kind: SalesDocumentKind;
   lines: SalesQuoteLineDetail[];
   loadError: string | null;
+  onFormatChange: (format: SalesPrintFormat) => void;
   onClose: () => void;
   onPrint: () => void;
   row: SalesDocumentRow;
@@ -1844,6 +1856,7 @@ function SalesPrintDialog({
 
         {loadError ? <p className="sales-print-dialog-chrome sales-print-warning">{loadError}</p> : null}
         {isLoadingConfig ? <p className="sales-print-dialog-chrome sales-print-loading">Cargando plantilla guardada...</p> : null}
+        {format ? <SalesPrintFormatToggle format={format} onChange={onFormatChange} /> : null}
 
         {format && config ? (
           <div
@@ -4274,4 +4287,3 @@ function QuoteStickyBar({
     </footer>
   );
 }
-

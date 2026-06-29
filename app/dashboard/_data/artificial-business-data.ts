@@ -27,6 +27,8 @@ export type ArtificialSalesDocumentRow = {
   retentionAmount?: number;
   suplidoAmount?: number;
   total: number;
+  templateConfig?: Record<string, unknown> | null;
+  templateFormat?: "pdf" | "template";
 };
 
 export const artificialSalesCustomers: string[] = [];

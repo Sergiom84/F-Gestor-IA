@@ -1244,7 +1244,7 @@ export async function createSalesInvoice(formData: FormData): Promise<{ error?: 
 
   const invoiceNumber = String(numberResult.data);
 
-  let invoiceInsertResult = await supabase
+  const { data: invoice, error: invoiceInsertError } = await supabase
     .from("sales_invoices")
     .insert({
       organization_id: organizationId,
@@ -1269,38 +1269,9 @@ export async function createSalesInvoice(formData: FormData): Promise<{ error?: 
     .select("id, invoice_number")
     .single();
 
-  if (invoiceInsertResult.error) {
-    invoiceInsertResult = await supabase
-      .from("sales_invoices")
-      .insert({
-        organization_id: organizationId,
-        fiscal_entity_id: fiscalEntity.id,
-        client_id: clientResult.id,
-        invoice_number: invoiceNumber,
-        issue_date: String(formData.get("issue_date") ?? "").trim() || null,
-        currency: "EUR",
-        status: "draft",
-        subtotal_amount: subtotalAmount,
-        tax_amount: taxAmount,
-        total_amount: totalAmount,
-        notes: [
-          String(formData.get("reference") ?? "").trim() ? `Referencia: ${String(formData.get("reference") ?? "").trim()}` : null,
-          `Retencion IRPF ${retentionRate}%: -${retentionAmount.toFixed(2)} EUR`,
-          suplidoAmount ? `Suplido: ${suplidoAmount.toFixed(2)} EUR` : null,
-          `Plantilla PDF: ${String(formData.get("pdf_template") ?? "standard")}`,
-          String(formData.get("notes") ?? "").trim() || null
-        ].filter(Boolean).join("\n"),
-        created_by: user.id
-      })
-      .select("id, invoice_number")
-      .single();
+  if (invoiceInsertError || !invoice) {
+    return { error: invoiceInsertError?.message ?? "No se pudo crear la factura." };
   }
-
-  if (invoiceInsertResult.error || !invoiceInsertResult.data) {
-    return { error: invoiceInsertResult.error?.message ?? "No se pudo crear la factura." };
-  }
-
-  const invoice = invoiceInsertResult.data;
 
   const lineRows = lines.map((line, index) => ({
     ...buildSalesLineRow(organizationId, line, index),
@@ -1318,6 +1289,11 @@ export async function createSalesInvoice(formData: FormData): Promise<{ error?: 
   }
 
   if (linesResult.error) {
+    await supabase
+      .from("sales_invoices")
+      .update({ deleted_at: new Date().toISOString() })
+      .eq("id", invoice.id);
+
     return { error: linesResult.error.message };
   }
 
@@ -1620,8 +1596,8 @@ function applyDocumentFiscalRules(lines: SalesInvoiceLineInput[], kind: SalesDoc
   });
 }
 
-// Devuelve el id de plantilla solo si es un UUID valido Y pertenece a la organizacion
-// (defensa contra un document_template_id manipulado en el FormData).
+// Devuelve el id de plantilla solo si es un UUID valido, pertenece a la
+// organizacion y esta creada para Ventas.
 async function resolveSalesTemplateId(
   supabase: Awaited<ReturnType<typeof getAuthenticatedUser>>["supabase"],
   organizationId: string,
@@ -1635,6 +1611,7 @@ async function resolveSalesTemplateId(
     .select("id")
     .eq("id", id)
     .eq("organization_id", organizationId)
+    .eq("scope", "sales")
     .maybeSingle();
 
   return data ? id : null;
@@ -2024,16 +2001,24 @@ export async function duplicateSalesDocument(
       return { error: insertError?.message ?? "No se pudo duplicar el presupuesto." };
     }
 
-    const { data: originalLines } = await supabase
+    const { data: originalLines, error: linesReadError } = await supabase
       .from("sales_quote_lines")
       .select("organization_id, product_service_id, line_index, description, quantity, unit_price, tax_rate, retention_rate, discount_rate, line_total")
       .eq("sales_quote_id", documentId)
       .order("line_index", { ascending: true });
 
-    if (originalLines && originalLines.length > 0) {
-      await supabase
-        .from("sales_quote_lines")
-        .insert(originalLines.map((line) => ({ ...line, sales_quote_id: copy.id })));
+    if (linesReadError || !originalLines || originalLines.length === 0) {
+      await supabase.from("sales_quotes").update({ deleted_at: new Date().toISOString() }).eq("id", copy.id);
+      return { error: linesReadError?.message ?? "El presupuesto original no tiene líneas para duplicar." };
+    }
+
+    const { error: linesError } = await supabase
+      .from("sales_quote_lines")
+      .insert(originalLines.map((line) => ({ ...line, sales_quote_id: copy.id })));
+
+    if (linesError) {
+      await supabase.from("sales_quotes").update({ deleted_at: new Date().toISOString() }).eq("id", copy.id);
+      return { error: `No se pudieron copiar las líneas: ${linesError.message}` };
     }
 
     revalidatePath("/dashboard");
@@ -2100,16 +2085,24 @@ export async function duplicateSalesDocument(
       return { error: insertError?.message ?? "No se pudo duplicar el pedido." };
     }
 
-    const { data: originalLines } = await supabase
+    const { data: originalLines, error: linesReadError } = await supabase
       .from("sales_order_lines")
       .select("organization_id, product_service_id, line_index, description, quantity, unit_price, tax_rate, retention_rate, discount_rate, line_total")
       .eq("sales_order_id", documentId)
       .order("line_index", { ascending: true });
 
-    if (originalLines && originalLines.length > 0) {
-      await supabase
-        .from("sales_order_lines")
-        .insert(originalLines.map((line) => ({ ...line, sales_order_id: copy.id })));
+    if (linesReadError || !originalLines || originalLines.length === 0) {
+      await supabase.from("sales_orders").update({ deleted_at: new Date().toISOString() }).eq("id", copy.id);
+      return { error: linesReadError?.message ?? "El pedido original no tiene líneas para duplicar." };
+    }
+
+    const { error: linesError } = await supabase
+      .from("sales_order_lines")
+      .insert(originalLines.map((line) => ({ ...line, sales_order_id: copy.id })));
+
+    if (linesError) {
+      await supabase.from("sales_orders").update({ deleted_at: new Date().toISOString() }).eq("id", copy.id);
+      return { error: `No se pudieron copiar las líneas: ${linesError.message}` };
     }
 
     revalidatePath("/dashboard");
@@ -2175,16 +2168,24 @@ export async function duplicateSalesDocument(
       return { error: insertError?.message ?? "No se pudo duplicar la factura." };
     }
 
-    const { data: originalLines } = await supabase
+    const { data: originalLines, error: linesReadError } = await supabase
       .from("sales_invoice_lines")
       .select("organization_id, product_service_id, line_index, description, quantity, unit_price, tax_rate, retention_rate, discount_rate, line_total")
       .eq("sales_invoice_id", documentId)
       .order("line_index", { ascending: true });
 
-    if (originalLines && originalLines.length > 0) {
-      await supabase
-        .from("sales_invoice_lines")
-        .insert(originalLines.map((line) => ({ ...line, sales_invoice_id: copy.id })));
+    if (linesReadError || !originalLines || originalLines.length === 0) {
+      await supabase.from("sales_invoices").update({ deleted_at: new Date().toISOString() }).eq("id", copy.id);
+      return { error: linesReadError?.message ?? "La factura original no tiene líneas para duplicar." };
+    }
+
+    const { error: linesError } = await supabase
+      .from("sales_invoice_lines")
+      .insert(originalLines.map((line) => ({ ...line, sales_invoice_id: copy.id })));
+
+    if (linesError) {
+      await supabase.from("sales_invoices").update({ deleted_at: new Date().toISOString() }).eq("id", copy.id);
+      return { error: `No se pudieron copiar las líneas: ${linesError.message}` };
     }
 
     revalidatePath("/dashboard");
@@ -2251,16 +2252,24 @@ export async function duplicateSalesDocument(
       return { error: insertError?.message ?? "No se pudo duplicar el albarán." };
     }
 
-    const { data: originalLines } = await supabase
+    const { data: originalLines, error: linesReadError } = await supabase
       .from("sales_delivery_note_lines")
       .select("organization_id, line_index, description, quantity, unit_price, tax_rate, retention_rate, discount_rate, line_total")
       .eq("sales_delivery_note_id", documentId)
       .order("line_index", { ascending: true });
 
-    if (originalLines && originalLines.length > 0) {
-      await supabase
-        .from("sales_delivery_note_lines")
-        .insert(originalLines.map((line) => ({ ...line, sales_delivery_note_id: copy.id })));
+    if (linesReadError || !originalLines || originalLines.length === 0) {
+      await supabase.from("sales_delivery_notes").update({ deleted_at: new Date().toISOString() }).eq("id", copy.id);
+      return { error: linesReadError?.message ?? "El albarán original no tiene líneas para duplicar." };
+    }
+
+    const { error: linesError } = await supabase
+      .from("sales_delivery_note_lines")
+      .insert(originalLines.map((line) => ({ ...line, sales_delivery_note_id: copy.id })));
+
+    if (linesError) {
+      await supabase.from("sales_delivery_notes").update({ deleted_at: new Date().toISOString() }).eq("id", copy.id);
+      return { error: `No se pudieron copiar las líneas: ${linesError.message}` };
     }
 
     revalidatePath("/dashboard");
@@ -2328,16 +2337,24 @@ export async function duplicateSalesDocument(
       return { error: insertError?.message ?? "No se pudo duplicar la plantilla recurrente." };
     }
 
-    const { data: originalLines } = await supabase
+    const { data: originalLines, error: linesReadError } = await supabase
       .from("sales_recurring_invoice_lines")
       .select("organization_id, line_index, description, quantity, unit_price, tax_rate, retention_rate, discount_rate, line_total")
       .eq("sales_recurring_invoice_id", documentId)
       .order("line_index", { ascending: true });
 
-    if (originalLines && originalLines.length > 0) {
-      await supabase
-        .from("sales_recurring_invoice_lines")
-        .insert(originalLines.map((line) => ({ ...line, sales_recurring_invoice_id: copy.id })));
+    if (linesReadError || !originalLines || originalLines.length === 0) {
+      await supabase.from("sales_recurring_invoices").update({ deleted_at: new Date().toISOString() }).eq("id", copy.id);
+      return { error: linesReadError?.message ?? "La plantilla recurrente original no tiene líneas para duplicar." };
+    }
+
+    const { error: linesError } = await supabase
+      .from("sales_recurring_invoice_lines")
+      .insert(originalLines.map((line) => ({ ...line, sales_recurring_invoice_id: copy.id })));
+
+    if (linesError) {
+      await supabase.from("sales_recurring_invoices").update({ deleted_at: new Date().toISOString() }).eq("id", copy.id);
+      return { error: `No se pudieron copiar las líneas: ${linesError.message}` };
     }
 
     revalidatePath("/dashboard");
@@ -2442,6 +2459,11 @@ export async function createSalesDeliveryNote(formData: FormData): Promise<{ err
     }));
 
   if (noteLinesResult.error) {
+    await supabase
+      .from("sales_delivery_notes")
+      .update({ deleted_at: new Date().toISOString() })
+      .eq("id", data.id);
+
     return { error: noteLinesResult.error.message };
   }
 
@@ -2543,6 +2565,11 @@ export async function createSalesRecurringInvoice(formData: FormData): Promise<{
     }));
 
   if (recurringLinesResult.error) {
+    await supabase
+      .from("sales_recurring_invoices")
+      .update({ deleted_at: new Date().toISOString() })
+      .eq("id", data.id);
+
     return { error: recurringLinesResult.error.message };
   }
 
