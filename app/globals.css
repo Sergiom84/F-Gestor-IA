@@ -2846,6 +2846,12 @@ a {
   gap: 10px;
 }
 
+/* Check "Incluir IVA": resaltado en verde cuando esta activo. */
+.iva-toggle-button.is-active {
+  border-color: #008a45;
+  color: #008a45;
+}
+
 .quote-lines-table th {
   background: #cbd6dc;
   border-right: 2px solid #dfe6eb;

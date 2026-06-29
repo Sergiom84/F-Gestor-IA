@@ -8,10 +8,12 @@ import {
   CheckCircle2,
   ChevronDown,
   Copy,
+  CheckSquare,
   CreditCard,
   Eye,
   EyeOff,
   ExternalLink,
+  Square,
   FileText,
   Filter,
   FileCog,
@@ -2908,6 +2910,7 @@ function QuoteForm({
   const [defaultRetentionRate, setDefaultRetentionRate] = useState(0);
   const [suplidoAmount, setSuplidoAmount] = useState(0);
   const [quantityVisible, setQuantityVisible] = useState(true);
+  const [ivaIncluded, setIvaIncluded] = useState(true);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [pdfTemplate, setPdfTemplate] = useState("standard");
   const [customMessage, setCustomMessage] = useState("");
@@ -2929,6 +2932,8 @@ function QuoteForm({
   // - IRPF y suplido: solo en facturas (incluidas las recurrentes).
   const isInvoice = !isQuote && !isOrder && !isDeliveryNote && !isRecurring;
   const appliesIva = !isQuote;
+  // Donde aplica IVA, el usuario puede incluirlo o no con un check ("stick").
+  const ivaActive = appliesIva && ivaIncluded;
   const appliesIrpf = isInvoice || isRecurring;
   const appliesSuplido = appliesIrpf;
   // Cuando se oculta la columna Cantidad, cada linea cuenta como 1 (la base = precio unitario).
@@ -2948,7 +2953,7 @@ function QuoteForm({
 
     return Math.max(lineBase - (lineBase * (discountPercent / 100)), 0);
   };
-  const taxTotal = appliesIva
+  const taxTotal = ivaActive
     ? lines.reduce((totalTax, line) => totalTax + lineBaseAfterClientDiscount(line) * ((line.taxRate || 0) / 100), 0)
     : 0;
   // IRPF por linea: solo retienen las lineas con tipo > 0 (puede haber mezcla en la misma factura).
@@ -3098,7 +3103,7 @@ function QuoteForm({
     const linesToPersist = lines.map((line) => ({
       ...line,
       quantity: effectiveQuantity(line),
-      taxRate: appliesIva ? line.taxRate : 0,
+      taxRate: ivaActive ? line.taxRate : 0,
       retentionRate: appliesIrpf ? line.retentionRate : 0
     }));
     formData.set("lines_json", JSON.stringify(linesToPersist));
@@ -3262,15 +3267,18 @@ function QuoteForm({
         {activeTab === "products" ? (
           <ProductsTab
             forcePendingStatus={isQuote}
+            ivaIncluded={ivaIncluded}
+            ivaToggleable={appliesIva}
             lines={lines}
             products={products}
             quantityVisible={quantityVisible}
             showIrpf={appliesIrpf}
-            showIva={appliesIva}
+            showIva={ivaActive}
             onAddLine={addLine}
             onDuplicateLine={duplicateLine}
             onPreview={() => setPreviewOpen(true)}
             onRemoveLine={removeLine}
+            onToggleIva={() => setIvaIncluded((current) => !current)}
             onToggleQuantity={() => setQuantityVisible((current) => !current)}
             onUpdateLine={updateLine}
           />
@@ -3283,7 +3291,7 @@ function QuoteForm({
             retentionRate={effectiveRetentionRate}
             retentionTotal={retentionTotal}
             showIrpf={appliesIrpf}
-            showIva={appliesIva}
+            showIva={ivaActive}
             showSuplido={appliesSuplido}
             subtotal={subtotal}
             suplidoAmount={suplidoAmount}
@@ -3316,7 +3324,7 @@ function QuoteForm({
         canCreate={canCreate}
         isPending={isSaving}
         showIrpf={appliesIrpf}
-        showIva={appliesIva}
+        showIva={ivaActive}
         showSuplido={appliesSuplido}
         taxableBase={taxableBase}
         taxTotal={taxTotal}
@@ -3338,7 +3346,7 @@ function QuoteForm({
             unitPrice: line.unitPrice,
             discountRate: line.discount,
             taxableBase: lineBaseAfterClientDiscount(line),
-            taxRate: appliesIva ? line.taxRate : null,
+            taxRate: ivaActive ? line.taxRate : null,
             status: "Completa"
           }))}
           organizationId={organizationId}
@@ -3400,6 +3408,8 @@ function QuoteTab({
 
 function ProductsTab({
   forcePendingStatus,
+  ivaIncluded,
+  ivaToggleable,
   lines,
   products,
   quantityVisible,
@@ -3409,10 +3419,13 @@ function ProductsTab({
   onDuplicateLine,
   onPreview,
   onRemoveLine,
+  onToggleIva,
   onToggleQuantity,
   onUpdateLine
 }: {
   forcePendingStatus?: boolean;
+  ivaIncluded: boolean;
+  ivaToggleable: boolean;
   lines: QuoteLine[];
   products: ProductItem[];
   quantityVisible: boolean;
@@ -3422,6 +3435,7 @@ function ProductsTab({
   onDuplicateLine: (line: QuoteLine) => void;
   onPreview: () => void;
   onRemoveLine: (id: number) => void;
+  onToggleIva: () => void;
   onToggleQuantity: () => void;
   onUpdateLine: (id: number, patch: Partial<QuoteLine>) => void;
 }) {
@@ -3526,6 +3540,17 @@ function ProductsTab({
           {quantityVisible ? <EyeOff aria-hidden="true" size={18} /> : <Eye aria-hidden="true" size={18} />}
           {quantityVisible ? "Ocultar cantidad" : "Mostrar cantidad"}
         </button>
+        {ivaToggleable ? (
+          <button
+            aria-pressed={ivaIncluded}
+            className={`sage-outline-button iva-toggle-button${ivaIncluded ? " is-active" : ""}`}
+            onClick={onToggleIva}
+            type="button"
+          >
+            {ivaIncluded ? <CheckSquare aria-hidden="true" size={18} /> : <Square aria-hidden="true" size={18} />}
+            Incluir IVA
+          </button>
+        ) : null}
       </div>
 
       <div className="quote-lines-wrap">
