@@ -3329,10 +3329,11 @@ function QuoteForm({
         taxableBase={taxableBase}
         taxTotal={taxTotal}
         retentionTotal={retentionTotal}
-        suplidoAmount={effectiveSuplido}
+        suplidoAmount={suplidoAmount}
         total={total}
         onCancel={onCancel}
         onCreate={submitDocument}
+        onSuplidoChange={setSuplidoAmount}
       />
 
       {previewOpen ? (
@@ -4119,6 +4120,7 @@ function QuoteStickyBar({
   isPending,
   onCancel,
   onCreate,
+  onSuplidoChange,
   retentionTotal,
   showIrpf,
   showIva,
@@ -4132,6 +4134,7 @@ function QuoteStickyBar({
   isPending: boolean;
   onCancel: () => void;
   onCreate: () => void;
+  onSuplidoChange: (value: number) => void;
   retentionTotal: number;
   showIrpf: boolean;
   showIva: boolean;
@@ -4146,7 +4149,21 @@ function QuoteStickyBar({
       <SummaryBox label="Total base imponible" value={taxableBase} />
       {showIva ? <SummaryBox label="Total IVA" value={taxTotal} /> : null}
       {showIrpf ? <SummaryBox label="Retencion IRPF" value={-retentionTotal} /> : null}
-      {showSuplido ? <SummaryBox label="Suplido" value={suplidoAmount} /> : null}
+      {showSuplido ? (
+        <article className="quote-summary-box quote-summary-box-editable">
+          <input
+            aria-label="Importe de suplido"
+            className="quote-summary-box-input"
+            inputMode="decimal"
+            min="0"
+            onChange={(event) => onSuplidoChange(Math.max(parseEditableNumber(event.target.value), 0))}
+            placeholder="0,00 €"
+            type="number"
+            value={editableNumberValue(suplidoAmount)}
+          />
+          <span>Suplido</span>
+        </article>
+      ) : null}
       <SummaryBox label="Total" value={total} />
       <button className="quote-cancel-action" onClick={onCancel} type="button">Cancelar</button>
       <button className={`quote-create-action${canCreate ? " is-ready" : ""}`} disabled={!canCreate} onClick={onCreate} type="button">

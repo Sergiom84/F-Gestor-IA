@@ -3051,6 +3051,28 @@ a {
   font-weight: 800;
 }
 
+/* Caja de Suplido editable dentro de la barra de totales. */
+.quote-summary-box-editable {
+  background: #ffffff;
+  border: 1px solid #008a45;
+}
+
+.quote-summary-box-input {
+  background: transparent;
+  border: 0;
+  color: #000000;
+  font-size: 1.32rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 900;
+  line-height: 1;
+  text-align: center;
+  width: 100%;
+}
+
+.quote-summary-box-input:focus {
+  outline: none;
+}
+
 .discount-field input {
   text-align: right;
 }
