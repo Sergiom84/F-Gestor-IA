@@ -245,7 +245,7 @@ export function ProductsWorkspace({
           <ProductServiceForm
             initialProduct={editingProduct}
             initialCategory={createCategory}
-            suggestedCode={suggestNextProductCode(products)}
+            products={products}
             organizationId={organizationId}
             onCancel={openProduct}
             onSaved={(product) => {
@@ -349,6 +349,7 @@ function ProductsTemplateView({
   const [query, setQuery] = useState("");
   const [showFilters, setShowFilters] = useState(false);
   const [showColumns, setShowColumns] = useState(false);
+  const [categoryFilter, setCategoryFilter] = useState<"all" | "product" | "service">("all");
   const [openActionMenu, setOpenActionMenu] = useState<{ id: string; left: number; top: number } | null>(null);
   const [pendingActionId, setPendingActionId] = useState<string | null>(null);
   const isProductsSection = activeSectionId === "products";
@@ -356,9 +357,12 @@ function ProductsTemplateView({
   const normalizedQuery = query.trim().toLowerCase();
   const visibleProducts = isProductsSection
     ? productRows.filter((product) => (
-      !normalizedQuery
-      || product.name.toLowerCase().includes(normalizedQuery)
-      || product.code.toLowerCase().includes(normalizedQuery)
+      (categoryFilter === "all" || product.kind === categoryFilter)
+      && (
+        !normalizedQuery
+        || product.name.toLowerCase().includes(normalizedQuery)
+        || product.code.toLowerCase().includes(normalizedQuery)
+      )
     ))
     : [];
   const visiblePriceLists = isTariffsSection
@@ -558,6 +562,26 @@ function ProductsTemplateView({
       <div className="products-reference-panel product-template-table-panel">
         <div className="sales-template-table-head">
           <h2>{activeSection.tableTitle}</h2>
+          {isProductsSection ? (
+            <div className="products-category-filter" role="tablist" aria-label="Filtrar por categoria">
+              {([
+                { id: "all", label: "Todos" },
+                { id: "product", label: "Productos" },
+                { id: "service", label: "Servicios" }
+              ] as const).map((option) => (
+                <button
+                  aria-selected={categoryFilter === option.id}
+                  className={`products-category-filter-button${categoryFilter === option.id ? " active" : ""}`}
+                  key={option.id}
+                  onClick={() => setCategoryFilter(option.id)}
+                  role="tab"
+                  type="button"
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          ) : null}
         </div>
         <table className="products-data-table">
           <thead>
@@ -781,37 +805,49 @@ function resolveProductsSectionId(view: ProductsView): ProductsSectionId {
 const taxGroupOptions = [
   { label: "General - 21 %", rate: 21 },
   { label: "Reducido - 10 %", rate: 10 },
+  { label: "Superreducido - 4 %", rate: 4 },
   { label: "Exento - 0 %", rate: 0 }
 ];
 
-// Propone el siguiente codigo correlativo (001, 002...) a partir de los codigos numericos existentes.
-function suggestNextProductCode(products: ProductItem[]): string {
-  const maxNumeric = products.reduce((max, product) => {
-    const numeric = Number(String(product.code).replace(/\D/g, ""));
-    return Number.isFinite(numeric) && numeric > max ? numeric : max;
-  }, 0);
+// Propone el siguiente codigo correlativo por categoria: PR-001 para productos, SE-001 para servicios.
+function suggestNextProductCode(products: ProductItem[], category: ProductCategory): string {
+  const prefix = category === "service" ? "SE" : "PR";
+  const maxNumeric = products
+    .filter((product) => product.kind === category)
+    .reduce((max, product) => {
+      const numeric = Number(String(product.code).replace(/\D/g, ""));
+      return Number.isFinite(numeric) && numeric > max ? numeric : max;
+    }, 0);
 
-  return String(maxNumeric + 1).padStart(3, "0");
+  return `${prefix}-${String(maxNumeric + 1).padStart(3, "0")}`;
 }
 
 function ProductServiceForm({
   initialProduct,
   initialCategory = "product",
-  suggestedCode = "",
+  products = [],
   organizationId,
   onCancel,
   onSaved
 }: {
   initialProduct?: ProductItem | null;
   initialCategory?: ProductCategory;
-  suggestedCode?: string;
+  products?: ProductItem[];
   organizationId: string;
   onCancel: () => void;
   onSaved: (product: ProductItem) => void;
 }) {
   const [activeTab, setActiveTab] = useState<ProductFormTab>("basic");
   const [category, setCategory] = useState<ProductCategory>(initialProduct?.kind ?? initialCategory);
-  const [code, setCode] = useState(initialProduct?.code ?? suggestedCode);
+  const [codeEdited, setCodeEdited] = useState(false);
+  const [code, setCode] = useState(initialProduct?.code ?? suggestNextProductCode(products, initialProduct?.kind ?? initialCategory));
+  // Al cambiar de categoria, si el codigo no se ha tocado a mano, reproponemos el prefijo (PR-/SE-).
+  const changeCategory = (nextCategory: ProductCategory) => {
+    setCategory(nextCategory);
+    if (!initialProduct && !codeEdited) {
+      setCode(suggestNextProductCode(products, nextCategory));
+    }
+  };
   const [name, setName] = useState(initialProduct?.name ?? "");
   const [unitMeasure, setUnitMeasure] = useState<ProductUnitMeasure>(initialProduct?.unitMeasure ?? "hour");
   const [description, setDescription] = useState(initialProduct?.description ?? "");
@@ -933,7 +969,7 @@ function ProductServiceForm({
             <label className="product-radio-row">
               <input
                 checked={category === "product"}
-                onChange={() => setCategory("product")}
+                onChange={() => changeCategory("product")}
                 type="radio"
               />
               <span>Producto</span>
@@ -941,7 +977,7 @@ function ProductServiceForm({
             <label className="product-radio-row">
               <input
                 checked={category === "service"}
-                onChange={() => setCategory("service")}
+                onChange={() => changeCategory("service")}
                 type="radio"
               />
               <span>Servicio</span>
@@ -950,7 +986,10 @@ function ProductServiceForm({
 
           <label className="sage-field product-code-field">
             <span>Codigo <RequiredMark /></span>
-            <input onChange={(event) => setCode(event.target.value)} value={code} />
+            <input
+              onChange={(event) => { setCode(event.target.value); setCodeEdited(true); }}
+              value={code}
+            />
           </label>
 
           <label className="sage-field product-name-field">

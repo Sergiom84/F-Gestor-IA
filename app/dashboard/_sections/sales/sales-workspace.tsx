@@ -9,6 +9,8 @@ import {
   ChevronDown,
   Copy,
   CreditCard,
+  Eye,
+  EyeOff,
   ExternalLink,
   FileText,
   Filter,
@@ -793,6 +795,7 @@ export function SalesWorkspace({ clients, fiscalEntities, organizationId, organi
             clients={clients}
             fiscalEntities={fiscalEntities}
             organizationId={organizationId}
+            organizationName={organizationName}
             products={products ?? []}
             section={activeSection}
             onCancel={() => setIsCreating(false)}
@@ -1996,6 +1999,112 @@ function PostCreatePreviewDialog({
   );
 }
 
+function FormPreviewDialog({
+  kind,
+  lines,
+  organizationId,
+  organizationName,
+  row,
+  onClose
+}: {
+  kind: SalesDocumentKind;
+  lines: SalesQuoteLineDetail[];
+  organizationId: string;
+  organizationName: string;
+  row: SalesDocumentRow;
+  onClose: () => void;
+}) {
+  const [config, setConfig] = useState<QuotesTemplateConfig | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [previewScale, setPreviewScale] = useState(0.62);
+  const previewPanelRef = useRef<HTMLElement | null>(null);
+  const documentLabel = salesPrintDocumentLabel(kind);
+
+  useEffect(() => {
+    let isMounted = true;
+    setIsLoading(true);
+
+    void loadQuotesInitialData(organizationId)
+      .catch(() => ({ config: null }))
+      .then((initialData) => {
+        if (!isMounted) return;
+        setConfig(normalizeQuotesTemplateConfig(selectQuotesPrintConfig(initialData.config, "pdf"), organizationName));
+        setIsLoading(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [organizationId, organizationName]);
+
+  useEffect(() => {
+    const previewPanel = previewPanelRef.current;
+    if (!previewPanel) return;
+
+    const updateScale = () => {
+      const rect = previewPanel.getBoundingClientRect();
+      const nextScale = Math.min(
+        Math.max((rect.width - 20) / 794, 0.34),
+        Math.max((rect.height - 20) / 1123, 0.34),
+        1,
+      );
+      setPreviewScale(Number(nextScale.toFixed(3)));
+    };
+
+    updateScale();
+    const observer = new ResizeObserver(updateScale);
+    observer.observe(previewPanel);
+    window.addEventListener("resize", updateScale);
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", updateScale);
+    };
+  }, [config, isLoading]);
+
+  if (typeof document === "undefined") return null;
+
+  return createPortal(
+    <div className="sales-print-modal-backdrop" role="presentation">
+      <section className="sales-print-modal" role="dialog" aria-modal="true" aria-label={`Vista previa de ${documentLabel.singular}`}>
+        <header className="sales-print-dialog-chrome sales-print-modal-header">
+          <h2>Vista previa — {documentLabel.singular} (borrador)</h2>
+          <button className="panel-icon-button" onClick={onClose} type="button" aria-label="Cerrar vista previa">
+            <X aria-hidden="true" size={18} />
+          </button>
+        </header>
+
+        {isLoading || !config ? (
+          <div className="sales-print-dialog-chrome sales-print-empty-state">
+            <FileText aria-hidden="true" size={34} />
+            <p>Preparando la vista previa...</p>
+          </div>
+        ) : (
+          <div
+            className="quotes-shell sales-print-preview-shell"
+            style={{ "--sales-print-preview-scale": previewScale } as CSSProperties}
+          >
+            <section ref={previewPanelRef} className="preview-panel" aria-label="Vista previa del documento">
+              <div className="sales-print-printable">
+                <SalesPrintableDocument config={config} format="pdf" kind={kind} lines={lines} row={row} />
+              </div>
+            </section>
+          </div>
+        )}
+
+        <footer className="sales-print-dialog-chrome sales-print-actions">
+          <button className="sage-outline-button" onClick={onClose} type="button">Cerrar</button>
+          <button className="sage-primary-button" disabled={isLoading || !config} onClick={() => window.print()} type="button">
+            <FileText aria-hidden="true" size={18} />
+            Imprimir / PDF
+          </button>
+        </footer>
+      </section>
+    </div>,
+    document.body,
+  );
+}
+
 function SalesPrintableDocument({
   config,
   format,
@@ -2770,6 +2879,7 @@ function QuoteForm({
   clients,
   fiscalEntities,
   organizationId,
+  organizationName,
   products,
   section,
   onCancel,
@@ -2779,6 +2889,7 @@ function QuoteForm({
   clients: ArtificialContactListItem[];
   fiscalEntities: Array<{ id: string; name: string }>;
   organizationId: string;
+  organizationName: string;
   products: ProductItem[];
   section: SalesSection;
   onCancel: () => void;
@@ -2796,6 +2907,8 @@ function QuoteForm({
   const [discountPercent, setDiscountPercent] = useState(0);
   const [defaultRetentionRate, setDefaultRetentionRate] = useState(0);
   const [suplidoAmount, setSuplidoAmount] = useState(0);
+  const [quantityVisible, setQuantityVisible] = useState(true);
+  const [previewOpen, setPreviewOpen] = useState(false);
   const [pdfTemplate, setPdfTemplate] = useState("standard");
   const [customMessage, setCustomMessage] = useState("");
   const [internalNotes, setInternalNotes] = useState("");
@@ -2811,8 +2924,17 @@ function QuoteForm({
   const isRecurring = section.id === "recurring-invoices";
   const defaultPrefix = isQuote ? "PRES" : isOrder ? "PED" : isDeliveryNote ? "ALB" : isRecurring ? "REC" : "FAC";
   const [prefix, setPrefix] = useState(defaultPrefix);
+  // Reglas fiscales por tipo de documento (notas del cliente):
+  // - Presupuesto: sin IVA ni IRPF.
+  // - IRPF y suplido: solo en facturas (incluidas las recurrentes).
+  const isInvoice = !isQuote && !isOrder && !isDeliveryNote && !isRecurring;
+  const appliesIva = !isQuote;
+  const appliesIrpf = isInvoice || isRecurring;
+  const appliesSuplido = appliesIrpf;
+  // Cuando se oculta la columna Cantidad, cada linea cuenta como 1 (la base = precio unitario).
+  const effectiveQuantity = (line: QuoteLine) => quantityVisible ? line.quantity : 1;
   const subtotal = lines.reduce((total, line) => {
-    const rawLineTotal = line.quantity * line.unitPrice;
+    const rawLineTotal = effectiveQuantity(line) * line.unitPrice;
     const discountAmount = rawLineTotal * (line.discount / 100);
 
     return total + rawLineTotal - discountAmount;
@@ -2820,21 +2942,22 @@ function QuoteForm({
   const clientDiscount = subtotal * (discountPercent / 100);
   const taxableBase = Math.max(subtotal - clientDiscount, 0);
   const lineBaseAfterClientDiscount = (line: QuoteLine) => {
-    const rawLineTotal = line.quantity * line.unitPrice;
+    const rawLineTotal = effectiveQuantity(line) * line.unitPrice;
     const discountAmount = rawLineTotal * (line.discount / 100);
     const lineBase = Math.max(rawLineTotal - discountAmount, 0);
 
     return Math.max(lineBase - (lineBase * (discountPercent / 100)), 0);
   };
-  const taxTotal = lines.reduce((totalTax, line) => (
-    totalTax + lineBaseAfterClientDiscount(line) * ((line.taxRate || 0) / 100)
-  ), 0);
+  const taxTotal = appliesIva
+    ? lines.reduce((totalTax, line) => totalTax + lineBaseAfterClientDiscount(line) * ((line.taxRate || 0) / 100), 0)
+    : 0;
   // IRPF por linea: solo retienen las lineas con tipo > 0 (puede haber mezcla en la misma factura).
-  const retentionTotal = lines.reduce((totalRetention, line) => (
-    totalRetention + lineBaseAfterClientDiscount(line) * ((line.retentionRate || 0) / 100)
-  ), 0);
+  const retentionTotal = appliesIrpf
+    ? lines.reduce((totalRetention, line) => totalRetention + lineBaseAfterClientDiscount(line) * ((line.retentionRate || 0) / 100), 0)
+    : 0;
   const effectiveRetentionRate = taxableBase > 0 ? (retentionTotal / taxableBase) * 100 : 0;
-  const total = taxableBase + taxTotal - retentionTotal + suplidoAmount;
+  const effectiveSuplido = appliesSuplido ? suplidoAmount : 0;
+  const total = taxableBase + taxTotal - retentionTotal + effectiveSuplido;
   const canCreate = client.trim().length > 0 && lines.length > 0 && !isSaving;
   const selectedClientBase = clients.find((item) => item.id === clientId)
     ?? clients.find((item) => item.name === client.trim())
@@ -2968,10 +3091,17 @@ function QuoteForm({
     }
     formData.set("retention_rate", String(effectiveRetentionRate));
     formData.set("retention_amount", String(retentionTotal));
-    formData.set("suplido_amount", String(suplidoAmount));
+    formData.set("suplido_amount", String(effectiveSuplido));
     formData.set("pdf_template", pdfTemplate);
     formData.set("notes", [customMessage, internalNotes].filter(Boolean).join("\n\n"));
-    formData.set("lines_json", JSON.stringify(lines));
+    // Persistimos las lineas con los valores efectivos segun el tipo de documento.
+    const linesToPersist = lines.map((line) => ({
+      ...line,
+      quantity: effectiveQuantity(line),
+      taxRate: appliesIva ? line.taxRate : 0,
+      retentionRate: appliesIrpf ? line.retentionRate : 0
+    }));
+    formData.set("lines_json", JSON.stringify(linesToPersist));
 
     const docLabel = isQuote ? "el presupuesto" : isOrder ? "el pedido" : isDeliveryNote ? "el albarán" : isRecurring ? "la plantilla recurrente" : "la factura";
 
@@ -3026,7 +3156,7 @@ function QuoteForm({
         taxAmount: taxTotal,
         retentionRate: effectiveRetentionRate,
         retentionAmount: retentionTotal,
-        suplidoAmount,
+        suplidoAmount: effectiveSuplido,
         total: persisted.total
       });
     } catch (error) {
@@ -3134,9 +3264,14 @@ function QuoteForm({
             forcePendingStatus={isQuote}
             lines={lines}
             products={products}
+            quantityVisible={quantityVisible}
+            showIrpf={appliesIrpf}
+            showIva={appliesIva}
             onAddLine={addLine}
             onDuplicateLine={duplicateLine}
+            onPreview={() => setPreviewOpen(true)}
             onRemoveLine={removeLine}
+            onToggleQuantity={() => setQuantityVisible((current) => !current)}
             onUpdateLine={updateLine}
           />
         ) : null}
@@ -3144,9 +3279,12 @@ function QuoteForm({
           <TotalsTab
             clientDiscount={clientDiscount}
             discountPercent={discountPercent}
-            productDiscount={subtotal - lines.reduce((totalLine, line) => totalLine + line.quantity * line.unitPrice, 0)}
+            productDiscount={subtotal - lines.reduce((totalLine, line) => totalLine + effectiveQuantity(line) * line.unitPrice, 0)}
             retentionRate={effectiveRetentionRate}
             retentionTotal={retentionTotal}
+            showIrpf={appliesIrpf}
+            showIva={appliesIva}
+            showSuplido={appliesSuplido}
             subtotal={subtotal}
             suplidoAmount={suplidoAmount}
             taxTotal={taxTotal}
@@ -3177,14 +3315,61 @@ function QuoteForm({
       <QuoteStickyBar
         canCreate={canCreate}
         isPending={isSaving}
+        showIrpf={appliesIrpf}
+        showIva={appliesIva}
+        showSuplido={appliesSuplido}
         taxableBase={taxableBase}
         taxTotal={taxTotal}
         retentionTotal={retentionTotal}
-        suplidoAmount={suplidoAmount}
+        suplidoAmount={effectiveSuplido}
         total={total}
         onCancel={onCancel}
         onCreate={submitDocument}
       />
+
+      {previewOpen ? (
+        <FormPreviewDialog
+          kind={sectionDocumentKind(section.id) ?? "quote"}
+          lines={lines.map((line) => ({
+            id: String(line.id),
+            productOrService: line.product,
+            description: line.description,
+            quantity: effectiveQuantity(line),
+            unitPrice: line.unitPrice,
+            discountRate: line.discount,
+            taxableBase: lineBaseAfterClientDiscount(line),
+            taxRate: appliesIva ? line.taxRate : null,
+            status: "Completa"
+          }))}
+          organizationId={organizationId}
+          organizationName={organizationName}
+          row={{
+            id: "preview",
+            status: isQuote ? "Pendiente" : "Borrador",
+            date: new Date(documentDate || new Date().toISOString().slice(0, 10)).toLocaleDateString("es-ES"),
+            number: `${prefix}-${(documentDate || new Date().toISOString()).slice(0, 4)}-XXXX`,
+            reference: "",
+            clientId,
+            clientCode,
+            clientCountry: selectedClient?.country ?? "ES",
+            clientEmail,
+            clientFiscalAddress: selectedClient?.fiscalAddress ?? "",
+            clientPhone,
+            clientPostalCode: selectedClient?.postalCode ?? "",
+            clientProvince: selectedClient?.province ?? "",
+            clientTaxId: selectedClient?.taxId ?? "",
+            clientCity: selectedClient?.city ?? "",
+            client: client || (clientInputRef.current?.value ?? ""),
+            baseAvailable: taxableBase,
+            taxAmount: taxTotal,
+            retentionRate: effectiveRetentionRate,
+            retentionAmount: retentionTotal,
+            suplidoAmount: effectiveSuplido,
+            total
+          }}
+          onClose={() => setPreviewOpen(false)}
+        />
+      ) : null}
     </section>
   );
 }
@@ -3217,17 +3402,27 @@ function ProductsTab({
   forcePendingStatus,
   lines,
   products,
+  quantityVisible,
+  showIrpf,
+  showIva,
   onAddLine,
   onDuplicateLine,
+  onPreview,
   onRemoveLine,
+  onToggleQuantity,
   onUpdateLine
 }: {
   forcePendingStatus?: boolean;
   lines: QuoteLine[];
   products: ProductItem[];
+  quantityVisible: boolean;
+  showIrpf: boolean;
+  showIva: boolean;
   onAddLine: () => void;
   onDuplicateLine: (line: QuoteLine) => void;
+  onPreview: () => void;
   onRemoveLine: (id: number) => void;
+  onToggleQuantity: () => void;
   onUpdateLine: (id: number, patch: Partial<QuoteLine>) => void;
 }) {
   const [lineActionMenu, setLineActionMenu] = useState<{ lineId: number; left: number; top: number } | null>(null);
@@ -3318,27 +3513,35 @@ function ProductsTab({
     };
   }, [productMenu, lineActionMenu]);
 
+  const visibleColumnCount = 7 + (quantityVisible ? 1 : 0) + (showIrpf ? 1 : 0) + (showIva ? 1 : 0);
+
   return (
     <div className="quote-products-panel">
-      <button className="sage-primary-button" onClick={onAddLine} type="button">
-        <Plus aria-hidden="true" size={23} />
-        Anadir
-      </button>
+      <div className="quote-products-toolbar">
+        <button className="sage-primary-button" onClick={onAddLine} type="button">
+          <Plus aria-hidden="true" size={23} />
+          Anadir
+        </button>
+        <button className="sage-outline-button" onClick={onToggleQuantity} type="button">
+          {quantityVisible ? <EyeOff aria-hidden="true" size={18} /> : <Eye aria-hidden="true" size={18} />}
+          {quantityVisible ? "Ocultar cantidad" : "Mostrar cantidad"}
+        </button>
+      </div>
 
       <div className="quote-lines-wrap">
         <table className="quote-lines-table">
           <thead>
             <tr>
-              <th>Producto o servicio</th>
-              <th>Descripcion</th>
-              <th>Cantidad</th>
-              <th>Precio unitario</th>
-              <th>% IRPF</th>
-              <th>Descuento</th>
-              <th>Base imponible</th>
-              <th>% IVA</th>
-              <th>Estado</th>
-              <th>Acciones</th>
+              <th className="col-product">Producto o servicio</th>
+              <th className="col-desc">Descripcion</th>
+              {quantityVisible ? <th className="col-qty">Cantidad</th> : null}
+              <th className="col-price">Precio unitario</th>
+              {showIrpf ? <th className="col-irpf">% IRPF</th> : null}
+              <th className="col-discount">Descuento</th>
+              <th className="col-base">Base imponible</th>
+              {showIva ? <th className="col-iva">% IVA</th> : null}
+              <th className="col-status">Estado</th>
+              <th className="col-actions">Acciones</th>
             </tr>
           </thead>
           <tbody>
@@ -3347,9 +3550,10 @@ function ProductsTab({
                 ? productMenu.query.trim().toLowerCase()
                 : line.product.trim().toLowerCase();
               const selectedProduct = findSelectedProduct(line.product);
-              const rawLineTotal = line.quantity * line.unitPrice;
+              const effectiveQty = quantityVisible ? line.quantity : 1;
+              const rawLineTotal = effectiveQty * line.unitPrice;
               const lineBase = rawLineTotal - (rawLineTotal * (line.discount / 100));
-              const lineStatus = !forcePendingStatus && line.product.trim() && line.description.trim() && line.quantity > 0 ? "Completa" : "Pendiente";
+              const lineStatus = !forcePendingStatus && line.product.trim() && line.description.trim() && effectiveQty > 0 ? "Completa" : "Pendiente";
               const visibleProducts = products.filter((product) => (
                 !productQuery
                 || product.name.toLowerCase().includes(productQuery)
@@ -3359,7 +3563,7 @@ function ProductsTab({
 
               return (
               <tr key={line.id}>
-                <td>
+                <td className="col-product">
                   <div className="quote-product-picker">
                     <input
                       aria-expanded={productMenu?.lineId === line.id}
@@ -3395,26 +3599,28 @@ function ProductsTab({
                     ) : null}
                   </div>
                 </td>
-                <td>
+                <td className="col-desc">
                   <textarea
                     aria-label="Descripcion"
                     onChange={(event) => onUpdateLine(line.id, { description: event.target.value })}
                     value={line.description}
                   />
                 </td>
-                <td className="quote-line-quantity-cell">
-                  <div className="quote-line-quantity-control">
-                    <input
-                      aria-label="Cantidad"
-                      min="0"
-                      onChange={(event) => onUpdateLine(line.id, { quantity: parseQuantityNumber(event.target.value) })}
-                      type="number"
-                      value={editableNumberValue(line.quantity)}
-                    />
-                    {unitMeasureAbbreviation(selectedProduct?.unitMeasure) ? <span>{unitMeasureAbbreviation(selectedProduct?.unitMeasure)}</span> : null}
-                  </div>
-                </td>
-                <td>
+                {quantityVisible ? (
+                  <td className="col-qty quote-line-quantity-cell">
+                    <div className="quote-line-quantity-control">
+                      <input
+                        aria-label="Cantidad"
+                        min="0"
+                        onChange={(event) => onUpdateLine(line.id, { quantity: parseQuantityNumber(event.target.value) })}
+                        type="number"
+                        value={editableNumberValue(line.quantity)}
+                      />
+                      {unitMeasureAbbreviation(selectedProduct?.unitMeasure) ? <span>{unitMeasureAbbreviation(selectedProduct?.unitMeasure)}</span> : null}
+                    </div>
+                  </td>
+                ) : null}
+                <td className="col-price">
                   <input
                     aria-label="Precio unitario"
                     min="0"
@@ -3423,15 +3629,17 @@ function ProductsTab({
                     value={editableNumberValue(line.unitPrice)}
                   />
                 </td>
-                <td>
-                  <LineRatePicker
-                    ariaLabel="Porcentaje de IRPF"
-                    onChange={(rate) => onUpdateLine(line.id, { retentionRate: rate })}
-                    options={lineRetentionRateOptions}
-                    value={line.retentionRate}
-                  />
-                </td>
-                <td>
+                {showIrpf ? (
+                  <td className="col-irpf">
+                    <LineRatePicker
+                      ariaLabel="Porcentaje de IRPF"
+                      onChange={(rate) => onUpdateLine(line.id, { retentionRate: rate })}
+                      options={lineRetentionRateOptions}
+                      value={line.retentionRate}
+                    />
+                  </td>
+                ) : null}
+                <td className="col-discount">
                   <input
                     aria-label="Descuento"
                     min="0"
@@ -3441,21 +3649,23 @@ function ProductsTab({
                     value={editableNumberValue(line.discount)}
                   />
                 </td>
-                <td>
+                <td className="col-base">
                   {formatMoney(Math.max(lineBase, 0))}
                 </td>
-                <td>
-                  <LineRatePicker
-                    ariaLabel="Porcentaje de IVA"
-                    onChange={(rate) => onUpdateLine(line.id, { taxRate: rate })}
-                    options={lineTaxRateOptions}
-                    value={line.taxRate}
-                  />
-                </td>
-                <td>
+                {showIva ? (
+                  <td className="col-iva">
+                    <LineRatePicker
+                      ariaLabel="Porcentaje de IVA"
+                      onChange={(rate) => onUpdateLine(line.id, { taxRate: rate })}
+                      options={lineTaxRateOptions}
+                      value={line.taxRate}
+                    />
+                  </td>
+                ) : null}
+                <td className="col-status">
                   <span className={`quote-line-status ${lineStatus === "Completa" ? "is-complete" : "is-pending"}`}>{lineStatus}</span>
                 </td>
-                <td>
+                <td className="col-actions">
                   <div className="quote-line-actions">
                     <button
                       aria-expanded={lineActionMenu?.lineId === line.id}
@@ -3472,6 +3682,7 @@ function ProductsTab({
                         role="menu"
                         style={{ left: `${lineActionMenu.left}px`, top: `${lineActionMenu.top}px` }}
                       >
+                        <button onClick={() => runLineAction(onPreview)} type="button">Previsualizacion</button>
                         <button onClick={() => runLineAction(() => onDuplicateLine(line))} type="button">Duplicar linea</button>
                         <button onClick={() => runLineAction(() => onUpdateLine(line.id, { discount: 0 }))} type="button">Quitar descuento</button>
                         <button className="danger" onClick={() => runLineAction(() => onRemoveLine(line.id))} type="button">Eliminar</button>
@@ -3483,7 +3694,7 @@ function ProductsTab({
               );
             }) : (
               <tr>
-                <td colSpan={10}>
+                <td colSpan={visibleColumnCount}>
                   <div className="quote-line-empty">
                     <ListChecks aria-hidden="true" size={42} />
                     <span>Anade productos o servicios para activar la creacion.</span>
@@ -3550,6 +3761,9 @@ function TotalsTab({
   productDiscount,
   retentionRate,
   retentionTotal,
+  showIrpf,
+  showIva,
+  showSuplido,
   subtotal,
   suplidoAmount,
   taxTotal,
@@ -3562,6 +3776,9 @@ function TotalsTab({
   productDiscount: number;
   retentionRate: number;
   retentionTotal: number;
+  showIrpf: boolean;
+  showIva: boolean;
+  showSuplido: boolean;
   subtotal: number;
   suplidoAmount: number;
   taxTotal: number;
@@ -3590,30 +3807,36 @@ function TotalsTab({
           />
         </label>
         <SummaryBox label="Descuento total a cliente" value={clientDiscount} />
-        <label className="sage-field discount-field totals-discount-field">
-          <span>Suplido</span>
-          <input
-            aria-label="Importe de suplido"
-            min="0"
-            onChange={(event) => onSuplidoChange(Math.max(parseEditableNumber(event.target.value), 0))}
-            type="number"
-            value={editableNumberValue(suplidoAmount)}
-          />
-        </label>
+        {showSuplido ? (
+          <label className="sage-field discount-field totals-discount-field">
+            <span>Suplido</span>
+            <input
+              aria-label="Importe de suplido"
+              min="0"
+              onChange={(event) => onSuplidoChange(Math.max(parseEditableNumber(event.target.value), 0))}
+              type="number"
+              value={editableNumberValue(suplidoAmount)}
+            />
+          </label>
+        ) : null}
       </div>
 
-      <TaxBreakdownTable
-        columns={["Impuesto", "Base imponible", "Tipo de IVA", "Cuota de IVA"]}
-        rows={[{ id: "iva", label: `IVA ${formatPercent(effectiveIvaRate)}`, base: taxableBase, rate: effectiveIvaRate, amount: taxTotal }]}
-        title="IVA"
-      />
+      {showIva ? (
+        <TaxBreakdownTable
+          columns={["Impuesto", "Base imponible", "Tipo de IVA", "Cuota de IVA"]}
+          rows={[{ id: "iva", label: `IVA ${formatPercent(effectiveIvaRate)}`, base: taxableBase, rate: effectiveIvaRate, amount: taxTotal }]}
+          title="IVA"
+        />
+      ) : null}
 
-      <TaxBreakdownTable
-        columns={["Impuesto", "Base imponible", "Tipo de IRPF", "Cuota de retencion"]}
-        emptyMessage="Esta lista esta en blanco."
-        rows={irpfRows}
-        title="IRPF"
-      />
+      {showIrpf ? (
+        <TaxBreakdownTable
+          columns={["Impuesto", "Base imponible", "Tipo de IRPF", "Cuota de retencion"]}
+          emptyMessage="Esta lista esta en blanco."
+          rows={irpfRows}
+          title="IRPF"
+        />
+      ) : null}
     </div>
   );
 }
@@ -3872,6 +4095,9 @@ function QuoteStickyBar({
   onCancel,
   onCreate,
   retentionTotal,
+  showIrpf,
+  showIva,
+  showSuplido,
   suplidoAmount,
   taxableBase,
   taxTotal,
@@ -3882,6 +4108,9 @@ function QuoteStickyBar({
   onCancel: () => void;
   onCreate: () => void;
   retentionTotal: number;
+  showIrpf: boolean;
+  showIva: boolean;
+  showSuplido: boolean;
   suplidoAmount: number;
   taxableBase: number;
   taxTotal: number;
@@ -3890,9 +4119,9 @@ function QuoteStickyBar({
   return (
     <footer className="quote-sticky-bar">
       <SummaryBox label="Total base imponible" value={taxableBase} />
-      <SummaryBox label="Total IVA" value={taxTotal} />
-      <SummaryBox label="Retencion IRPF" value={-retentionTotal} />
-      <SummaryBox label="Suplido" value={suplidoAmount} />
+      {showIva ? <SummaryBox label="Total IVA" value={taxTotal} /> : null}
+      {showIrpf ? <SummaryBox label="Retencion IRPF" value={-retentionTotal} /> : null}
+      {showSuplido ? <SummaryBox label="Suplido" value={suplidoAmount} /> : null}
       <SummaryBox label="Total" value={total} />
       <button className="quote-cancel-action" onClick={onCancel} type="button">Cancelar</button>
       <button className={`quote-create-action${canCreate ? " is-ready" : ""}`} disabled={!canCreate} onClick={onCreate} type="button">

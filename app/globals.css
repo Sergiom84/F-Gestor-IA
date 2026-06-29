@@ -2835,8 +2835,15 @@ a {
   border-collapse: separate;
   border-spacing: 0;
   table-layout: fixed;
-  min-width: 1240px;
+  min-width: 1080px;
   width: 100%;
+}
+
+.quote-products-toolbar {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
 }
 
 .quote-lines-table th {
@@ -2849,52 +2856,18 @@ a {
   white-space: nowrap;
 }
 
-.quote-lines-table th:nth-child(1),
-.quote-lines-table td:nth-child(1) {
-  width: 17%;
-}
+.quote-lines-table .col-product { width: 15%; }
+.quote-lines-table .col-desc { width: 22%; }
+.quote-lines-table .col-qty { width: 7%; }
+.quote-lines-table .col-price { width: 10%; }
+.quote-lines-table .col-irpf { width: 9%; }
+.quote-lines-table .col-discount { width: 8%; }
+.quote-lines-table .col-base { width: 9%; }
+.quote-lines-table .col-iva { width: 9%; }
+.quote-lines-table .col-status { width: 5%; }
+.quote-lines-table .col-actions { width: 6%; }
 
-.quote-lines-table th:nth-child(2),
-.quote-lines-table td:nth-child(2) {
-  width: 28%;
-}
-
-.quote-lines-table th:nth-child(3),
-.quote-lines-table td:nth-child(3) {
-  width: 7%;
-}
-
-.quote-lines-table th:nth-child(4),
-.quote-lines-table td:nth-child(4) {
-  width: 12%;
-}
-
-.quote-lines-table th:nth-child(5),
-.quote-lines-table td:nth-child(5) {
-  width: 7%;
-}
-
-.quote-lines-table th:nth-child(6),
-.quote-lines-table td:nth-child(6) {
-  width: 9%;
-}
-
-.quote-lines-table th:nth-child(7),
-.quote-lines-table td:nth-child(7) {
-  width: 6%;
-}
-
-.quote-lines-table th:nth-child(8),
-.quote-lines-table td:nth-child(8) {
-  width: 8%;
-}
-
-.quote-lines-table th:nth-child(9),
-.quote-lines-table td:nth-child(9) {
-  width: 6%;
-}
-
-.quote-lines-table th:nth-child(4) {
+.quote-lines-table th.col-price {
   font-size: 0.76rem;
   letter-spacing: 0;
 }
@@ -2906,20 +2879,14 @@ a {
   vertical-align: top;
 }
 
-.quote-lines-table th:nth-child(3),
-.quote-lines-table th:nth-child(4),
-.quote-lines-table th:nth-child(5),
-.quote-lines-table th:nth-child(6),
-.quote-lines-table th:nth-child(7),
-.quote-lines-table th:nth-child(8),
-.quote-lines-table th:nth-child(9),
-.quote-lines-table td:nth-child(3),
-.quote-lines-table td:nth-child(4),
-.quote-lines-table td:nth-child(5),
-.quote-lines-table td:nth-child(6),
-.quote-lines-table td:nth-child(7),
-.quote-lines-table td:nth-child(8),
-.quote-lines-table td:nth-child(9) {
+.quote-lines-table .col-qty,
+.quote-lines-table .col-price,
+.quote-lines-table .col-irpf,
+.quote-lines-table .col-discount,
+.quote-lines-table .col-base,
+.quote-lines-table .col-iva,
+.quote-lines-table .col-status,
+.quote-lines-table .col-actions {
   text-align: center;
 }
 
@@ -4199,6 +4166,18 @@ a {
   margin-top: 16px;
 }
 
+/* Evita que las etiquetas (E-mail, Telefono, NIF/CIF) se partan en varias lineas. */
+.client-address-body .sage-field span {
+  flex: 0 0 auto;
+  min-width: 72px;
+  white-space: nowrap;
+}
+
+.client-address-body .sage-field input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
 .client-address-body input[type="checkbox"] {
   accent-color: #2f6474;
   height: 22px;
@@ -4735,6 +4714,37 @@ a {
   border-spacing: 0;
   min-width: 980px;
   width: 100%;
+}
+
+/* Filtro de categoria (Todos / Productos / Servicios) sobre el catalogo. */
+.product-template-table-panel .sales-template-table-head {
+  align-items: center;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+}
+
+.products-category-filter {
+  display: inline-flex;
+  background: #eef2f4;
+  border-radius: 999px;
+  gap: 2px;
+  padding: 3px;
+}
+
+.products-category-filter-button {
+  background: transparent;
+  border: 0;
+  border-radius: 999px;
+  color: #51606a;
+  cursor: pointer;
+  font-weight: 700;
+  padding: 6px 16px;
+}
+
+.products-category-filter-button.active {
+  background: #008a45;
+  color: #ffffff;
 }
 
 .products-data-table th {

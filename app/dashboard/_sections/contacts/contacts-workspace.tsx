@@ -1261,6 +1261,20 @@ function provinceFromPostalCode(postalCode: string): string {
   return provinceByPostalPrefix[prefix] ?? "";
 }
 
+// Consulta poblacion y provincia a partir del CP (servicio publico gratuito, sin clave).
+async function lookupPostalCode(postalCode: string): Promise<{ city: string; province: string } | null> {
+  try {
+    const response = await fetch(`https://api.zippopotam.us/es/${postalCode}`);
+    if (!response.ok) return null;
+    const data = (await response.json()) as { places?: Array<{ "place name"?: string; state?: string }> };
+    const place = data.places?.[0];
+    if (!place) return null;
+    return { city: place["place name"] ?? "", province: place.state ?? "" };
+  } catch {
+    return null;
+  }
+}
+
 function NewContactForm({
   organizationId,
   sectionId,
@@ -1315,12 +1329,23 @@ function NewContactForm({
     setVatNumber(cleanTaxId ? `ES${cleanTaxId}` : "");
   }, [taxId, isVatManual]);
 
-  // Al escribir el codigo postal autocompletamos la provincia (2 primeros digitos).
+  // Al escribir el codigo postal autocompletamos provincia (2 primeros digitos, instantaneo)
+  // y poblacion (consulta a un servicio postal publico cuando hay 5 digitos).
   const handlePostalCodeChange = (value: string) => {
+    const previousAutoProvince = provinceFromPostalCode(postalCode);
     setPostalCode(value);
     const matchedProvince = provinceFromPostalCode(value);
-    if (matchedProvince && (province.trim() === "" || province === provinceFromPostalCode(postalCode))) {
+    if (matchedProvince && (province.trim() === "" || province === previousAutoProvince)) {
       setProvince(matchedProvince);
+    }
+
+    const digits = value.replace(/\D/g, "");
+    if (digits.length === 5) {
+      void lookupPostalCode(digits).then((place) => {
+        if (!place) return;
+        setCity((current) => current.trim() === "" ? place.city : current);
+        setProvince((current) => (current.trim() === "" || current === matchedProvince) ? (place.province || matchedProvince) : current);
+      });
     }
   };
   const handleCreate = async () => {
