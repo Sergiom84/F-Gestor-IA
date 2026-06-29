@@ -1874,6 +1874,33 @@ function SalesPrintDialog({
   );
 }
 
+// Selector de formato (PDF / Plantilla) que comparten las vistas previas de venta;
+// ambos formatos usan la personalizacion de documentos definida en Presupuestos.
+function SalesPrintFormatToggle({ format, onChange }: { format: SalesPrintFormat; onChange: (format: SalesPrintFormat) => void }) {
+  return (
+    <div className="sales-print-dialog-chrome sales-print-format-toggle" role="tablist" aria-label="Formato del documento">
+      <button
+        aria-selected={format === "pdf"}
+        className={`sales-print-format-button${format === "pdf" ? " active" : ""}`}
+        onClick={() => onChange("pdf")}
+        role="tab"
+        type="button"
+      >
+        Formato PDF
+      </button>
+      <button
+        aria-selected={format === "template"}
+        className={`sales-print-format-button${format === "template" ? " active" : ""}`}
+        onClick={() => onChange("template")}
+        role="tab"
+        type="button"
+      >
+        Formato Plantilla
+      </button>
+    </div>
+  );
+}
+
 function PostCreatePreviewDialog({
   kind,
   organizationId,
@@ -1887,31 +1914,37 @@ function PostCreatePreviewDialog({
   row: SalesDocumentRow;
   onClose: () => void;
 }) {
-  const [config, setConfig] = useState<QuotesTemplateConfig | null>(null);
+  const [rawConfig, setRawConfig] = useState<Record<string, unknown> | null | undefined>(undefined);
+  const [format, setFormat] = useState<SalesPrintFormat>("pdf");
   const [lines, setLines] = useState<SalesQuoteLineDetail[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [linesLoaded, setLinesLoaded] = useState(false);
   const [previewScale, setPreviewScale] = useState(0.62);
   const previewPanelRef = useRef<HTMLElement | null>(null);
   const documentLabel = salesPrintDocumentLabel(kind);
 
   useEffect(() => {
     let isMounted = true;
-    setIsLoading(true);
 
     void Promise.all([
       loadQuotesInitialData(organizationId).catch(() => ({ config: null })),
       getSalesDocumentLineDetails(kind, row.id)
     ]).then(([initialData, lineResult]) => {
       if (!isMounted) return;
-      setConfig(normalizeQuotesTemplateConfig(selectQuotesPrintConfig(initialData.config, "pdf"), organizationName));
+      setRawConfig(initialData.config ?? null);
       setLines(lineResult.lines ?? []);
-      setIsLoading(false);
+      setLinesLoaded(true);
     });
 
     return () => {
       isMounted = false;
     };
-  }, [kind, row.id, organizationId, organizationName]);
+  }, [kind, row.id, organizationId]);
+
+  const config = useMemo(
+    () => rawConfig === undefined ? null : normalizeQuotesTemplateConfig(selectQuotesPrintConfig(rawConfig, format), organizationName),
+    [rawConfig, format, organizationName]
+  );
+  const isLoading = rawConfig === undefined || !linesLoaded;
 
   useEffect(() => {
     const previewPanel = previewPanelRef.current;
@@ -1956,6 +1989,8 @@ function PostCreatePreviewDialog({
           </button>
         </header>
 
+        <SalesPrintFormatToggle format={format} onChange={setFormat} />
+
         {isLoading || !config ? (
           <div className="sales-print-dialog-chrome sales-print-empty-state">
             <FileText aria-hidden="true" size={34} />
@@ -1968,7 +2003,7 @@ function PostCreatePreviewDialog({
           >
             <section ref={previewPanelRef} className="preview-panel" aria-label="Vista previa del documento">
               <div className="sales-print-printable">
-                <SalesPrintableDocument config={config} format="pdf" kind={kind} lines={lines} row={row} />
+                <SalesPrintableDocument config={config} format={format} kind={kind} lines={lines} row={row} />
               </div>
             </section>
           </div>
@@ -2016,28 +2051,32 @@ function FormPreviewDialog({
   row: SalesDocumentRow;
   onClose: () => void;
 }) {
-  const [config, setConfig] = useState<QuotesTemplateConfig | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [rawConfig, setRawConfig] = useState<Record<string, unknown> | null | undefined>(undefined);
+  const [format, setFormat] = useState<SalesPrintFormat>("pdf");
   const [previewScale, setPreviewScale] = useState(0.62);
   const previewPanelRef = useRef<HTMLElement | null>(null);
   const documentLabel = salesPrintDocumentLabel(kind);
 
   useEffect(() => {
     let isMounted = true;
-    setIsLoading(true);
 
     void loadQuotesInitialData(organizationId)
       .catch(() => ({ config: null }))
       .then((initialData) => {
         if (!isMounted) return;
-        setConfig(normalizeQuotesTemplateConfig(selectQuotesPrintConfig(initialData.config, "pdf"), organizationName));
-        setIsLoading(false);
+        setRawConfig(initialData.config ?? null);
       });
 
     return () => {
       isMounted = false;
     };
-  }, [organizationId, organizationName]);
+  }, [organizationId]);
+
+  const config = useMemo(
+    () => rawConfig === undefined ? null : normalizeQuotesTemplateConfig(selectQuotesPrintConfig(rawConfig, format), organizationName),
+    [rawConfig, format, organizationName]
+  );
+  const isLoading = rawConfig === undefined;
 
   useEffect(() => {
     const previewPanel = previewPanelRef.current;
@@ -2076,6 +2115,8 @@ function FormPreviewDialog({
           </button>
         </header>
 
+        <SalesPrintFormatToggle format={format} onChange={setFormat} />
+
         {isLoading || !config ? (
           <div className="sales-print-dialog-chrome sales-print-empty-state">
             <FileText aria-hidden="true" size={34} />
@@ -2088,7 +2129,7 @@ function FormPreviewDialog({
           >
             <section ref={previewPanelRef} className="preview-panel" aria-label="Vista previa del documento">
               <div className="sales-print-printable">
-                <SalesPrintableDocument config={config} format="pdf" kind={kind} lines={lines} row={row} />
+                <SalesPrintableDocument config={config} format={format} kind={kind} lines={lines} row={row} />
               </div>
             </section>
           </div>

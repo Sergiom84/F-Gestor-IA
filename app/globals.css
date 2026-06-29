@@ -2852,6 +2852,22 @@ a {
   color: #008a45;
 }
 
+/* Campos multilinea de la personalizacion de documentos (domicilio, cuentas). */
+.config-multiline-input {
+  font-family: inherit;
+  line-height: 1.4;
+  min-height: 44px;
+  resize: vertical;
+  white-space: pre-wrap;
+}
+
+/* Respeta los saltos de linea del emisor y los metodos de pago en el PDF. */
+.pdf-client-block p,
+.pdf-payment-table div,
+.payment-block p {
+  white-space: pre-line;
+}
+
 .quote-lines-table th {
   background: #cbd6dc;
   border-right: 2px solid #dfe6eb;
@@ -3049,6 +3065,30 @@ a {
   color: #000000;
   font-size: 0.84rem;
   font-weight: 800;
+}
+
+/* Selector de formato (PDF / Plantilla) en las vistas previas de venta. */
+.sales-print-format-toggle {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  padding: 10px 16px 0;
+}
+
+.sales-print-format-button {
+  background: #eef2f4;
+  border: 1px solid #d4dde2;
+  border-radius: 999px;
+  color: #51606a;
+  cursor: pointer;
+  font-weight: 700;
+  padding: 7px 18px;
+}
+
+.sales-print-format-button.active {
+  background: #008a45;
+  border-color: #008a45;
+  color: #ffffff;
 }
 
 /* Caja de Suplido editable dentro de la barra de totales. */

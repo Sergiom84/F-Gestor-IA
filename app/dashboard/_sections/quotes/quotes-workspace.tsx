@@ -2036,8 +2036,10 @@ export function QuotesWorkspace({ initialData }: { initialData: QuotesInitialDat
                         </label>
                         <label>
                           Número o valor fijo
-                          <input
+                          <textarea
+                            className="config-multiline-input"
                             placeholder="Número de Bizum, IBAN..."
+                            rows={2}
                             value={row.value}
                             onChange={(event) =>
                               updateConfigPaymentRow("pdfPaymentRows", row.id, { value: event.target.value })
@@ -2168,7 +2170,9 @@ export function QuotesWorkspace({ initialData }: { initialData: QuotesInitialDat
                   </label>
                   <label>
                     Domicilio
-                    <input
+                    <textarea
+                      className="config-multiline-input"
+                      rows={2}
                       value={activeConfigDraft.templateIssuerAddress}
                       onChange={(event) => updateConfigDraft({ templateIssuerAddress: event.target.value })}
                     />
@@ -2208,8 +2212,10 @@ export function QuotesWorkspace({ initialData }: { initialData: QuotesInitialDat
                       </label>
                       <label>
                         Número o valor fijo
-                        <input
+                        <textarea
+                          className="config-multiline-input"
                           placeholder="Número de Bizum, IBAN..."
+                          rows={2}
                           value={row.value}
                           onChange={(event) =>
                             updateConfigPaymentRow("templatePaymentRows", row.id, { value: event.target.value })
