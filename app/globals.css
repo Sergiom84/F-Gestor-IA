@@ -3077,6 +3077,40 @@ a {
   padding-top: 14px;
 }
 
+.config-template-name-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-weight: 700;
+}
+
+.config-template-name-field input {
+  font-weight: 400;
+}
+
+/* Plantillas en la barra lateral de Presupuestos. */
+.sidebar-template-row {
+  align-items: stretch;
+  display: flex;
+  gap: 6px;
+}
+
+.sidebar-template-row .template-card {
+  flex: 1 1 auto;
+}
+
+.sidebar-template-delete {
+  align-items: center;
+  background: transparent;
+  border: 1px solid #d6dee4;
+  border-radius: 8px;
+  color: #b0413e;
+  cursor: pointer;
+  display: flex;
+  justify-content: center;
+  padding: 0 8px;
+}
+
 .config-template-save-row {
   align-items: center;
   display: flex;

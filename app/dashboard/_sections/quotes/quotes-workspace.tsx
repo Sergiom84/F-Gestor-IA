@@ -1059,7 +1059,7 @@ export function QuotesWorkspace({ initialData }: { initialData: QuotesInitialDat
   const [configDraft, setConfigDraft] = useState<AppConfig>(initialConfig);
   const [salesTemplates, setSalesTemplates] = useState<SalesDocumentTemplate[]>([]);
   const [templateName, setTemplateName] = useState("");
-  const [templateDefault, setTemplateDefault] = useState(false);
+  const [editingTemplateId, setEditingTemplateId] = useState("");
   const [templateSaving, setTemplateSaving] = useState(false);
   const [templateFeedback, setTemplateFeedback] = useState("");
   const importFileRef = useRef<HTMLInputElement>(null);
@@ -1071,7 +1071,6 @@ export function QuotesWorkspace({ initialData }: { initialData: QuotesInitialDat
   const activeDocumentConfig = getDocumentConfig(activeQuote.documentType);
 
   useEffect(() => {
-    if (!configDialogOpen) return;
     let mounted = true;
     void listSalesTemplates(organizationId).then((result) => {
       if (mounted) setSalesTemplates(result.templates);
@@ -1079,8 +1078,10 @@ export function QuotesWorkspace({ initialData }: { initialData: QuotesInitialDat
     return () => {
       mounted = false;
     };
-  }, [configDialogOpen, organizationId]);
+  }, [organizationId]);
 
+  // Guardar plantilla: nombre obligatorio. Persiste la plantilla con nombre y la
+  // configuracion subyacente (saveAppConfig cierra el dialogo).
   const handleSaveSalesTemplate = async () => {
     const name = templateName.trim();
     if (!name) {
@@ -1091,11 +1092,11 @@ export function QuotesWorkspace({ initialData }: { initialData: QuotesInitialDat
     setTemplateFeedback("");
     const result = await saveSalesTemplate({
       organizationId,
+      ...(editingTemplateId ? { id: editingTemplateId } : {}),
       name,
       format: activeConfigFormat,
       scope: configScope,
-      config: activeConfigDraft as unknown as Record<string, unknown>,
-      isDefault: templateDefault
+      config: activeConfigDraft as unknown as Record<string, unknown>
     });
     setTemplateSaving(false);
     if (result.error || !result.template) {
@@ -1103,15 +1104,10 @@ export function QuotesWorkspace({ initialData }: { initialData: QuotesInitialDat
       return;
     }
     const saved = result.template;
-    setSalesTemplates((current) => {
-      const cleaned = templateDefault
-        ? current.map((item) => (item.scope === saved.scope ? { ...item, isDefault: false } : item))
-        : current;
-      return [...cleaned.filter((item) => item.id !== saved.id), saved];
-    });
+    setSalesTemplates((current) => [...current.filter((item) => item.id !== saved.id), saved]);
     setTemplateName("");
-    setTemplateDefault(false);
-    setTemplateFeedback(`Plantilla "${saved.name}" guardada.`);
+    setEditingTemplateId("");
+    saveAppConfig();
   };
 
   const handleDeleteSalesTemplate = async (id: string) => {
@@ -1121,6 +1117,22 @@ export function QuotesWorkspace({ initialData }: { initialData: QuotesInitialDat
       return;
     }
     setSalesTemplates((current) => current.filter((item) => item.id !== id));
+    if (editingTemplateId === id) {
+      setEditingTemplateId("");
+      setTemplateName("");
+    }
+  };
+
+  // Cargar una plantilla guardada en el editor para verla o re-editarla.
+  const loadSalesTemplate = (tpl: SalesDocumentTemplate) => {
+    const format: ConfigFormat = tpl.format === "template" ? "template" : "pdf";
+    setConfigScope(tpl.scope);
+    setConfigTab(format);
+    setConfigDraft((current) => updateConfigProfile(current, tpl.scope, format, tpl.config as Partial<AppConfigBase>));
+    setTemplateName(tpl.name);
+    setEditingTemplateId(tpl.id);
+    setTemplateFeedback("");
+    setConfigDialogOpen(true);
   };
   const totals = useMemo(() => calculateTotals(activeQuote), [activeQuote]);
   const pdfTotals = useMemo(() => calculatePdfInvoiceTotals(activeQuote), [activeQuote]);
@@ -1717,96 +1729,32 @@ export function QuotesWorkspace({ initialData }: { initialData: QuotesInitialDat
         </div>
 
         <div className="template-section">
-          <button
-            className={`section-title section-toggle ${openSidebarSections.template ? "is-open" : ""}`}
-            type="button"
-            aria-expanded={openSidebarSections.template}
-            onClick={() => toggleSidebarSection("template")}
-          >
-            <span>Plantilla Ventas</span>
-            <span className="accordion-indicator" aria-hidden="true" />
-          </button>
-          {openSidebarSections.template && (
+          <div className="section-title">Mis plantillas</div>
+          {salesTemplates.length > 0 ? (
             <div className="sidebar-section-content">
-              {salesTemplateRoutes.map((route) => (
-                <button
-                  className="history-category-card template-card"
-                  key={`template-${route.kind}`}
-                  type="button"
-                  onClick={() => createNewQuote(route.templateType, "sales", route.kind)}
-                >
-                  <span>{route.label}</span>
-                  <strong>PL</strong>
-                </button>
+              {salesTemplates.map((tpl) => (
+                <div className="sidebar-template-row" key={tpl.id}>
+                  <button
+                    className="history-category-card template-card"
+                    type="button"
+                    onClick={() => loadSalesTemplate(tpl)}
+                  >
+                    <span>{tpl.name}</span>
+                    <strong>{tpl.format === "template" ? "PL" : "PDF"}</strong>
+                  </button>
+                  <button
+                    className="sidebar-template-delete"
+                    type="button"
+                    title="Eliminar plantilla"
+                    onClick={() => void handleDeleteSalesTemplate(tpl.id)}
+                  >
+                    <Trash2 aria-hidden="true" size={15} />
+                  </button>
+                </div>
               ))}
             </div>
-          )}
-        </div>
-
-        <div className="template-section">
-          <button
-            className={`section-title section-toggle ${openSidebarSections.pdf ? "is-open" : ""}`}
-            type="button"
-            aria-expanded={openSidebarSections.pdf}
-            onClick={() => toggleSidebarSection("pdf")}
-          >
-            <span>Formato PDF</span>
-            <span className="accordion-indicator" aria-hidden="true" />
-          </button>
-          {openSidebarSections.pdf && (
-            <div className="sidebar-section-content">
-              {salesTemplateRoutes.map((route) => (
-                <button
-                  className="history-category-card template-card"
-                  key={`pdf-${route.kind}`}
-                  type="button"
-                  onClick={() => createNewQuote(route.pdfType, "sales", route.kind)}
-                >
-                  <span>{route.label}</span>
-                  <strong>PDF</strong>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-
-        <div className="history-list">
-          <button
-            className={`section-title section-toggle ${openSidebarSections.history ? "is-open" : ""}`}
-            type="button"
-            aria-expanded={openSidebarSections.history}
-            onClick={() => toggleSidebarSection("history")}
-          >
-            <span>Historial</span>
-            <span className="accordion-indicator" aria-hidden="true" />
-          </button>
-          {openSidebarSections.history && (
-            <div className="sidebar-section-content">
-              <div className="sidebar-subgroup-title">Plantilla Ventas</div>
-              {salesTemplateRoutes.map((route) => (
-                <button
-                  className="history-category-card"
-                  key={`history-template-${route.kind}`}
-                  type="button"
-                  onClick={() => openHistoryDialog(route.templateType, "sales", route.kind, `Plantilla Ventas · ${route.label}`)}
-                >
-                  <span>{route.label}</span>
-                  <strong>{routeCount(route.templateType, "sales", route.kind)}</strong>
-                </button>
-              ))}
-              <div className="sidebar-subgroup-title">PDF</div>
-              {salesTemplateRoutes.map((route) => (
-                <button
-                  className="history-category-card"
-                  key={`history-pdf-${route.kind}`}
-                  type="button"
-                  onClick={() => openHistoryDialog(route.pdfType, "sales", route.kind, `PDF · ${route.label}`)}
-                >
-                  <span>{route.label}</span>
-                  <strong>{routeCount(route.pdfType, "sales", route.kind)}</strong>
-                </button>
-              ))}
-            </div>
+          ) : (
+            <p className="empty-helper-text">Aún no hay plantillas. Crea una desde "Ajustes generales".</p>
           )}
         </div>
       </aside>
@@ -2323,51 +2271,33 @@ export function QuotesWorkspace({ initialData }: { initialData: QuotesInitialDat
 
             {configTab !== "backup" ? (
               <div className="config-template-save">
-                <h2>Guardar como plantilla</h2>
-                <p className="empty-helper-text">
-                  Guarda esta personalización ({configScope === "sales" ? "Ventas" : "Presupuestos"} · {activeConfigFormat === "template" ? "Plantilla" : "PDF"}) con un nombre para poder elegirla al crear documentos en Ventas.
-                </p>
-                <div className="config-template-save-row">
+                <label className="config-template-name-field">
+                  <span>Nombre de la plantilla ({configScope === "sales" ? "Ventas" : "Presupuestos"} · {activeConfigFormat === "template" ? "Plantilla" : "PDF"})</span>
                   <input
-                    placeholder="Nombre de la plantilla (p. ej. Ventas Azul)"
+                    placeholder="Ej. Ventas Azul"
                     value={templateName}
                     onChange={(event) => setTemplateName(event.target.value)}
                   />
-                  <label className="config-template-default">
-                    <input
-                      type="checkbox"
-                      checked={templateDefault}
-                      onChange={(event) => setTemplateDefault(event.target.checked)}
-                    />
-                    Por defecto
-                  </label>
-                  <button type="button" onClick={() => void handleSaveSalesTemplate()} disabled={templateSaving}>
-                    {templateSaving ? "Guardando..." : "Guardar plantilla"}
-                  </button>
-                </div>
+                </label>
                 {templateFeedback ? <p className="config-template-feedback">{templateFeedback}</p> : null}
-                {salesTemplates.length > 0 ? (
-                  <ul className="config-template-list">
-                    {salesTemplates.map((tpl) => (
-                      <li key={tpl.id}>
-                        <span className="config-template-name">{tpl.name}</span>
-                        <span className="config-template-badge">
-                          {tpl.scope === "sales" ? "Ventas" : "Presupuestos"} · {tpl.format === "template" ? "Plantilla" : "PDF"}{tpl.isDefault ? " · por defecto" : ""}
-                        </span>
-                        <button type="button" onClick={() => void handleDeleteSalesTemplate(tpl.id)} title="Eliminar plantilla">
-                          <Trash2 aria-hidden="true" size={15} />
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                ) : null}
               </div>
             ) : null}
 
             <div className="config-modal-actions">
-              <button className="primary-action" type="button" onClick={saveAppConfig}>
-                Guardar configuración
-              </button>
+              {configTab === "backup" ? (
+                <button className="primary-action" type="button" onClick={saveAppConfig}>
+                  Guardar configuración
+                </button>
+              ) : (
+                <button
+                  className="primary-action"
+                  type="button"
+                  disabled={templateSaving || templateName.trim().length === 0}
+                  onClick={() => void handleSaveSalesTemplate()}
+                >
+                  {templateSaving ? "Guardando..." : "Guardar plantilla"}
+                </button>
+              )}
             </div>
           </section>
         </div>
