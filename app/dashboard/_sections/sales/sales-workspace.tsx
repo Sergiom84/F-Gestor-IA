@@ -2200,6 +2200,7 @@ function printableLines(row: SalesDocumentRow, lines: SalesQuoteLineDetail[]): S
     discountRate: 0,
     taxableBase: row.baseAvailable ?? row.total,
     taxRate: null,
+    retentionRate: null,
     status: "Completa"
   }];
 }
@@ -2562,6 +2563,7 @@ function QuoteLinesTable({
     discountRate: 0,
     taxableBase: row.baseAvailable ?? row.total,
     taxRate: null,
+    retentionRate: null,
     status: "Completa"
   };
   const displayLines = lines.length > 0 ? lines : isLoading ? [] : [fallbackLine];
@@ -2575,6 +2577,7 @@ function QuoteLinesTable({
             <th>Descripcion</th>
             <th>Cantidad</th>
             <th>Precio unitario</th>
+            <th>% IRPF</th>
             <th>Descuento</th>
             <th>Base imponible</th>
             <th>% IVA</th>
@@ -2584,7 +2587,7 @@ function QuoteLinesTable({
         <tbody>
           {isLoading ? (
             <tr>
-              <td colSpan={8}>Cargando productos y servicios...</td>
+              <td colSpan={9}>Cargando productos y servicios...</td>
             </tr>
           ) : displayLines.map((line) => (
             <tr key={line.id}>
@@ -2592,6 +2595,7 @@ function QuoteLinesTable({
               <td className="quote-line-description">{line.description}</td>
               <td>{formatQuantity(line.quantity)}</td>
               <td>{formatMoney(line.unitPrice)}</td>
+              <td>{line.retentionRate === null ? "—" : formatPercent(line.retentionRate)}</td>
               <td>{formatPercent(line.discountRate)}</td>
               <td>{formatMoney(line.taxableBase)}</td>
               <td>{line.taxRate === null ? "—" : formatPercent(line.taxRate)}</td>
@@ -3445,6 +3449,7 @@ function QuoteForm({
             discountRate: line.discount,
             taxableBase: lineBaseAfterClientDiscount(line),
             taxRate: ivaActive ? line.taxRate : null,
+            retentionRate: appliesIrpf ? line.retentionRate : null,
             status: "Completa"
           }))}
           organizationId={organizationId}

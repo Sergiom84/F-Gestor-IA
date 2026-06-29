@@ -1007,6 +1007,8 @@ export async function createSalesQuote(formData: FormData): Promise<{ error?: st
     return { error: clientResult.error ?? "Selecciona o introduce un cliente." };
   }
 
+  const templateId = await resolveSalesTemplateId(supabase, organizationId, formData);
+
   const lines = applyDocumentFiscalRules(parseSalesInvoiceLines(formData), "quote");
 
   if (lines.length === 0) {
@@ -1047,7 +1049,7 @@ export async function createSalesQuote(formData: FormData): Promise<{ error?: st
       retention_amount: retentionAmount,
       suplido_amount: suplidoAmount,
       pdf_template: String(formData.get("pdf_template") ?? "standard").trim() || "standard",
-      sales_document_template_id: salesTemplateIdFromForm(formData),
+      sales_document_template_id: templateId,
       total_amount: totalAmount,
       notes: [
         String(formData.get("notes") ?? "").trim() || null
@@ -1107,6 +1109,8 @@ export async function createSalesOrder(formData: FormData): Promise<{ error?: st
     return { error: clientResult.error ?? "Selecciona o introduce un cliente." };
   }
 
+  const templateId = await resolveSalesTemplateId(supabase, organizationId, formData);
+
   const lines = applyDocumentFiscalRules(parseSalesInvoiceLines(formData), "order");
 
   if (lines.length === 0) {
@@ -1147,7 +1151,7 @@ export async function createSalesOrder(formData: FormData): Promise<{ error?: st
       retention_amount: retentionAmount,
       suplido_amount: suplidoAmount,
       pdf_template: String(formData.get("pdf_template") ?? "standard").trim() || "standard",
-      sales_document_template_id: salesTemplateIdFromForm(formData),
+      sales_document_template_id: templateId,
       total_amount: totalAmount,
       notes: [String(formData.get("notes") ?? "").trim() || null].filter(Boolean).join("\n"),
       created_by: user.id
@@ -1216,6 +1220,8 @@ export async function createSalesInvoice(formData: FormData): Promise<{ error?: 
     return { error: clientResult.error ?? "Selecciona o introduce un cliente." };
   }
 
+  const templateId = await resolveSalesTemplateId(supabase, organizationId, formData);
+
   const lines = parseSalesInvoiceLines(formData);
 
   if (lines.length === 0) {
@@ -1255,7 +1261,7 @@ export async function createSalesInvoice(formData: FormData): Promise<{ error?: 
       retention_amount: retentionAmount,
       suplido_amount: suplidoAmount,
       pdf_template: String(formData.get("pdf_template") ?? "standard").trim() || "standard",
-      sales_document_template_id: salesTemplateIdFromForm(formData),
+      sales_document_template_id: templateId,
       total_amount: totalAmount,
       notes: String(formData.get("notes") ?? "").trim() || null,
       created_by: user.id
@@ -1614,9 +1620,24 @@ function applyDocumentFiscalRules(lines: SalesInvoiceLineInput[], kind: SalesDoc
   });
 }
 
-function salesTemplateIdFromForm(formData: FormData): string | null {
+// Devuelve el id de plantilla solo si es un UUID valido Y pertenece a la organizacion
+// (defensa contra un document_template_id manipulado en el FormData).
+async function resolveSalesTemplateId(
+  supabase: Awaited<ReturnType<typeof getAuthenticatedUser>>["supabase"],
+  organizationId: string,
+  formData: FormData
+): Promise<string | null> {
   const id = String(formData.get("document_template_id") ?? "").trim();
-  return isUuid(id) ? id : null;
+  if (!isUuid(id)) return null;
+
+  const { data } = await supabase
+    .from("sales_document_templates")
+    .select("id")
+    .eq("id", id)
+    .eq("organization_id", organizationId)
+    .maybeSingle();
+
+  return data ? id : null;
 }
 
 export type SalesDocumentKind = "invoice" | "quote" | "order" | "delivery-note" | "recurring-invoice";
@@ -1638,6 +1659,7 @@ export type SalesQuoteLineDetail = {
   discountRate: number;
   taxableBase: number;
   taxRate: number | null;
+  retentionRate: number | null;
   status: string;
 };
 
@@ -1649,6 +1671,7 @@ type SalesDocumentLineResult = {
   discount_rate: number | null;
   line_total: number | null;
   tax_rate: number | null;
+  retention_rate?: number | null;
   products_services?: { code?: string | null; name?: string | null } | null;
 };
 
@@ -1880,8 +1903,8 @@ export async function getSalesDocumentLineDetails(
   const { supabase } = await getAuthenticatedUser();
   const lineConfig = salesDocumentLineConfig(kind);
   const selectColumns = lineConfig.hasProductService
-    ? "id, description, quantity, unit_price, discount_rate, line_total, tax_rate, products_services!product_service_id(code, name)"
-    : "id, description, quantity, unit_price, discount_rate, line_total, tax_rate";
+    ? "id, description, quantity, unit_price, discount_rate, line_total, tax_rate, retention_rate, products_services!product_service_id(code, name)"
+    : "id, description, quantity, unit_price, discount_rate, line_total, tax_rate, retention_rate";
   const { data, error } = await supabase
     .from(lineConfig.table)
     .select(selectColumns as "id, description, quantity, unit_price, discount_rate, line_total, tax_rate")
@@ -1908,6 +1931,7 @@ export async function getSalesDocumentLineDetails(
         discountRate: Number(line.discount_rate ?? 0),
         taxableBase: Number(line.line_total ?? 0),
         taxRate: line.tax_rate === null ? null : Number(line.tax_rate),
+        retentionRate: line.retention_rate === null || line.retention_rate === undefined ? null : Number(line.retention_rate),
         status: "Completa"
       };
     })
@@ -1952,7 +1976,7 @@ export async function duplicateSalesDocument(
   if (kind === "quote") {
     const { data: original, error: readError } = await supabase
       .from("sales_quotes")
-      .select("organization_id, fiscal_entity_id, client_id, quote_number, quote_date, currency, reference, subtotal_amount, tax_amount, retention_rate, retention_amount, suplido_amount, pdf_template, total_amount, notes, clients!client_id(name, code)")
+      .select("organization_id, fiscal_entity_id, client_id, quote_number, quote_date, currency, reference, subtotal_amount, tax_amount, retention_rate, retention_amount, suplido_amount, pdf_template, sales_document_template_id, total_amount, notes, clients!client_id(name, code)")
       .eq("id", documentId)
       .single();
 
@@ -1988,6 +2012,7 @@ export async function duplicateSalesDocument(
         retention_amount: original.retention_amount,
         suplido_amount: original.suplido_amount,
         pdf_template: original.pdf_template,
+        sales_document_template_id: original.sales_document_template_id,
         total_amount: original.total_amount,
         notes: original.notes,
         created_by: user.id
@@ -2001,7 +2026,7 @@ export async function duplicateSalesDocument(
 
     const { data: originalLines } = await supabase
       .from("sales_quote_lines")
-      .select("organization_id, product_service_id, line_index, description, quantity, unit_price, tax_rate, discount_rate, line_total")
+      .select("organization_id, product_service_id, line_index, description, quantity, unit_price, tax_rate, retention_rate, discount_rate, line_total")
       .eq("sales_quote_id", documentId)
       .order("line_index", { ascending: true });
 
@@ -2027,7 +2052,7 @@ export async function duplicateSalesDocument(
   if (kind === "order") {
     const { data: original, error: readError } = await supabase
       .from("sales_orders")
-      .select("organization_id, fiscal_entity_id, client_id, order_number, order_date, currency, reference, subtotal_amount, tax_amount, retention_rate, retention_amount, suplido_amount, pdf_template, total_amount, notes, clients!client_id(name, code)")
+      .select("organization_id, fiscal_entity_id, client_id, order_number, order_date, currency, reference, subtotal_amount, tax_amount, retention_rate, retention_amount, suplido_amount, pdf_template, sales_document_template_id, total_amount, notes, clients!client_id(name, code)")
       .eq("id", documentId)
       .single();
 
@@ -2063,6 +2088,7 @@ export async function duplicateSalesDocument(
         retention_amount: original.retention_amount,
         suplido_amount: original.suplido_amount,
         pdf_template: original.pdf_template,
+        sales_document_template_id: original.sales_document_template_id,
         total_amount: original.total_amount,
         notes: original.notes,
         created_by: user.id
@@ -2076,7 +2102,7 @@ export async function duplicateSalesDocument(
 
     const { data: originalLines } = await supabase
       .from("sales_order_lines")
-      .select("organization_id, product_service_id, line_index, description, quantity, unit_price, tax_rate, discount_rate, line_total")
+      .select("organization_id, product_service_id, line_index, description, quantity, unit_price, tax_rate, retention_rate, discount_rate, line_total")
       .eq("sales_order_id", documentId)
       .order("line_index", { ascending: true });
 
@@ -2102,7 +2128,7 @@ export async function duplicateSalesDocument(
   if (kind === "invoice") {
     const { data: original, error: readError } = await supabase
       .from("sales_invoices")
-      .select("organization_id, fiscal_entity_id, client_id, invoice_number, issue_date, currency, reference, subtotal_amount, tax_amount, retention_rate, retention_amount, suplido_amount, pdf_template, total_amount, notes, clients!client_id(name)")
+      .select("organization_id, fiscal_entity_id, client_id, invoice_number, issue_date, currency, reference, subtotal_amount, tax_amount, retention_rate, retention_amount, suplido_amount, pdf_template, sales_document_template_id, total_amount, notes, clients!client_id(name)")
       .eq("id", documentId)
       .single();
 
@@ -2137,6 +2163,7 @@ export async function duplicateSalesDocument(
         retention_amount: original.retention_amount,
         suplido_amount: original.suplido_amount,
         pdf_template: original.pdf_template,
+        sales_document_template_id: original.sales_document_template_id,
         total_amount: original.total_amount,
         notes: original.notes,
         created_by: user.id
@@ -2150,7 +2177,7 @@ export async function duplicateSalesDocument(
 
     const { data: originalLines } = await supabase
       .from("sales_invoice_lines")
-      .select("organization_id, product_service_id, line_index, description, quantity, unit_price, tax_rate, discount_rate, line_total")
+      .select("organization_id, product_service_id, line_index, description, quantity, unit_price, tax_rate, retention_rate, discount_rate, line_total")
       .eq("sales_invoice_id", documentId)
       .order("line_index", { ascending: true });
 
@@ -2176,7 +2203,7 @@ export async function duplicateSalesDocument(
   if (kind === "delivery-note") {
     const { data: original, error: readError } = await supabase
       .from("sales_delivery_notes")
-      .select("organization_id, fiscal_entity_id, client_id, note_number, note_date, currency, reference, subtotal_amount, tax_amount, retention_rate, retention_amount, suplido_amount, pdf_template, total_amount, notes, clients!client_id(name, code)")
+      .select("organization_id, fiscal_entity_id, client_id, note_number, note_date, currency, reference, subtotal_amount, tax_amount, retention_rate, retention_amount, suplido_amount, pdf_template, sales_document_template_id, total_amount, notes, clients!client_id(name, code)")
       .eq("id", documentId)
       .single();
 
@@ -2212,6 +2239,7 @@ export async function duplicateSalesDocument(
         retention_amount: original.retention_amount,
         suplido_amount: original.suplido_amount,
         pdf_template: original.pdf_template,
+        sales_document_template_id: original.sales_document_template_id,
         total_amount: original.total_amount,
         notes: original.notes,
         created_by: user.id
@@ -2225,7 +2253,7 @@ export async function duplicateSalesDocument(
 
     const { data: originalLines } = await supabase
       .from("sales_delivery_note_lines")
-      .select("organization_id, line_index, description, quantity, unit_price, tax_rate, discount_rate, line_total")
+      .select("organization_id, line_index, description, quantity, unit_price, tax_rate, retention_rate, discount_rate, line_total")
       .eq("sales_delivery_note_id", documentId)
       .order("line_index", { ascending: true });
 
@@ -2251,7 +2279,7 @@ export async function duplicateSalesDocument(
   if (kind === "recurring-invoice") {
     const { data: original, error: readError } = await supabase
       .from("sales_recurring_invoices")
-      .select("organization_id, fiscal_entity_id, client_id, template_number, frequency, next_issue_date, currency, reference, subtotal_amount, tax_amount, retention_rate, retention_amount, suplido_amount, pdf_template, total_amount, notes, clients!client_id(name, code)")
+      .select("organization_id, fiscal_entity_id, client_id, template_number, frequency, next_issue_date, currency, reference, subtotal_amount, tax_amount, retention_rate, retention_amount, suplido_amount, pdf_template, sales_document_template_id, total_amount, notes, clients!client_id(name, code)")
       .eq("id", documentId)
       .single();
 
@@ -2288,6 +2316,7 @@ export async function duplicateSalesDocument(
         retention_amount: original.retention_amount,
         suplido_amount: original.suplido_amount,
         pdf_template: original.pdf_template,
+        sales_document_template_id: original.sales_document_template_id,
         total_amount: original.total_amount,
         notes: original.notes,
         created_by: user.id
@@ -2301,7 +2330,7 @@ export async function duplicateSalesDocument(
 
     const { data: originalLines } = await supabase
       .from("sales_recurring_invoice_lines")
-      .select("organization_id, line_index, description, quantity, unit_price, tax_rate, discount_rate, line_total")
+      .select("organization_id, line_index, description, quantity, unit_price, tax_rate, retention_rate, discount_rate, line_total")
       .eq("sales_recurring_invoice_id", documentId)
       .order("line_index", { ascending: true });
 
@@ -2347,6 +2376,8 @@ export async function createSalesDeliveryNote(formData: FormData): Promise<{ err
     return { error: clientResult.error ?? "Selecciona o introduce un cliente." };
   }
 
+  const templateId = await resolveSalesTemplateId(supabase, organizationId, formData);
+
   const lines = applyDocumentFiscalRules(parseSalesInvoiceLines(formData), "delivery-note");
 
   if (lines.length === 0) {
@@ -2387,7 +2418,7 @@ export async function createSalesDeliveryNote(formData: FormData): Promise<{ err
       retention_amount: retentionAmount,
       suplido_amount: suplidoAmount,
       pdf_template: String(formData.get("pdf_template") ?? "standard").trim() || "standard",
-      sales_document_template_id: salesTemplateIdFromForm(formData),
+      sales_document_template_id: templateId,
       total_amount: totalAmount,
       notes: [String(formData.get("notes") ?? "").trim() || null].filter(Boolean).join("\n"),
       created_by: user.id
@@ -2444,6 +2475,8 @@ export async function createSalesRecurringInvoice(formData: FormData): Promise<{
     return { error: clientResult.error ?? "Selecciona o introduce un cliente." };
   }
 
+  const templateId = await resolveSalesTemplateId(supabase, organizationId, formData);
+
   const lines = parseSalesInvoiceLines(formData);
 
   if (lines.length === 0) {
@@ -2486,7 +2519,7 @@ export async function createSalesRecurringInvoice(formData: FormData): Promise<{
       retention_amount: retentionAmount,
       suplido_amount: suplidoAmount,
       pdf_template: String(formData.get("pdf_template") ?? "standard").trim() || "standard",
-      sales_document_template_id: salesTemplateIdFromForm(formData),
+      sales_document_template_id: templateId,
       total_amount: totalAmount,
       notes: [String(formData.get("notes") ?? "").trim() || null].filter(Boolean).join("\n"),
       created_by: user.id
