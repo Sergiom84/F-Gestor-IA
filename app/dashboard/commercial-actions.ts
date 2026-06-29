@@ -2628,3 +2628,121 @@ function parseSpanishDateToISO(value: string): string | null {
   const iso = `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
   return /^\d{4}-\d{2}-\d{2}$/.test(iso) ? iso : null;
 }
+
+// --- Plantillas de documentos de venta (con nombre, seleccionables en Ventas) ---
+
+export type SalesDocumentTemplate = {
+  id: string;
+  name: string;
+  format: "pdf" | "template";
+  scope: "sales" | "quotes";
+  config: Record<string, unknown>;
+  isDefault: boolean;
+};
+
+function mapTemplateRow(row: {
+  id: unknown;
+  name: unknown;
+  format: unknown;
+  scope: unknown;
+  config: unknown;
+  is_default: unknown;
+}): SalesDocumentTemplate {
+  return {
+    id: String(row.id),
+    name: String(row.name ?? ""),
+    format: row.format === "template" ? "template" : "pdf",
+    scope: row.scope === "quotes" ? "quotes" : "sales",
+    config: (row.config && typeof row.config === "object" ? row.config : {}) as Record<string, unknown>,
+    isDefault: Boolean(row.is_default)
+  };
+}
+
+export async function listSalesTemplates(organizationId: string): Promise<{ error?: string; templates: SalesDocumentTemplate[] }> {
+  if (!isUuid(organizationId)) return { templates: [] };
+
+  const { supabase } = await getAuthenticatedUser();
+  const { data, error } = await supabase
+    .from("sales_document_templates")
+    .select("id, name, format, scope, config, is_default")
+    .eq("organization_id", organizationId)
+    .order("created_at", { ascending: true });
+
+  if (error) return { error: error.message, templates: [] };
+
+  return { templates: (data ?? []).map(mapTemplateRow) };
+}
+
+export async function saveSalesTemplate(input: {
+  organizationId: string;
+  id?: string;
+  name: string;
+  format: "pdf" | "template";
+  scope?: "sales" | "quotes";
+  config: Record<string, unknown>;
+  isDefault?: boolean;
+}): Promise<{ error?: string; template?: SalesDocumentTemplate }> {
+  if (!isUuid(input.organizationId)) return { error: "Organización inválida." };
+
+  const name = input.name.trim();
+  if (!name) return { error: "El nombre de la plantilla es obligatorio." };
+
+  const { supabase, user } = await getAuthenticatedUser();
+  const scope = input.scope === "quotes" ? "quotes" : "sales";
+  const format = input.format === "template" ? "template" : "pdf";
+
+  // Solo una plantilla por defecto por ambito.
+  if (input.isDefault) {
+    await supabase
+      .from("sales_document_templates")
+      .update({ is_default: false })
+      .eq("organization_id", input.organizationId)
+      .eq("scope", scope);
+  }
+
+  const row = {
+    organization_id: input.organizationId,
+    name,
+    format,
+    scope,
+    config: input.config,
+    is_default: Boolean(input.isDefault)
+  };
+
+  const result = input.id && isUuid(input.id)
+    ? await supabase
+        .from("sales_document_templates")
+        .update(row)
+        .eq("id", input.id)
+        .eq("organization_id", input.organizationId)
+        .select("id, name, format, scope, config, is_default")
+        .single()
+    : await supabase
+        .from("sales_document_templates")
+        .insert({ ...row, created_by: user.id })
+        .select("id, name, format, scope, config, is_default")
+        .single();
+
+  if (result.error || !result.data) {
+    return { error: result.error?.message ?? "No se pudo guardar la plantilla." };
+  }
+
+  revalidatePath("/dashboard");
+  return { template: mapTemplateRow(result.data) };
+}
+
+export async function deleteSalesTemplate(organizationId: string, id: string): Promise<{ error?: string }> {
+  if (!isUuid(organizationId) || !isUuid(id)) return { error: "Datos inválidos." };
+
+  const { supabase } = await getAuthenticatedUser();
+  const { error } = await supabase
+    .from("sales_document_templates")
+    .delete()
+    .eq("id", id)
+    .eq("organization_id", organizationId);
+
+  if (error) return { error: error.message };
+
+  revalidatePath("/dashboard");
+  return {};
+}

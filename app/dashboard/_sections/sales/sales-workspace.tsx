@@ -41,13 +41,14 @@ import {
   getSalesDocumentLineDetails,
   getSalesDocumentNotes,
   getSalesDocumentStatusDetail,
+  listSalesTemplates,
   saveSalesConfigSection,
   softDeleteSalesDocument,
   updateContactClient,
   updateSalesDocumentNotes,
   updateSalesDocumentStatus
 } from "../../commercial-actions";
-import type { SalesConfigPayload, SalesDocumentKind, SalesDocumentStatusDetail, SalesQuoteLineDetail } from "../../commercial-actions";
+import type { SalesConfigPayload, SalesDocumentKind, SalesDocumentStatusDetail, SalesDocumentTemplate, SalesQuoteLineDetail } from "../../commercial-actions";
 import { artificialSalesDocuments } from "../../_data/artificial-business-data";
 import type { ArtificialContactListItem, SalesSectionId } from "../../_data/artificial-business-data";
 import type { ProductItem } from "../../_data/commercial-data";
@@ -2041,6 +2042,8 @@ function FormPreviewDialog({
   lines,
   organizationId,
   organizationName,
+  overrideConfig,
+  initialFormat = "pdf",
   row,
   onClose
 }: {
@@ -2048,16 +2051,19 @@ function FormPreviewDialog({
   lines: SalesQuoteLineDetail[];
   organizationId: string;
   organizationName: string;
+  overrideConfig?: Record<string, unknown> | null;
+  initialFormat?: SalesPrintFormat;
   row: SalesDocumentRow;
   onClose: () => void;
 }) {
   const [rawConfig, setRawConfig] = useState<Record<string, unknown> | null | undefined>(undefined);
-  const [format, setFormat] = useState<SalesPrintFormat>("pdf");
+  const [format, setFormat] = useState<SalesPrintFormat>(initialFormat);
   const [previewScale, setPreviewScale] = useState(0.62);
   const previewPanelRef = useRef<HTMLElement | null>(null);
   const documentLabel = salesPrintDocumentLabel(kind);
 
   useEffect(() => {
+    if (overrideConfig) return;
     let isMounted = true;
 
     void loadQuotesInitialData(organizationId)
@@ -2070,13 +2076,16 @@ function FormPreviewDialog({
     return () => {
       isMounted = false;
     };
-  }, [organizationId]);
+  }, [organizationId, overrideConfig]);
 
+  // Si hay una plantilla elegida en Ventas, se usa su config; si no, el perfil de Presupuestos.
   const config = useMemo(
-    () => rawConfig === undefined ? null : normalizeQuotesTemplateConfig(selectQuotesPrintConfig(rawConfig, format), organizationName),
-    [rawConfig, format, organizationName]
+    () => overrideConfig
+      ? normalizeQuotesTemplateConfig(overrideConfig, organizationName)
+      : rawConfig === undefined ? null : normalizeQuotesTemplateConfig(selectQuotesPrintConfig(rawConfig, format), organizationName),
+    [overrideConfig, rawConfig, format, organizationName]
   );
-  const isLoading = rawConfig === undefined;
+  const isLoading = overrideConfig ? false : rawConfig === undefined;
 
   useEffect(() => {
     const previewPanel = previewPanelRef.current;
@@ -2953,6 +2962,24 @@ function QuoteForm({
   const [quantityVisible, setQuantityVisible] = useState(true);
   const [ivaIncluded, setIvaIncluded] = useState(true);
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [salesTemplates, setSalesTemplates] = useState<SalesDocumentTemplate[]>([]);
+  const [selectedTemplateId, setSelectedTemplateId] = useState("");
+
+  useEffect(() => {
+    let mounted = true;
+    void listSalesTemplates(organizationId).then((result) => {
+      if (!mounted) return;
+      const salesScoped = result.templates.filter((item) => item.scope === "sales");
+      setSalesTemplates(salesScoped);
+      const byDefault = salesScoped.find((item) => item.isDefault);
+      if (byDefault) setSelectedTemplateId(byDefault.id);
+    });
+    return () => {
+      mounted = false;
+    };
+  }, [organizationId]);
+
+  const selectedTemplate = salesTemplates.find((item) => item.id === selectedTemplateId);
   const [pdfTemplate, setPdfTemplate] = useState("standard");
   const [customMessage, setCustomMessage] = useState("");
   const [internalNotes, setInternalNotes] = useState("");
@@ -3258,6 +3285,19 @@ function QuoteForm({
               <option value="tablamax">TABLAMAX con impuestos y suplido</option>
             </select>
           </label>
+          {salesTemplates.length > 0 ? (
+            <label className="sage-field">
+              <span>Plantilla de documento</span>
+              <select value={selectedTemplateId} onChange={(event) => setSelectedTemplateId(event.target.value)}>
+                <option value="">Por defecto</option>
+                {salesTemplates.map((tpl) => (
+                  <option key={tpl.id} value={tpl.id}>
+                    {tpl.name} ({tpl.format === "template" ? "Plantilla" : "PDF"})
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
           {clientCode ? (
             <label className="sage-field">
               <span>Codigo de cliente</span>
@@ -3380,6 +3420,8 @@ function QuoteForm({
       {previewOpen ? (
         <FormPreviewDialog
           kind={sectionDocumentKind(section.id) ?? "quote"}
+          overrideConfig={selectedTemplate?.config ?? null}
+          initialFormat={selectedTemplate?.format ?? "pdf"}
           lines={lines.map((line) => ({
             id: String(line.id),
             productOrService: line.product,

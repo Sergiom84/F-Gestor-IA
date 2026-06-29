@@ -5,6 +5,12 @@
 import "./quotes.css";
 
 import { Image as ImageIcon, Search, Settings, Trash2, X } from "lucide-react";
+import {
+  deleteSalesTemplate,
+  listSalesTemplates,
+  saveSalesTemplate,
+  type SalesDocumentTemplate
+} from "../../commercial-actions";
 import { type CSSProperties, type PointerEvent as ReactPointerEvent, useEffect, useId, useMemo, useRef, useState, useTransition } from "react";
 import {
   bulkUpsertQuoteDocuments,
@@ -1051,6 +1057,11 @@ export function QuotesWorkspace({ initialData }: { initialData: QuotesInitialDat
     () => initialData.config === null && !hasStoredAppConfig()
   );
   const [configDraft, setConfigDraft] = useState<AppConfig>(initialConfig);
+  const [salesTemplates, setSalesTemplates] = useState<SalesDocumentTemplate[]>([]);
+  const [templateName, setTemplateName] = useState("");
+  const [templateDefault, setTemplateDefault] = useState(false);
+  const [templateSaving, setTemplateSaving] = useState(false);
+  const [templateFeedback, setTemplateFeedback] = useState("");
   const importFileRef = useRef<HTMLInputElement>(null);
   const logoFileRef = useRef<HTMLInputElement>(null);
   const activeQuote = draftQuote ?? quotes.find((quote) => quote.id === activeQuoteId) ?? quotes[0]!;
@@ -1058,6 +1069,59 @@ export function QuotesWorkspace({ initialData }: { initialData: QuotesInitialDat
   const activeConfigFormat: ConfigFormat = configTab === "template" ? "template" : "pdf";
   const activeConfigDraft = resolveConfigProfile(configDraft, configScope, activeConfigFormat);
   const activeDocumentConfig = getDocumentConfig(activeQuote.documentType);
+
+  useEffect(() => {
+    if (!configDialogOpen) return;
+    let mounted = true;
+    void listSalesTemplates(organizationId).then((result) => {
+      if (mounted) setSalesTemplates(result.templates);
+    });
+    return () => {
+      mounted = false;
+    };
+  }, [configDialogOpen, organizationId]);
+
+  const handleSaveSalesTemplate = async () => {
+    const name = templateName.trim();
+    if (!name) {
+      setTemplateFeedback("Pon un nombre a la plantilla.");
+      return;
+    }
+    setTemplateSaving(true);
+    setTemplateFeedback("");
+    const result = await saveSalesTemplate({
+      organizationId,
+      name,
+      format: activeConfigFormat,
+      scope: configScope,
+      config: activeConfigDraft as unknown as Record<string, unknown>,
+      isDefault: templateDefault
+    });
+    setTemplateSaving(false);
+    if (result.error || !result.template) {
+      setTemplateFeedback(result.error ?? "No se pudo guardar la plantilla.");
+      return;
+    }
+    const saved = result.template;
+    setSalesTemplates((current) => {
+      const cleaned = templateDefault
+        ? current.map((item) => (item.scope === saved.scope ? { ...item, isDefault: false } : item))
+        : current;
+      return [...cleaned.filter((item) => item.id !== saved.id), saved];
+    });
+    setTemplateName("");
+    setTemplateDefault(false);
+    setTemplateFeedback(`Plantilla "${saved.name}" guardada.`);
+  };
+
+  const handleDeleteSalesTemplate = async (id: string) => {
+    const result = await deleteSalesTemplate(organizationId, id);
+    if (result.error) {
+      setTemplateFeedback(result.error);
+      return;
+    }
+    setSalesTemplates((current) => current.filter((item) => item.id !== id));
+  };
   const totals = useMemo(() => calculateTotals(activeQuote), [activeQuote]);
   const pdfTotals = useMemo(() => calculatePdfInvoiceTotals(activeQuote), [activeQuote]);
   const routeCount = (documentType: DocumentType, templateScope: TemplateScope, sourceKind: SalesTemplateDocumentKind) =>
@@ -2256,6 +2320,49 @@ export function QuotesWorkspace({ initialData }: { initialData: QuotesInitialDat
                 </div>
               </div>
             )}
+
+            {configTab !== "backup" ? (
+              <div className="config-template-save">
+                <h2>Guardar como plantilla</h2>
+                <p className="empty-helper-text">
+                  Guarda esta personalización ({configScope === "sales" ? "Ventas" : "Presupuestos"} · {activeConfigFormat === "template" ? "Plantilla" : "PDF"}) con un nombre para poder elegirla al crear documentos en Ventas.
+                </p>
+                <div className="config-template-save-row">
+                  <input
+                    placeholder="Nombre de la plantilla (p. ej. Ventas Azul)"
+                    value={templateName}
+                    onChange={(event) => setTemplateName(event.target.value)}
+                  />
+                  <label className="config-template-default">
+                    <input
+                      type="checkbox"
+                      checked={templateDefault}
+                      onChange={(event) => setTemplateDefault(event.target.checked)}
+                    />
+                    Por defecto
+                  </label>
+                  <button type="button" onClick={() => void handleSaveSalesTemplate()} disabled={templateSaving}>
+                    {templateSaving ? "Guardando..." : "Guardar plantilla"}
+                  </button>
+                </div>
+                {templateFeedback ? <p className="config-template-feedback">{templateFeedback}</p> : null}
+                {salesTemplates.length > 0 ? (
+                  <ul className="config-template-list">
+                    {salesTemplates.map((tpl) => (
+                      <li key={tpl.id}>
+                        <span className="config-template-name">{tpl.name}</span>
+                        <span className="config-template-badge">
+                          {tpl.scope === "sales" ? "Ventas" : "Presupuestos"} · {tpl.format === "template" ? "Plantilla" : "PDF"}{tpl.isDefault ? " · por defecto" : ""}
+                        </span>
+                        <button type="button" onClick={() => void handleDeleteSalesTemplate(tpl.id)} title="Eliminar plantilla">
+                          <Trash2 aria-hidden="true" size={15} />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+              </div>
+            ) : null}
 
             <div className="config-modal-actions">
               <button className="primary-action" type="button" onClick={saveAppConfig}>
