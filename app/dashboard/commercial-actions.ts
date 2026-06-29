@@ -233,10 +233,13 @@ export async function createContactClient(formData: FormData): Promise<{
   // El NIF-IVA intracomunitario se persiste aparte: la RPC no lo recibe y la
   // columna clients.vat_number es aditiva. Si falla (columna ausente) no rompe el alta.
   if (vatNumber) {
-    await supabase
+    const vatResult = await supabase
       .from("clients")
       .update({ vat_number: vatNumber })
       .eq("id", String(created.id));
+    if (vatResult.error) {
+      console.error("No se pudo guardar el NIF-IVA del cliente:", vatResult.error.message);
+    }
   }
 
   revalidatePath("/dashboard");
@@ -1004,7 +1007,7 @@ export async function createSalesQuote(formData: FormData): Promise<{ error?: st
     return { error: clientResult.error ?? "Selecciona o introduce un cliente." };
   }
 
-  const lines = parseSalesInvoiceLines(formData);
+  const lines = applyDocumentFiscalRules(parseSalesInvoiceLines(formData), "quote");
 
   if (lines.length === 0) {
     return { error: "Añade al menos una línea de producto o servicio." };
@@ -1013,7 +1016,7 @@ export async function createSalesQuote(formData: FormData): Promise<{ error?: st
   const quoteDateRaw = String(formData.get("quote_date") ?? "").trim();
   const { subtotalAmount, taxAmount, retentionAmount } = calculateSalesLinesTotals(lines);
   const retentionRate = subtotalAmount > 0 ? roundMoney(retentionAmount * 100 / subtotalAmount) : 0;
-  const suplidoAmount = Math.max(parseAmount(formData, "suplido_amount", 0), 0);
+  const suplidoAmount = 0;
   const totalAmount = roundMoney(subtotalAmount + taxAmount - retentionAmount + suplidoAmount);
   const numberResult = await supabase.rpc("next_document_number", {
     target_organization_id: organizationId,
@@ -1044,6 +1047,7 @@ export async function createSalesQuote(formData: FormData): Promise<{ error?: st
       retention_amount: retentionAmount,
       suplido_amount: suplidoAmount,
       pdf_template: String(formData.get("pdf_template") ?? "standard").trim() || "standard",
+      sales_document_template_id: salesTemplateIdFromForm(formData),
       total_amount: totalAmount,
       notes: [
         String(formData.get("notes") ?? "").trim() || null
@@ -1103,7 +1107,7 @@ export async function createSalesOrder(formData: FormData): Promise<{ error?: st
     return { error: clientResult.error ?? "Selecciona o introduce un cliente." };
   }
 
-  const lines = parseSalesInvoiceLines(formData);
+  const lines = applyDocumentFiscalRules(parseSalesInvoiceLines(formData), "order");
 
   if (lines.length === 0) {
     return { error: "Añade al menos una línea de producto o servicio." };
@@ -1112,7 +1116,7 @@ export async function createSalesOrder(formData: FormData): Promise<{ error?: st
   const orderDateRaw = String(formData.get("order_date") ?? "").trim();
   const { subtotalAmount, taxAmount, retentionAmount } = calculateSalesLinesTotals(lines);
   const retentionRate = subtotalAmount > 0 ? roundMoney(retentionAmount * 100 / subtotalAmount) : 0;
-  const suplidoAmount = Math.max(parseAmount(formData, "suplido_amount", 0), 0);
+  const suplidoAmount = 0;
   const totalAmount = roundMoney(subtotalAmount + taxAmount - retentionAmount + suplidoAmount);
   const numberResult = await supabase.rpc("next_document_number", {
     target_organization_id: organizationId,
@@ -1143,6 +1147,7 @@ export async function createSalesOrder(formData: FormData): Promise<{ error?: st
       retention_amount: retentionAmount,
       suplido_amount: suplidoAmount,
       pdf_template: String(formData.get("pdf_template") ?? "standard").trim() || "standard",
+      sales_document_template_id: salesTemplateIdFromForm(formData),
       total_amount: totalAmount,
       notes: [String(formData.get("notes") ?? "").trim() || null].filter(Boolean).join("\n"),
       created_by: user.id
@@ -1250,6 +1255,7 @@ export async function createSalesInvoice(formData: FormData): Promise<{ error?: 
       retention_amount: retentionAmount,
       suplido_amount: suplidoAmount,
       pdf_template: String(formData.get("pdf_template") ?? "standard").trim() || "standard",
+      sales_document_template_id: salesTemplateIdFromForm(formData),
       total_amount: totalAmount,
       notes: String(formData.get("notes") ?? "").trim() || null,
       created_by: user.id
@@ -1584,9 +1590,33 @@ function buildSalesLineRow(organizationId: string, line: SalesInvoiceLineInput, 
     quantity,
     unit_price: unitPrice,
     tax_rate: lineTaxRate(line),
+    retention_rate: lineRetentionRate(line),
     discount_rate: discountRate,
     line_total: roundMoney(gross - (gross * discountRate / 100))
   };
+}
+
+// Reglas fiscales aplicadas en servidor (no fiables solo desde la UI):
+// presupuesto sin IVA ni IRPF; IRPF/suplido solo en facturas (y recurrentes).
+function documentFiscalFlags(kind: SalesDocumentKind): { iva: boolean; retention: boolean; suplido: boolean } {
+  const retention = kind === "invoice" || kind === "recurring-invoice";
+  return { iva: kind !== "quote", retention, suplido: retention };
+}
+
+function applyDocumentFiscalRules(lines: SalesInvoiceLineInput[], kind: SalesDocumentKind): SalesInvoiceLineInput[] {
+  const flags = documentFiscalFlags(kind);
+  if (flags.iva && flags.retention) return lines;
+  return lines.map((line) => {
+    const next: SalesInvoiceLineInput = { ...line };
+    if (!flags.iva) next.taxRate = 0;
+    if (!flags.retention) next.retentionRate = 0;
+    return next;
+  });
+}
+
+function salesTemplateIdFromForm(formData: FormData): string | null {
+  const id = String(formData.get("document_template_id") ?? "").trim();
+  return isUuid(id) ? id : null;
 }
 
 export type SalesDocumentKind = "invoice" | "quote" | "order" | "delivery-note" | "recurring-invoice";
@@ -2317,7 +2347,7 @@ export async function createSalesDeliveryNote(formData: FormData): Promise<{ err
     return { error: clientResult.error ?? "Selecciona o introduce un cliente." };
   }
 
-  const lines = parseSalesInvoiceLines(formData);
+  const lines = applyDocumentFiscalRules(parseSalesInvoiceLines(formData), "delivery-note");
 
   if (lines.length === 0) {
     return { error: "Añade al menos una línea de producto o servicio." };
@@ -2326,7 +2356,7 @@ export async function createSalesDeliveryNote(formData: FormData): Promise<{ err
   const noteDateRaw = String(formData.get("note_date") ?? "").trim();
   const { subtotalAmount, taxAmount, retentionAmount } = calculateSalesLinesTotals(lines);
   const retentionRate = subtotalAmount > 0 ? roundMoney(retentionAmount * 100 / subtotalAmount) : 0;
-  const suplidoAmount = Math.max(parseAmount(formData, "suplido_amount", 0), 0);
+  const suplidoAmount = 0;
   const totalAmount = roundMoney(subtotalAmount + taxAmount - retentionAmount + suplidoAmount);
   const numberResult = await supabase.rpc("next_document_number", {
     target_organization_id: organizationId,
@@ -2357,6 +2387,7 @@ export async function createSalesDeliveryNote(formData: FormData): Promise<{ err
       retention_amount: retentionAmount,
       suplido_amount: suplidoAmount,
       pdf_template: String(formData.get("pdf_template") ?? "standard").trim() || "standard",
+      sales_document_template_id: salesTemplateIdFromForm(formData),
       total_amount: totalAmount,
       notes: [String(formData.get("notes") ?? "").trim() || null].filter(Boolean).join("\n"),
       created_by: user.id
@@ -2455,6 +2486,7 @@ export async function createSalesRecurringInvoice(formData: FormData): Promise<{
       retention_amount: retentionAmount,
       suplido_amount: suplidoAmount,
       pdf_template: String(formData.get("pdf_template") ?? "standard").trim() || "standard",
+      sales_document_template_id: salesTemplateIdFromForm(formData),
       total_amount: totalAmount,
       notes: [String(formData.get("notes") ?? "").trim() || null].filter(Boolean).join("\n"),
       created_by: user.id

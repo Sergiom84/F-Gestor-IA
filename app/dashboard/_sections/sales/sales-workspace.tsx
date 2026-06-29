@@ -133,6 +133,8 @@ type SalesDocumentRow = {
   retentionAmount?: number;
   suplidoAmount?: number;
   total: number;
+  templateConfig?: Record<string, unknown> | null;
+  templateFormat?: SalesPrintFormat;
 };
 
 type QuoteLine = {
@@ -870,6 +872,8 @@ export function SalesWorkspace({ clients, fiscalEntities, organizationId, organi
           kind={activeKind}
           organizationId={organizationId}
           organizationName={organizationName}
+          overrideConfig={postCreateRow.templateConfig ?? null}
+          initialFormat={postCreateRow.templateFormat ?? "pdf"}
           row={postCreateRow}
           onClose={() => setPostCreateRow(null)}
         />
@@ -1906,17 +1910,21 @@ function PostCreatePreviewDialog({
   kind,
   organizationId,
   organizationName,
+  overrideConfig,
+  initialFormat = "pdf",
   row,
   onClose
 }: {
   kind: SalesDocumentKind;
   organizationId: string;
   organizationName: string;
+  overrideConfig?: Record<string, unknown> | null;
+  initialFormat?: SalesPrintFormat;
   row: SalesDocumentRow;
   onClose: () => void;
 }) {
   const [rawConfig, setRawConfig] = useState<Record<string, unknown> | null | undefined>(undefined);
-  const [format, setFormat] = useState<SalesPrintFormat>("pdf");
+  const [format, setFormat] = useState<SalesPrintFormat>(initialFormat);
   const [lines, setLines] = useState<SalesQuoteLineDetail[]>([]);
   const [linesLoaded, setLinesLoaded] = useState(false);
   const [previewScale, setPreviewScale] = useState(0.62);
@@ -1927,7 +1935,7 @@ function PostCreatePreviewDialog({
     let isMounted = true;
 
     void Promise.all([
-      loadQuotesInitialData(organizationId).catch(() => ({ config: null })),
+      overrideConfig ? Promise.resolve({ config: null }) : loadQuotesInitialData(organizationId).catch(() => ({ config: null })),
       getSalesDocumentLineDetails(kind, row.id)
     ]).then(([initialData, lineResult]) => {
       if (!isMounted) return;
@@ -1939,13 +1947,16 @@ function PostCreatePreviewDialog({
     return () => {
       isMounted = false;
     };
-  }, [kind, row.id, organizationId]);
+  }, [kind, row.id, organizationId, overrideConfig]);
 
+  // Si la factura se creo con una plantilla nombrada, el preview usa su config.
   const config = useMemo(
-    () => rawConfig === undefined ? null : normalizeQuotesTemplateConfig(selectQuotesPrintConfig(rawConfig, format), organizationName),
-    [rawConfig, format, organizationName]
+    () => overrideConfig
+      ? normalizeQuotesTemplateConfig(overrideConfig, organizationName)
+      : rawConfig === undefined ? null : normalizeQuotesTemplateConfig(selectQuotesPrintConfig(rawConfig, format), organizationName),
+    [overrideConfig, rawConfig, format, organizationName]
   );
-  const isLoading = rawConfig === undefined || !linesLoaded;
+  const isLoading = (overrideConfig ? false : rawConfig === undefined) || !linesLoaded;
 
   useEffect(() => {
     const previewPanel = previewPanelRef.current;
@@ -3166,6 +3177,7 @@ function QuoteForm({
     formData.set("retention_amount", String(retentionTotal));
     formData.set("suplido_amount", String(effectiveSuplido));
     formData.set("pdf_template", pdfTemplate);
+    formData.set("document_template_id", selectedTemplateId);
     formData.set("notes", [customMessage, internalNotes].filter(Boolean).join("\n\n"));
     // Persistimos las lineas con los valores efectivos segun el tipo de documento.
     const linesToPersist = lines.map((line) => ({
@@ -3230,7 +3242,9 @@ function QuoteForm({
         retentionRate: effectiveRetentionRate,
         retentionAmount: retentionTotal,
         suplidoAmount: effectiveSuplido,
-        total: persisted.total
+        total: persisted.total,
+        templateConfig: selectedTemplate?.config ?? null,
+        templateFormat: selectedTemplate?.format ?? "pdf"
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : `No se pudo crear ${docLabel}.`;

@@ -237,16 +237,23 @@ const parseJsonIfString = <T,>(value: unknown): T | null => {
   }
 };
 
-const quoteToDbRow = (quote: Quote) => ({
-  id: quote.id,
-  document_type: quote.documentType,
-  quote_number: quote.quoteNumber || null,
-  client_name: quote.clientName || null,
-  date: quote.date || null,
-  due_date: quote.dueDate || null,
-  total_amount: 0,
-  payload: quote as unknown as Record<string, unknown>
-});
+const quoteToDbRow = (quote: Quote) => {
+  // El total real depende del tipo: las plantillas usan el neto con suplido.
+  const total = isTemplateDocument(quote.documentType)
+    ? calculatePdfInvoiceTotals(quote).netTotal
+    : calculateTotals(quote).total;
+
+  return {
+    id: quote.id,
+    document_type: quote.documentType,
+    quote_number: quote.quoteNumber || null,
+    client_name: quote.clientName || null,
+    date: quote.date || null,
+    due_date: quote.dueDate || null,
+    total_amount: Math.round((total + Number.EPSILON) * 100) / 100,
+    payload: quote as unknown as Record<string, unknown>
+  };
+};
 
 const STORAGE_KEY = "documents-quotes";
 const CONFIG_STORAGE_KEY = "documents-config";
