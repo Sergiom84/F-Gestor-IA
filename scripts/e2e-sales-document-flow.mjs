@@ -17,6 +17,10 @@ const fixtures = {
   productName: `Producto E2E ${stamp}`,
   serviceName: `Servicio E2E ${stamp}`
 };
+const runState = {
+  createdUserId: null,
+  organizationId: null
+};
 
 if (args.createUser) {
   await createConfirmedUser();
@@ -37,6 +41,7 @@ const context = await browser.newContext({
 });
 const page = await context.newPage();
 const report = { runId, baseUrl: args.baseUrl, email: args.email, fixtures, passes: [], screenshots: [] };
+let fatalError = null;
 
 try {
   await login(page);
@@ -45,16 +50,18 @@ try {
   await createProductOrService(page, "service", fixtures.serviceName);
   await createSalesDocument(page, "quotes", "Presupuesto de venta");
   await createSalesDocument(page, "invoices", "Factura de venta");
-
-  await writeReport();
-  console.log(`Sales document E2E OK. Artifacts: ${outputDir}`);
 } catch (error) {
+  fatalError = error;
   await screenshot(page, "fatal-error").catch(() => {});
-  await writeReport(error);
   console.error(error instanceof Error ? error.stack ?? error.message : String(error));
   process.exitCode = 1;
 } finally {
   if (!args.keepOpen) await browser.close();
+  report.cleanup = await cleanupFixture();
+  await writeReport(fatalError);
+  if (!fatalError && report.cleanup.errors.length === 0) {
+    console.log(`Sales document E2E OK. Artifacts: ${outputDir}`);
+  }
 }
 
 async function login(page) {
@@ -84,6 +91,7 @@ async function ensureWorkspace(page) {
   }
 
   await page.locator("main").waitFor({ timeout: args.timeout });
+  rememberOrganizationFromUrl(page.url());
 }
 
 async function createClientContact(page) {
@@ -155,24 +163,12 @@ async function ensureDocumentLine(form) {
 }
 
 async function createConfirmedUser() {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? process.env.SUPABASE_URL;
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-  if (!supabaseUrl || !serviceRoleKey) {
-    console.error("--create-user requires SUPABASE_URL/NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.");
-    process.exit(2);
-  }
+  const admin = createAdminClient("--create-user");
 
   args.email ||= `gfiscal-e2e-sales-${Date.now()}@example.com`;
   args.password ||= `Gfiscal-${Date.now()}!Aa`;
 
-  const admin = createSupabaseClient(supabaseUrl, serviceRoleKey, {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false
-    }
-  });
-  const { error } = await admin.auth.admin.createUser({
+  const { data, error } = await admin.auth.admin.createUser({
     email: args.email,
     password: args.password,
     email_confirm: true,
@@ -184,7 +180,129 @@ async function createConfirmedUser() {
     process.exit(2);
   }
 
+  runState.createdUserId = data.user?.id ?? null;
   console.log(`Created confirmed E2E user ${args.email}`);
+}
+
+async function cleanupFixture() {
+  const cleanup = {
+    requested: args.cleanup,
+    skippedReason: null,
+    organizationId: runState.organizationId,
+    userId: runState.createdUserId,
+    deletedOrganization: false,
+    deletedUser: false,
+    errors: []
+  };
+
+  if (!args.cleanup) {
+    return cleanup;
+  }
+
+  if (!args.createUser) {
+    cleanup.skippedReason = "--cleanup solo se ejecuta con usuarios creados por --create-user.";
+    console.log(`[SKIP] [cleanup] ${cleanup.skippedReason}`);
+    return cleanup;
+  }
+
+  if (args.keepOpen) {
+    cleanup.skippedReason = "--cleanup se omite con --keep-open para no invalidar la sesión abierta.";
+    console.log(`[SKIP] [cleanup] ${cleanup.skippedReason}`);
+    return cleanup;
+  }
+
+  if (!runState.createdUserId) {
+    cleanup.errors.push("No hay id de usuario temporal para limpiar.");
+    process.exitCode = 1;
+    return cleanup;
+  }
+
+  const admin = createAdminClient("--cleanup");
+  let organizationId = runState.organizationId;
+  if (!organizationId) {
+    try {
+      organizationId = await findCreatedOrganizationId(admin, runState.createdUserId);
+    } catch (error) {
+      cleanup.errors.push(error instanceof Error ? error.message : String(error));
+    }
+  }
+  cleanup.organizationId = organizationId;
+  cleanup.userId = runState.createdUserId;
+
+  if (organizationId) {
+    const deleteOrganization = await admin
+      .from("organizations")
+      .delete()
+      .eq("id", organizationId)
+      .select("id")
+      .maybeSingle();
+
+    if (deleteOrganization.error) {
+      cleanup.errors.push(`No se pudo borrar la organización temporal: ${deleteOrganization.error.message}`);
+    } else {
+      cleanup.deletedOrganization = Boolean(deleteOrganization.data?.id);
+    }
+  } else {
+    cleanup.skippedReason = "No se encontró organización temporal asociada al usuario.";
+  }
+
+  const deleteUser = await admin.auth.admin.deleteUser(runState.createdUserId, false);
+  if (deleteUser.error) {
+    cleanup.errors.push(`No se pudo borrar el usuario temporal: ${deleteUser.error.message}`);
+  } else {
+    cleanup.deletedUser = true;
+  }
+
+  if (cleanup.errors.length > 0) {
+    for (const error of cleanup.errors) {
+      console.error(`[ERROR] [cleanup] ${error}`);
+    }
+    process.exitCode = 1;
+  } else {
+    console.log(`[OK] [cleanup] Removed temporary user${organizationId ? " and organization" : ""}`);
+  }
+
+  return cleanup;
+}
+
+async function findCreatedOrganizationId(admin, userId) {
+  const { data, error } = await admin
+    .from("organization_members")
+    .select("organization_id")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`No se pudo localizar la organización temporal: ${error.message}`);
+  }
+
+  return data?.organization_id ?? null;
+}
+
+function createAdminClient(reason) {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? process.env.SUPABASE_URL;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!supabaseUrl || !serviceRoleKey) {
+    console.error(`${reason} requires SUPABASE_URL/NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.`);
+    process.exit(2);
+  }
+
+  return createSupabaseClient(supabaseUrl, serviceRoleKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false
+    }
+  });
+}
+
+function rememberOrganizationFromUrl(currentUrl) {
+  const organizationId = new URL(currentUrl).searchParams.get("org");
+  if (organizationId) {
+    runState.organizationId = organizationId;
+  }
 }
 
 async function goto(page, pathname) {
@@ -299,6 +417,7 @@ function parseArgs(argv) {
     headless: process.env.HEADLESS !== "false",
     keepOpen: process.env.npm_config_keep_open === "true",
     createUser: process.env.npm_config_create_user === "true",
+    cleanup: process.env.npm_config_cleanup === "true",
     slowMo: Number(process.env.GFISCAL_E2E_SLOW_MO ?? process.env.npm_config_slow_mo ?? 0),
     timeout: Number(process.env.GFISCAL_E2E_TIMEOUT_MS ?? process.env.npm_config_timeout ?? 20000),
     settleMs: Number(process.env.GFISCAL_E2E_SETTLE_MS ?? process.env.npm_config_settle_ms ?? 350)
@@ -312,6 +431,7 @@ function parseArgs(argv) {
     else if (arg === "--headless") parsed.headless = true;
     else if (arg === "--keep-open") parsed.keepOpen = true;
     else if (arg === "--create-user") parsed.createUser = true;
+    else if (arg === "--cleanup") parsed.cleanup = true;
     else if (arg.startsWith("--base-url=")) parsed.baseUrl = arg.slice("--base-url=".length);
     else if (arg.startsWith("--email=")) parsed.email = arg.slice("--email=".length);
     else if (arg.startsWith("--password=")) parsed.password = arg.slice("--password=".length);
