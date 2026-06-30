@@ -20,12 +20,13 @@
     "supabase:validate-local": "tsx src/tools/supabase-local-validate.ts",
     "smoke:mvp-remote": "tsx src/tools/smoke-mvp-remote.ts",
     "e2e:user-feedback": "node scripts/e2e-user-feedback.mjs",
+    "e2e:sales-flow": "node scripts/e2e-sales-document-flow.mjs",
     "ci:static": "npm run typecheck && npm test && npm run build",
     "ci:supabase-local": "npm run supabase:validate-local",
     "ci:full": "npm run ci:static && npm run ci:supabase-local",
     "db:test": "npx supabase test db --local",
     "test": "npm run test:unit",
-    "test:unit": "node --import tsx --test src/lib/documents/storage-path.test.ts src/lib/supabase/config.test.ts src/workers/document-worker/ai/processor.test.ts src/workers/document-worker/processor.test.ts src/workers/document-worker/regulatory/regulatory-ledger.test.ts src/workers/document-worker/repository.test.ts src/workers/document-worker/review/invoice-review.test.ts src/tools/supabase-local-validate.test.ts src/tools/sales-line-retention-migration.test.ts",
+    "test:unit": "node --import tsx --test src/lib/documents/storage-path.test.ts src/lib/supabase/config.test.ts src/workers/document-worker/ai/processor.test.ts src/workers/document-worker/processor.test.ts src/workers/document-worker/regulatory/regulatory-ledger.test.ts src/workers/document-worker/repository.test.ts src/workers/document-worker/review/invoice-review.test.ts src/tools/supabase-local-validate.test.ts src/tools/sales-line-retention-migration.test.ts src/tools/sales-document-transaction-migration.test.ts",
     "test:regulatory": "node --import tsx --test src/workers/document-worker/regulatory/regulatory-ledger.test.ts"
   },
   "dependencies": {

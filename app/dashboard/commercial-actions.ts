@@ -1020,70 +1020,37 @@ export async function createSalesQuote(formData: FormData): Promise<{ error?: st
   const retentionRate = subtotalAmount > 0 ? roundMoney(retentionAmount * 100 / subtotalAmount) : 0;
   const suplidoAmount = 0;
   const totalAmount = roundMoney(subtotalAmount + taxAmount - retentionAmount + suplidoAmount);
-  const numberResult = await supabase.rpc("next_document_number", {
-    target_organization_id: organizationId,
-    target_doc_type: "sales_quote",
-    target_prefix: String(formData.get("number_prefix") ?? "").trim() || null
+  const created = await createSalesDocumentTransaction(supabase, {
+    kind: "quote",
+    organizationId,
+    fiscalEntityId: fiscalEntity.id,
+    clientId: clientResult.id,
+    documentDate: quoteDateRaw || null,
+    numberPrefix: String(formData.get("number_prefix") ?? "").trim() || null,
+    reference: String(formData.get("reference") ?? "").trim() || null,
+    status: "open",
+    subtotalAmount,
+    taxAmount,
+    retentionRate,
+    retentionAmount,
+    suplidoAmount,
+    pdfTemplate: String(formData.get("pdf_template") ?? "standard").trim() || "standard",
+    templateId,
+    totalAmount,
+    notes: String(formData.get("notes") ?? "").trim() || null,
+    createdBy: user.id,
+    lines: lines.map((line, index) => buildSalesLineRow(organizationId, line, index))
   });
 
-  if (numberResult.error || !numberResult.data) {
-    return { error: numberResult.error?.message ?? "No se pudo asignar numero de presupuesto." };
-  }
-
-  const quoteNumber = String(numberResult.data);
-
-  const { data, error } = await supabase
-    .from("sales_quotes")
-    .insert({
-      organization_id: organizationId,
-      fiscal_entity_id: fiscalEntity.id,
-      client_id: clientResult.id,
-      quote_number: quoteNumber,
-      quote_date: quoteDateRaw || null,
-      reference: String(formData.get("reference") ?? "").trim() || null,
-      currency: "EUR",
-      status: "open",
-      subtotal_amount: subtotalAmount,
-      tax_amount: taxAmount,
-      retention_rate: retentionRate,
-      retention_amount: retentionAmount,
-      suplido_amount: suplidoAmount,
-      pdf_template: String(formData.get("pdf_template") ?? "standard").trim() || "standard",
-      sales_document_template_id: templateId,
-      total_amount: totalAmount,
-      notes: [
-        String(formData.get("notes") ?? "").trim() || null
-      ].filter(Boolean).join("\n"),
-      created_by: user.id
-    })
-    .select("id, quote_number")
-    .single();
-
-  if (error || !data) {
-    return { error: error.message };
-  }
-
-  const quoteLinesResult = await supabase
-    .from("sales_quote_lines")
-    .insert(lines.map((line, index) => ({
-      ...buildSalesLineRow(organizationId, line, index),
-      sales_quote_id: data.id
-    })));
-
-  if (quoteLinesResult.error) {
-    await supabase
-      .from("sales_quotes")
-      .update({ deleted_at: new Date().toISOString() })
-      .eq("id", data.id);
-
-    return { error: quoteLinesResult.error.message };
+  if (created.error || !created.document) {
+    return { error: created.error ?? "No se pudo crear el presupuesto." };
   }
 
   revalidatePath("/dashboard");
   return {
     quote: {
-      id: data.id as string,
-      number: String(data.quote_number ?? quoteNumber),
+      id: created.document.id,
+      number: created.document.number,
       total: totalAmount
     }
   };
@@ -1122,68 +1089,37 @@ export async function createSalesOrder(formData: FormData): Promise<{ error?: st
   const retentionRate = subtotalAmount > 0 ? roundMoney(retentionAmount * 100 / subtotalAmount) : 0;
   const suplidoAmount = 0;
   const totalAmount = roundMoney(subtotalAmount + taxAmount - retentionAmount + suplidoAmount);
-  const numberResult = await supabase.rpc("next_document_number", {
-    target_organization_id: organizationId,
-    target_doc_type: "sales_order",
-    target_prefix: String(formData.get("number_prefix") ?? "").trim() || null
+  const created = await createSalesDocumentTransaction(supabase, {
+    kind: "order",
+    organizationId,
+    fiscalEntityId: fiscalEntity.id,
+    clientId: clientResult.id,
+    documentDate: orderDateRaw || null,
+    numberPrefix: String(formData.get("number_prefix") ?? "").trim() || null,
+    reference: String(formData.get("reference") ?? "").trim() || null,
+    status: "open",
+    subtotalAmount,
+    taxAmount,
+    retentionRate,
+    retentionAmount,
+    suplidoAmount,
+    pdfTemplate: String(formData.get("pdf_template") ?? "standard").trim() || "standard",
+    templateId,
+    totalAmount,
+    notes: String(formData.get("notes") ?? "").trim() || null,
+    createdBy: user.id,
+    lines: lines.map((line, index) => buildSalesLineRow(organizationId, line, index))
   });
 
-  if (numberResult.error || !numberResult.data) {
-    return { error: numberResult.error?.message ?? "No se pudo asignar numero de pedido." };
-  }
-
-  const orderNumber = String(numberResult.data);
-
-  const { data, error } = await supabase
-    .from("sales_orders")
-    .insert({
-      organization_id: organizationId,
-      fiscal_entity_id: fiscalEntity.id,
-      client_id: clientResult.id,
-      order_number: orderNumber,
-      order_date: orderDateRaw || null,
-      reference: String(formData.get("reference") ?? "").trim() || null,
-      currency: "EUR",
-      status: "open",
-      subtotal_amount: subtotalAmount,
-      tax_amount: taxAmount,
-      retention_rate: retentionRate,
-      retention_amount: retentionAmount,
-      suplido_amount: suplidoAmount,
-      pdf_template: String(formData.get("pdf_template") ?? "standard").trim() || "standard",
-      sales_document_template_id: templateId,
-      total_amount: totalAmount,
-      notes: [String(formData.get("notes") ?? "").trim() || null].filter(Boolean).join("\n"),
-      created_by: user.id
-    })
-    .select("id, order_number")
-    .single();
-
-  if (error || !data) {
-    return { error: error?.message ?? "No se pudo crear el pedido." };
-  }
-
-  const orderLinesResult = await supabase
-    .from("sales_order_lines")
-    .insert(lines.map((line, index) => ({
-      ...buildSalesLineRow(organizationId, line, index),
-      sales_order_id: data.id
-    })));
-
-  if (orderLinesResult.error) {
-    await supabase
-      .from("sales_orders")
-      .update({ deleted_at: new Date().toISOString() })
-      .eq("id", data.id);
-
-    return { error: orderLinesResult.error.message };
+  if (created.error || !created.document) {
+    return { error: created.error ?? "No se pudo crear el pedido." };
   }
 
   revalidatePath("/dashboard");
   return {
     order: {
-      id: data.id as string,
-      number: String(data.order_number ?? orderNumber),
+      id: created.document.id,
+      number: created.document.number,
       total: totalAmount
     }
   };
@@ -1232,76 +1168,37 @@ export async function createSalesInvoice(formData: FormData): Promise<{ error?: 
   const retentionRate = subtotalAmount > 0 ? roundMoney(retentionAmount * 100 / subtotalAmount) : 0;
   const suplidoAmount = Math.max(parseAmount(formData, "suplido_amount", 0), 0);
   const totalAmount = roundMoney(subtotalAmount + taxAmount - retentionAmount + suplidoAmount);
-  const numberResult = await supabase.rpc("next_document_number", {
-    target_organization_id: organizationId,
-    target_doc_type: "sales_invoice",
-    target_prefix: String(formData.get("number_prefix") ?? "").trim() || null
+  const created = await createSalesDocumentTransaction(supabase, {
+    kind: "invoice",
+    organizationId,
+    fiscalEntityId: fiscalEntity.id,
+    clientId: clientResult.id,
+    documentDate: String(formData.get("issue_date") ?? "").trim() || null,
+    numberPrefix: String(formData.get("number_prefix") ?? "").trim() || null,
+    reference: String(formData.get("reference") ?? "").trim() || null,
+    status: "draft",
+    subtotalAmount,
+    taxAmount,
+    retentionRate,
+    retentionAmount,
+    suplidoAmount,
+    pdfTemplate: String(formData.get("pdf_template") ?? "standard").trim() || "standard",
+    templateId,
+    totalAmount,
+    notes: String(formData.get("notes") ?? "").trim() || null,
+    createdBy: user.id,
+    lines: lines.map((line, index) => buildSalesLineRow(organizationId, line, index))
   });
 
-  if (numberResult.error || !numberResult.data) {
-    return { error: numberResult.error?.message ?? "No se pudo asignar numero de factura." };
-  }
-
-  const invoiceNumber = String(numberResult.data);
-
-  const { data: invoice, error: invoiceInsertError } = await supabase
-    .from("sales_invoices")
-    .insert({
-      organization_id: organizationId,
-      fiscal_entity_id: fiscalEntity.id,
-      client_id: clientResult.id,
-      invoice_number: invoiceNumber,
-      reference: String(formData.get("reference") ?? "").trim() || null,
-      issue_date: String(formData.get("issue_date") ?? "").trim() || null,
-      currency: "EUR",
-      status: "draft",
-      subtotal_amount: subtotalAmount,
-      tax_amount: taxAmount,
-      retention_rate: retentionRate,
-      retention_amount: retentionAmount,
-      suplido_amount: suplidoAmount,
-      pdf_template: String(formData.get("pdf_template") ?? "standard").trim() || "standard",
-      sales_document_template_id: templateId,
-      total_amount: totalAmount,
-      notes: String(formData.get("notes") ?? "").trim() || null,
-      created_by: user.id
-    })
-    .select("id, invoice_number")
-    .single();
-
-  if (invoiceInsertError || !invoice) {
-    return { error: invoiceInsertError?.message ?? "No se pudo crear la factura." };
-  }
-
-  const lineRows = lines.map((line, index) => ({
-    ...buildSalesLineRow(organizationId, line, index),
-    sales_invoice_id: invoice.id
-  }));
-
-  let linesResult = await supabase
-    .from("sales_invoice_lines")
-    .insert(lineRows);
-
-  if (linesResult.error) {
-    linesResult = await supabase
-      .from("sales_invoice_lines")
-      .insert(lineRows.map(({ product_service_id, ...line }) => line));
-  }
-
-  if (linesResult.error) {
-    await supabase
-      .from("sales_invoices")
-      .update({ deleted_at: new Date().toISOString() })
-      .eq("id", invoice.id);
-
-    return { error: linesResult.error.message };
+  if (created.error || !created.document) {
+    return { error: created.error ?? "No se pudo crear la factura." };
   }
 
   revalidatePath("/dashboard");
   return {
     invoice: {
-      id: invoice.id as string,
-      number: String(invoice.invoice_number ?? invoiceNumber),
+      id: created.document.id,
+      number: created.document.number,
       total: totalAmount
     }
   };
@@ -1618,6 +1515,95 @@ async function resolveSalesTemplateId(
 }
 
 export type SalesDocumentKind = "invoice" | "quote" | "order" | "delivery-note" | "recurring-invoice";
+
+type SalesDocumentRpcRow = {
+  document_id?: unknown;
+  document_number?: unknown;
+  document_date?: unknown;
+  client_name?: unknown;
+  total_amount?: unknown;
+  status?: unknown;
+};
+
+function salesDocumentRpcRow(data: unknown): SalesDocumentRpcRow | null {
+  const row = Array.isArray(data) ? data[0] : data;
+  return row && typeof row === "object" ? row as SalesDocumentRpcRow : null;
+}
+
+async function createSalesDocumentTransaction(
+  supabase: Awaited<ReturnType<typeof getAuthenticatedUser>>["supabase"],
+  input: {
+    kind: SalesDocumentKind;
+    organizationId: string;
+    fiscalEntityId: string;
+    clientId: string;
+    documentDate: string | null;
+    numberPrefix: string | null;
+    reference: string | null;
+    status: string;
+    subtotalAmount: number;
+    taxAmount: number;
+    retentionRate: number;
+    retentionAmount: number;
+    suplidoAmount: number;
+    pdfTemplate: string;
+    templateId: string | null;
+    totalAmount: number;
+    notes: string | null;
+    frequency?: string | null;
+    createdBy: string;
+    lines: Array<Record<string, unknown>>;
+  }
+): Promise<{
+  error?: string;
+  document?: { id: string; number: string; date: string; client: string; total: number; status: string };
+}> {
+  const { data, error } = await supabase.rpc("create_sales_document", {
+    p_client_id: input.clientId,
+    p_created_by: input.createdBy,
+    p_currency: "EUR",
+    p_document_date: input.documentDate,
+    p_fiscal_entity_id: input.fiscalEntityId,
+    p_frequency: input.frequency ?? null,
+    p_kind: input.kind,
+    p_lines: input.lines,
+    p_notes: input.notes,
+    p_number_prefix: input.numberPrefix,
+    p_organization_id: input.organizationId,
+    p_pdf_template: input.pdfTemplate,
+    p_reference: input.reference,
+    p_retention_amount: input.retentionAmount,
+    p_retention_rate: input.retentionRate,
+    p_sales_document_template_id: input.templateId,
+    p_status: input.status,
+    p_subtotal_amount: input.subtotalAmount,
+    p_suplido_amount: input.suplidoAmount,
+    p_tax_amount: input.taxAmount,
+    p_total_amount: input.totalAmount
+  });
+
+  if (error) {
+    return { error: error.message };
+  }
+
+  const row = salesDocumentRpcRow(data);
+  const id = row?.document_id;
+
+  if (typeof id !== "string") {
+    return { error: "No se pudo confirmar la creación del documento." };
+  }
+
+  return {
+    document: {
+      id,
+      number: String(row?.document_number ?? ""),
+      date: String(row?.document_date ?? ""),
+      client: String(row?.client_name ?? "—"),
+      total: Number(row?.total_amount ?? input.totalAmount),
+      status: String(row?.status ?? input.status)
+    }
+  };
+}
 export type SalesDocumentStatusDetail = {
   currentStatus: string;
   createdAt: string | null;
@@ -1949,428 +1935,34 @@ export async function duplicateSalesDocument(
   }
 
   const { supabase, user } = await getAuthenticatedUser();
+  const { data, error } = await supabase.rpc("duplicate_sales_document", {
+    p_created_by: user.id,
+    p_document_id: documentId,
+    p_kind: kind
+  });
 
-  if (kind === "quote") {
-    const { data: original, error: readError } = await supabase
-      .from("sales_quotes")
-      .select("organization_id, fiscal_entity_id, client_id, quote_number, quote_date, currency, reference, subtotal_amount, tax_amount, retention_rate, retention_amount, suplido_amount, pdf_template, sales_document_template_id, total_amount, notes, clients!client_id(name, code)")
-      .eq("id", documentId)
-      .single();
-
-    if (readError || !original) {
-      return { error: readError?.message ?? "Presupuesto no encontrado." };
-    }
-
-    const copyNumberResult = await supabase.rpc("next_document_number", {
-      target_organization_id: original.organization_id,
-      target_doc_type: "sales_quote",
-      target_prefix: null
-    });
-
-    if (copyNumberResult.error || !copyNumberResult.data) {
-      return { error: copyNumberResult.error?.message ?? "No se pudo asignar numero al duplicado." };
-    }
-
-    const copyNumber = String(copyNumberResult.data);
-    const { data: copy, error: insertError } = await supabase
-      .from("sales_quotes")
-      .insert({
-        organization_id: original.organization_id,
-        fiscal_entity_id: original.fiscal_entity_id,
-        client_id: original.client_id,
-        quote_number: copyNumber,
-        quote_date: original.quote_date,
-        reference: original.reference,
-        currency: original.currency,
-        status: "draft",
-        subtotal_amount: original.subtotal_amount,
-        tax_amount: original.tax_amount,
-        retention_rate: original.retention_rate,
-        retention_amount: original.retention_amount,
-        suplido_amount: original.suplido_amount,
-        pdf_template: original.pdf_template,
-        sales_document_template_id: original.sales_document_template_id,
-        total_amount: original.total_amount,
-        notes: original.notes,
-        created_by: user.id
-      })
-      .select("id, quote_number, quote_date, total_amount")
-      .single();
-
-    if (insertError || !copy) {
-      return { error: insertError?.message ?? "No se pudo duplicar el presupuesto." };
-    }
-
-    const { data: originalLines, error: linesReadError } = await supabase
-      .from("sales_quote_lines")
-      .select("organization_id, product_service_id, line_index, description, quantity, unit_price, tax_rate, retention_rate, discount_rate, line_total")
-      .eq("sales_quote_id", documentId)
-      .order("line_index", { ascending: true });
-
-    if (linesReadError || !originalLines || originalLines.length === 0) {
-      await supabase.from("sales_quotes").update({ deleted_at: new Date().toISOString() }).eq("id", copy.id);
-      return { error: linesReadError?.message ?? "El presupuesto original no tiene líneas para duplicar." };
-    }
-
-    const { error: linesError } = await supabase
-      .from("sales_quote_lines")
-      .insert(originalLines.map((line) => ({ ...line, sales_quote_id: copy.id })));
-
-    if (linesError) {
-      await supabase.from("sales_quotes").update({ deleted_at: new Date().toISOString() }).eq("id", copy.id);
-      return { error: `No se pudieron copiar las líneas: ${linesError.message}` };
-    }
-
-    revalidatePath("/dashboard");
-    return {
-      document: {
-        id: copy.id as string,
-        number: String(copy.quote_number ?? copyNumber),
-        date: String(copy.quote_date ?? ""),
-        client: (original.clients as { name?: string } | null)?.name ?? "—",
-        total: Number(copy.total_amount),
-        status: "draft"
-      }
-    };
+  if (error) {
+    return { error: error.message };
   }
 
-  if (kind === "order") {
-    const { data: original, error: readError } = await supabase
-      .from("sales_orders")
-      .select("organization_id, fiscal_entity_id, client_id, order_number, order_date, currency, reference, subtotal_amount, tax_amount, retention_rate, retention_amount, suplido_amount, pdf_template, sales_document_template_id, total_amount, notes, clients!client_id(name, code)")
-      .eq("id", documentId)
-      .single();
+  const row = salesDocumentRpcRow(data);
+  const id = row?.document_id;
 
-    if (readError || !original) {
-      return { error: readError?.message ?? "Pedido no encontrado." };
-    }
-
-    const copyNumberResult = await supabase.rpc("next_document_number", {
-      target_organization_id: original.organization_id,
-      target_doc_type: "sales_order",
-      target_prefix: null
-    });
-
-    if (copyNumberResult.error || !copyNumberResult.data) {
-      return { error: copyNumberResult.error?.message ?? "No se pudo asignar numero al duplicado." };
-    }
-
-    const copyNumber = String(copyNumberResult.data);
-    const { data: copy, error: insertError } = await supabase
-      .from("sales_orders")
-      .insert({
-        organization_id: original.organization_id,
-        fiscal_entity_id: original.fiscal_entity_id,
-        client_id: original.client_id,
-        order_number: copyNumber,
-        order_date: original.order_date,
-        reference: original.reference,
-        currency: original.currency,
-        status: "draft",
-        subtotal_amount: original.subtotal_amount,
-        tax_amount: original.tax_amount,
-        retention_rate: original.retention_rate,
-        retention_amount: original.retention_amount,
-        suplido_amount: original.suplido_amount,
-        pdf_template: original.pdf_template,
-        sales_document_template_id: original.sales_document_template_id,
-        total_amount: original.total_amount,
-        notes: original.notes,
-        created_by: user.id
-      })
-      .select("id, order_number, order_date, total_amount")
-      .single();
-
-    if (insertError || !copy) {
-      return { error: insertError?.message ?? "No se pudo duplicar el pedido." };
-    }
-
-    const { data: originalLines, error: linesReadError } = await supabase
-      .from("sales_order_lines")
-      .select("organization_id, product_service_id, line_index, description, quantity, unit_price, tax_rate, retention_rate, discount_rate, line_total")
-      .eq("sales_order_id", documentId)
-      .order("line_index", { ascending: true });
-
-    if (linesReadError || !originalLines || originalLines.length === 0) {
-      await supabase.from("sales_orders").update({ deleted_at: new Date().toISOString() }).eq("id", copy.id);
-      return { error: linesReadError?.message ?? "El pedido original no tiene líneas para duplicar." };
-    }
-
-    const { error: linesError } = await supabase
-      .from("sales_order_lines")
-      .insert(originalLines.map((line) => ({ ...line, sales_order_id: copy.id })));
-
-    if (linesError) {
-      await supabase.from("sales_orders").update({ deleted_at: new Date().toISOString() }).eq("id", copy.id);
-      return { error: `No se pudieron copiar las líneas: ${linesError.message}` };
-    }
-
-    revalidatePath("/dashboard");
-    return {
-      document: {
-        id: copy.id as string,
-        number: String(copy.order_number ?? copyNumber),
-        date: String(copy.order_date ?? ""),
-        client: (original.clients as { name?: string } | null)?.name ?? "—",
-        total: Number(copy.total_amount),
-        status: "draft"
-      }
-    };
+  if (typeof id !== "string") {
+    return { error: "No se pudo confirmar el duplicado." };
   }
 
-  if (kind === "invoice") {
-    const { data: original, error: readError } = await supabase
-      .from("sales_invoices")
-      .select("organization_id, fiscal_entity_id, client_id, invoice_number, issue_date, currency, reference, subtotal_amount, tax_amount, retention_rate, retention_amount, suplido_amount, pdf_template, sales_document_template_id, total_amount, notes, clients!client_id(name)")
-      .eq("id", documentId)
-      .single();
-
-    if (readError || !original) {
-      return { error: readError?.message ?? "Factura no encontrada." };
+  revalidatePath("/dashboard");
+  return {
+    document: {
+      id,
+      number: String(row?.document_number ?? ""),
+      date: String(row?.document_date ?? ""),
+      client: String(row?.client_name ?? "—"),
+      total: Number(row?.total_amount ?? 0),
+      status: String(row?.status ?? "draft")
     }
-
-    const copyNumberResult = await supabase.rpc("next_document_number", {
-      target_organization_id: original.organization_id,
-      target_doc_type: "sales_invoice",
-      target_prefix: null
-    });
-
-    if (copyNumberResult.error || !copyNumberResult.data) {
-      return { error: copyNumberResult.error?.message ?? "No se pudo asignar numero al duplicado." };
-    }
-
-    const copyNumber = String(copyNumberResult.data);
-    const { data: copy, error: insertError } = await supabase
-      .from("sales_invoices")
-      .insert({
-        organization_id: original.organization_id,
-        fiscal_entity_id: original.fiscal_entity_id,
-        client_id: original.client_id,
-        invoice_number: copyNumber,
-        issue_date: original.issue_date,
-        currency: original.currency,
-        status: "draft",
-        subtotal_amount: original.subtotal_amount,
-        tax_amount: original.tax_amount,
-        retention_rate: original.retention_rate,
-        retention_amount: original.retention_amount,
-        suplido_amount: original.suplido_amount,
-        pdf_template: original.pdf_template,
-        sales_document_template_id: original.sales_document_template_id,
-        total_amount: original.total_amount,
-        notes: original.notes,
-        created_by: user.id
-      })
-      .select("id, invoice_number, issue_date, total_amount")
-      .single();
-
-    if (insertError || !copy) {
-      return { error: insertError?.message ?? "No se pudo duplicar la factura." };
-    }
-
-    const { data: originalLines, error: linesReadError } = await supabase
-      .from("sales_invoice_lines")
-      .select("organization_id, product_service_id, line_index, description, quantity, unit_price, tax_rate, retention_rate, discount_rate, line_total")
-      .eq("sales_invoice_id", documentId)
-      .order("line_index", { ascending: true });
-
-    if (linesReadError || !originalLines || originalLines.length === 0) {
-      await supabase.from("sales_invoices").update({ deleted_at: new Date().toISOString() }).eq("id", copy.id);
-      return { error: linesReadError?.message ?? "La factura original no tiene líneas para duplicar." };
-    }
-
-    const { error: linesError } = await supabase
-      .from("sales_invoice_lines")
-      .insert(originalLines.map((line) => ({ ...line, sales_invoice_id: copy.id })));
-
-    if (linesError) {
-      await supabase.from("sales_invoices").update({ deleted_at: new Date().toISOString() }).eq("id", copy.id);
-      return { error: `No se pudieron copiar las líneas: ${linesError.message}` };
-    }
-
-    revalidatePath("/dashboard");
-    return {
-      document: {
-        id: copy.id as string,
-        number: String(copy.invoice_number ?? copyNumber),
-        date: String(copy.issue_date ?? ""),
-        client: (original.clients as { name?: string } | null)?.name ?? "—",
-        total: Number(copy.total_amount),
-        status: "draft"
-      }
-    };
-  }
-
-  if (kind === "delivery-note") {
-    const { data: original, error: readError } = await supabase
-      .from("sales_delivery_notes")
-      .select("organization_id, fiscal_entity_id, client_id, note_number, note_date, currency, reference, subtotal_amount, tax_amount, retention_rate, retention_amount, suplido_amount, pdf_template, sales_document_template_id, total_amount, notes, clients!client_id(name, code)")
-      .eq("id", documentId)
-      .single();
-
-    if (readError || !original) {
-      return { error: readError?.message ?? "Albarán no encontrado." };
-    }
-
-    const copyNumberResult = await supabase.rpc("next_document_number", {
-      target_organization_id: original.organization_id,
-      target_doc_type: "sales_delivery_note",
-      target_prefix: null
-    });
-
-    if (copyNumberResult.error || !copyNumberResult.data) {
-      return { error: copyNumberResult.error?.message ?? "No se pudo asignar numero al duplicado." };
-    }
-
-    const copyNumber = String(copyNumberResult.data);
-    const { data: copy, error: insertError } = await supabase
-      .from("sales_delivery_notes")
-      .insert({
-        organization_id: original.organization_id,
-        fiscal_entity_id: original.fiscal_entity_id,
-        client_id: original.client_id,
-        note_number: copyNumber,
-        note_date: original.note_date,
-        reference: original.reference,
-        currency: original.currency,
-        status: "open",
-        subtotal_amount: original.subtotal_amount,
-        tax_amount: original.tax_amount,
-        retention_rate: original.retention_rate,
-        retention_amount: original.retention_amount,
-        suplido_amount: original.suplido_amount,
-        pdf_template: original.pdf_template,
-        sales_document_template_id: original.sales_document_template_id,
-        total_amount: original.total_amount,
-        notes: original.notes,
-        created_by: user.id
-      })
-      .select("id, note_number, note_date, total_amount")
-      .single();
-
-    if (insertError || !copy) {
-      return { error: insertError?.message ?? "No se pudo duplicar el albarán." };
-    }
-
-    const { data: originalLines, error: linesReadError } = await supabase
-      .from("sales_delivery_note_lines")
-      .select("organization_id, line_index, description, quantity, unit_price, tax_rate, retention_rate, discount_rate, line_total")
-      .eq("sales_delivery_note_id", documentId)
-      .order("line_index", { ascending: true });
-
-    if (linesReadError || !originalLines || originalLines.length === 0) {
-      await supabase.from("sales_delivery_notes").update({ deleted_at: new Date().toISOString() }).eq("id", copy.id);
-      return { error: linesReadError?.message ?? "El albarán original no tiene líneas para duplicar." };
-    }
-
-    const { error: linesError } = await supabase
-      .from("sales_delivery_note_lines")
-      .insert(originalLines.map((line) => ({ ...line, sales_delivery_note_id: copy.id })));
-
-    if (linesError) {
-      await supabase.from("sales_delivery_notes").update({ deleted_at: new Date().toISOString() }).eq("id", copy.id);
-      return { error: `No se pudieron copiar las líneas: ${linesError.message}` };
-    }
-
-    revalidatePath("/dashboard");
-    return {
-      document: {
-        id: copy.id as string,
-        number: String(copy.note_number ?? copyNumber),
-        date: String(copy.note_date ?? ""),
-        client: (original.clients as { name?: string } | null)?.name ?? "—",
-        total: Number(copy.total_amount),
-        status: "open"
-      }
-    };
-  }
-
-  if (kind === "recurring-invoice") {
-    const { data: original, error: readError } = await supabase
-      .from("sales_recurring_invoices")
-      .select("organization_id, fiscal_entity_id, client_id, template_number, frequency, next_issue_date, currency, reference, subtotal_amount, tax_amount, retention_rate, retention_amount, suplido_amount, pdf_template, sales_document_template_id, total_amount, notes, clients!client_id(name, code)")
-      .eq("id", documentId)
-      .single();
-
-    if (readError || !original) {
-      return { error: readError?.message ?? "Plantilla recurrente no encontrada." };
-    }
-
-    const copyNumberResult = await supabase.rpc("next_document_number", {
-      target_organization_id: original.organization_id,
-      target_doc_type: "sales_recurring_invoice",
-      target_prefix: null
-    });
-
-    if (copyNumberResult.error || !copyNumberResult.data) {
-      return { error: copyNumberResult.error?.message ?? "No se pudo asignar numero al duplicado." };
-    }
-
-    const copyNumber = String(copyNumberResult.data);
-    const { data: copy, error: insertError } = await supabase
-      .from("sales_recurring_invoices")
-      .insert({
-        organization_id: original.organization_id,
-        fiscal_entity_id: original.fiscal_entity_id,
-        client_id: original.client_id,
-        template_number: copyNumber,
-        frequency: original.frequency,
-        next_issue_date: original.next_issue_date,
-        reference: original.reference,
-        currency: original.currency,
-        status: "open",
-        subtotal_amount: original.subtotal_amount,
-        tax_amount: original.tax_amount,
-        retention_rate: original.retention_rate,
-        retention_amount: original.retention_amount,
-        suplido_amount: original.suplido_amount,
-        pdf_template: original.pdf_template,
-        sales_document_template_id: original.sales_document_template_id,
-        total_amount: original.total_amount,
-        notes: original.notes,
-        created_by: user.id
-      })
-      .select("id, template_number, next_issue_date, total_amount")
-      .single();
-
-    if (insertError || !copy) {
-      return { error: insertError?.message ?? "No se pudo duplicar la plantilla recurrente." };
-    }
-
-    const { data: originalLines, error: linesReadError } = await supabase
-      .from("sales_recurring_invoice_lines")
-      .select("organization_id, line_index, description, quantity, unit_price, tax_rate, retention_rate, discount_rate, line_total")
-      .eq("sales_recurring_invoice_id", documentId)
-      .order("line_index", { ascending: true });
-
-    if (linesReadError || !originalLines || originalLines.length === 0) {
-      await supabase.from("sales_recurring_invoices").update({ deleted_at: new Date().toISOString() }).eq("id", copy.id);
-      return { error: linesReadError?.message ?? "La plantilla recurrente original no tiene líneas para duplicar." };
-    }
-
-    const { error: linesError } = await supabase
-      .from("sales_recurring_invoice_lines")
-      .insert(originalLines.map((line) => ({ ...line, sales_recurring_invoice_id: copy.id })));
-
-    if (linesError) {
-      await supabase.from("sales_recurring_invoices").update({ deleted_at: new Date().toISOString() }).eq("id", copy.id);
-      return { error: `No se pudieron copiar las líneas: ${linesError.message}` };
-    }
-
-    revalidatePath("/dashboard");
-    return {
-      document: {
-        id: copy.id as string,
-        number: String(copy.template_number ?? copyNumber),
-        date: String(copy.next_issue_date ?? ""),
-        client: (original.clients as { name?: string } | null)?.name ?? "—",
-        total: Number(copy.total_amount),
-        status: "open"
-      }
-    };
-  }
-
-  return { error: "Tipo de documento no soportado para duplicación." };
+  };
 }
 
 export async function createSalesDeliveryNote(formData: FormData): Promise<{ error?: string; note?: { id: string; number: string; total: number } }> {
@@ -2406,72 +1998,37 @@ export async function createSalesDeliveryNote(formData: FormData): Promise<{ err
   const retentionRate = subtotalAmount > 0 ? roundMoney(retentionAmount * 100 / subtotalAmount) : 0;
   const suplidoAmount = 0;
   const totalAmount = roundMoney(subtotalAmount + taxAmount - retentionAmount + suplidoAmount);
-  const numberResult = await supabase.rpc("next_document_number", {
-    target_organization_id: organizationId,
-    target_doc_type: "sales_delivery_note",
-    target_prefix: String(formData.get("number_prefix") ?? "").trim() || null
+  const created = await createSalesDocumentTransaction(supabase, {
+    kind: "delivery-note",
+    organizationId,
+    fiscalEntityId: fiscalEntity.id,
+    clientId: clientResult.id,
+    documentDate: noteDateRaw || null,
+    numberPrefix: String(formData.get("number_prefix") ?? "").trim() || null,
+    reference: String(formData.get("reference") ?? "").trim() || null,
+    status: "open",
+    subtotalAmount,
+    taxAmount,
+    retentionRate,
+    retentionAmount,
+    suplidoAmount,
+    pdfTemplate: String(formData.get("pdf_template") ?? "standard").trim() || "standard",
+    templateId,
+    totalAmount,
+    notes: String(formData.get("notes") ?? "").trim() || null,
+    createdBy: user.id,
+    lines: lines.map((line, index) => buildSalesLineRow(organizationId, line, index))
   });
 
-  if (numberResult.error || !numberResult.data) {
-    return { error: numberResult.error?.message ?? "No se pudo asignar numero de albarán." };
-  }
-
-  const noteNumber = String(numberResult.data);
-
-  const { data, error } = await supabase
-    .from("sales_delivery_notes")
-    .insert({
-      organization_id: organizationId,
-      fiscal_entity_id: fiscalEntity.id,
-      client_id: clientResult.id,
-      note_number: noteNumber,
-      note_date: noteDateRaw || null,
-      reference: String(formData.get("reference") ?? "").trim() || null,
-      currency: "EUR",
-      status: "open",
-      subtotal_amount: subtotalAmount,
-      tax_amount: taxAmount,
-      retention_rate: retentionRate,
-      retention_amount: retentionAmount,
-      suplido_amount: suplidoAmount,
-      pdf_template: String(formData.get("pdf_template") ?? "standard").trim() || "standard",
-      sales_document_template_id: templateId,
-      total_amount: totalAmount,
-      notes: [String(formData.get("notes") ?? "").trim() || null].filter(Boolean).join("\n"),
-      created_by: user.id
-    })
-    .select("id, note_number")
-    .single();
-
-  if (error || !data) {
-    return { error: error?.message ?? "No se pudo crear el albarán." };
-  }
-
-  const noteLinesResult = await supabase
-    .from("sales_delivery_note_lines")
-    .insert(lines.map((line, index) => {
-      const { product_service_id, ...lineRow } = buildSalesLineRow(organizationId, line, index);
-
-      return {
-        ...lineRow,
-        sales_delivery_note_id: data.id,
-      };
-    }));
-
-  if (noteLinesResult.error) {
-    await supabase
-      .from("sales_delivery_notes")
-      .update({ deleted_at: new Date().toISOString() })
-      .eq("id", data.id);
-
-    return { error: noteLinesResult.error.message };
+  if (created.error || !created.document) {
+    return { error: created.error ?? "No se pudo crear el albarán." };
   }
 
   revalidatePath("/dashboard");
   return {
     note: {
-      id: data.id as string,
-      number: String(data.note_number ?? noteNumber),
+      id: created.document.id,
+      number: created.document.number,
       total: totalAmount
     }
   };
@@ -2511,73 +2068,38 @@ export async function createSalesRecurringInvoice(formData: FormData): Promise<{
   const retentionRate = subtotalAmount > 0 ? roundMoney(retentionAmount * 100 / subtotalAmount) : 0;
   const suplidoAmount = Math.max(parseAmount(formData, "suplido_amount", 0), 0);
   const totalAmount = roundMoney(subtotalAmount + taxAmount - retentionAmount + suplidoAmount);
-  const numberResult = await supabase.rpc("next_document_number", {
-    target_organization_id: organizationId,
-    target_doc_type: "sales_recurring_invoice",
-    target_prefix: String(formData.get("number_prefix") ?? "").trim() || null
+  const created = await createSalesDocumentTransaction(supabase, {
+    kind: "recurring-invoice",
+    organizationId,
+    fiscalEntityId: fiscalEntity.id,
+    clientId: clientResult.id,
+    documentDate: nextIssueDateRaw || null,
+    numberPrefix: String(formData.get("number_prefix") ?? "").trim() || null,
+    reference: String(formData.get("reference") ?? "").trim() || null,
+    status: "open",
+    subtotalAmount,
+    taxAmount,
+    retentionRate,
+    retentionAmount,
+    suplidoAmount,
+    pdfTemplate: String(formData.get("pdf_template") ?? "standard").trim() || "standard",
+    templateId,
+    totalAmount,
+    notes: String(formData.get("notes") ?? "").trim() || null,
+    frequency,
+    createdBy: user.id,
+    lines: lines.map((line, index) => buildSalesLineRow(organizationId, line, index))
   });
 
-  if (numberResult.error || !numberResult.data) {
-    return { error: numberResult.error?.message ?? "No se pudo asignar numero de plantilla." };
-  }
-
-  const templateNumber = String(numberResult.data);
-
-  const { data, error } = await supabase
-    .from("sales_recurring_invoices")
-    .insert({
-      organization_id: organizationId,
-      fiscal_entity_id: fiscalEntity.id,
-      client_id: clientResult.id,
-      template_number: templateNumber,
-      frequency: ["weekly", "monthly", "quarterly", "annual"].includes(frequency) ? frequency : "monthly",
-      next_issue_date: nextIssueDateRaw || null,
-      reference: String(formData.get("reference") ?? "").trim() || null,
-      currency: "EUR",
-      status: "open",
-      subtotal_amount: subtotalAmount,
-      tax_amount: taxAmount,
-      retention_rate: retentionRate,
-      retention_amount: retentionAmount,
-      suplido_amount: suplidoAmount,
-      pdf_template: String(formData.get("pdf_template") ?? "standard").trim() || "standard",
-      sales_document_template_id: templateId,
-      total_amount: totalAmount,
-      notes: [String(formData.get("notes") ?? "").trim() || null].filter(Boolean).join("\n"),
-      created_by: user.id
-    })
-    .select("id, template_number")
-    .single();
-
-  if (error || !data) {
-    return { error: error?.message ?? "No se pudo crear la plantilla recurrente." };
-  }
-
-  const recurringLinesResult = await supabase
-    .from("sales_recurring_invoice_lines")
-    .insert(lines.map((line, index) => {
-      const { product_service_id, ...lineRow } = buildSalesLineRow(organizationId, line, index);
-
-      return {
-        ...lineRow,
-        sales_recurring_invoice_id: data.id,
-      };
-    }));
-
-  if (recurringLinesResult.error) {
-    await supabase
-      .from("sales_recurring_invoices")
-      .update({ deleted_at: new Date().toISOString() })
-      .eq("id", data.id);
-
-    return { error: recurringLinesResult.error.message };
+  if (created.error || !created.document) {
+    return { error: created.error ?? "No se pudo crear la plantilla recurrente." };
   }
 
   revalidatePath("/dashboard");
   return {
     recurring: {
-      id: data.id as string,
-      number: String(data.template_number ?? templateNumber),
+      id: created.document.id,
+      number: created.document.number,
       total: totalAmount
     }
   };

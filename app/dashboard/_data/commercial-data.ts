@@ -84,6 +84,7 @@ type DbSalesInvoiceRow = {
   total_amount: number;
   reference: string | null;
   sales_document_template_id: string | null;
+  sales_document_template_snapshot: Record<string, unknown> | null;
   clients: DbSalesClientSnapshot | null;
 };
 
@@ -106,6 +107,7 @@ type DbSalesQuoteRow = {
   total_amount: number;
   reference: string | null;
   sales_document_template_id: string | null;
+  sales_document_template_snapshot: Record<string, unknown> | null;
   clients: DbSalesClientSnapshot | null;
 };
 
@@ -123,6 +125,7 @@ type DbSalesOrderRow = {
   total_amount: number;
   reference: string | null;
   sales_document_template_id: string | null;
+  sales_document_template_snapshot: Record<string, unknown> | null;
   clients: DbSalesClientSnapshot | null;
 };
 
@@ -140,6 +143,7 @@ type DbSalesDeliveryNoteRow = {
   total_amount: number;
   reference: string | null;
   sales_document_template_id: string | null;
+  sales_document_template_snapshot: Record<string, unknown> | null;
   clients: DbSalesClientSnapshot | null;
 };
 
@@ -158,6 +162,7 @@ type DbSalesRecurringInvoiceRow = {
   total_amount: number;
   reference: string | null;
   sales_document_template_id: string | null;
+  sales_document_template_snapshot: Record<string, unknown> | null;
   clients: DbSalesClientSnapshot | null;
 };
 
@@ -462,7 +467,7 @@ export async function readSalesData(organizationId: string): Promise<SalesData> 
   const [invoicesResult, quotesResult, ordersResult, deliveryNotesResult, recurringInvoicesResult, clientRows, fiscalEntitiesResult, fiscalEntityClientsResult, configResult, productsResult] = await Promise.all([
     supabase
       .from("sales_invoices")
-      .select("id, client_id, invoice_number, issue_date, status, subtotal_amount, tax_amount, retention_rate, retention_amount, suplido_amount, total_amount, reference, sales_document_template_id, clients!client_id(name, code, tax_id, contact_email, contact_phone, fiscal_address, city, province, postal_code, country, apply_irpf_by_default, default_irpf_rate)")
+      .select("id, client_id, invoice_number, issue_date, status, subtotal_amount, tax_amount, retention_rate, retention_amount, suplido_amount, total_amount, reference, sales_document_template_id, sales_document_template_snapshot, clients!client_id(name, code, tax_id, contact_email, contact_phone, fiscal_address, city, province, postal_code, country, apply_irpf_by_default, default_irpf_rate)")
       .eq("organization_id", organizationId)
       .is("deleted_at", null)
       .order("issue_date", { ascending: false })
@@ -470,7 +475,7 @@ export async function readSalesData(organizationId: string): Promise<SalesData> 
       .returns<DbSalesInvoiceRow[]>(),
     supabase
       .from("sales_quotes")
-      .select("id, client_id, quote_number, quote_date, status, subtotal_amount, tax_amount, retention_rate, retention_amount, suplido_amount, total_amount, reference, sales_document_template_id, clients!client_id(name, code, tax_id, contact_email, contact_phone, fiscal_address, city, province, postal_code, country, apply_irpf_by_default, default_irpf_rate)")
+      .select("id, client_id, quote_number, quote_date, status, subtotal_amount, tax_amount, retention_rate, retention_amount, suplido_amount, total_amount, reference, sales_document_template_id, sales_document_template_snapshot, clients!client_id(name, code, tax_id, contact_email, contact_phone, fiscal_address, city, province, postal_code, country, apply_irpf_by_default, default_irpf_rate)")
       .eq("organization_id", organizationId)
       .is("deleted_at", null)
       .order("quote_date", { ascending: false })
@@ -478,7 +483,7 @@ export async function readSalesData(organizationId: string): Promise<SalesData> 
       .returns<DbSalesQuoteRow[]>(),
     supabase
       .from("sales_orders")
-      .select("id, client_id, order_number, order_date, status, subtotal_amount, tax_amount, retention_rate, retention_amount, suplido_amount, total_amount, reference, sales_document_template_id, clients!client_id(name, code, tax_id, contact_email, contact_phone, fiscal_address, city, province, postal_code, country, apply_irpf_by_default, default_irpf_rate)")
+      .select("id, client_id, order_number, order_date, status, subtotal_amount, tax_amount, retention_rate, retention_amount, suplido_amount, total_amount, reference, sales_document_template_id, sales_document_template_snapshot, clients!client_id(name, code, tax_id, contact_email, contact_phone, fiscal_address, city, province, postal_code, country, apply_irpf_by_default, default_irpf_rate)")
       .eq("organization_id", organizationId)
       .is("deleted_at", null)
       .order("order_date", { ascending: false })
@@ -486,7 +491,7 @@ export async function readSalesData(organizationId: string): Promise<SalesData> 
       .returns<DbSalesOrderRow[]>(),
     supabase
       .from("sales_delivery_notes")
-      .select("id, client_id, note_number, note_date, status, subtotal_amount, tax_amount, retention_rate, retention_amount, suplido_amount, total_amount, reference, sales_document_template_id, clients!client_id(name, code, tax_id, contact_email, contact_phone, fiscal_address, city, province, postal_code, country, apply_irpf_by_default, default_irpf_rate)")
+      .select("id, client_id, note_number, note_date, status, subtotal_amount, tax_amount, retention_rate, retention_amount, suplido_amount, total_amount, reference, sales_document_template_id, sales_document_template_snapshot, clients!client_id(name, code, tax_id, contact_email, contact_phone, fiscal_address, city, province, postal_code, country, apply_irpf_by_default, default_irpf_rate)")
       .eq("organization_id", organizationId)
       .is("deleted_at", null)
       .order("note_date", { ascending: false })
@@ -495,7 +500,7 @@ export async function readSalesData(organizationId: string): Promise<SalesData> 
       .then((r) => ({ data: r.data ?? [], error: r.error })),
     supabase
       .from("sales_recurring_invoices")
-      .select("id, client_id, template_number, next_issue_date, frequency, status, subtotal_amount, tax_amount, retention_rate, retention_amount, suplido_amount, total_amount, reference, sales_document_template_id, clients!client_id(name, code, tax_id, contact_email, contact_phone, fiscal_address, city, province, postal_code, country, apply_irpf_by_default, default_irpf_rate)")
+      .select("id, client_id, template_number, next_issue_date, frequency, status, subtotal_amount, tax_amount, retention_rate, retention_amount, suplido_amount, total_amount, reference, sales_document_template_id, sales_document_template_snapshot, clients!client_id(name, code, tax_id, contact_email, contact_phone, fiscal_address, city, province, postal_code, country, apply_irpf_by_default, default_irpf_rate)")
       .eq("organization_id", organizationId)
       .is("deleted_at", null)
       .order("next_issue_date", { ascending: true })
@@ -546,7 +551,21 @@ export async function readSalesData(organizationId: string): Promise<SalesData> 
       }
     ])
   );
-  const templateFieldsFor = (id: string | null): { templateConfig?: Record<string, unknown>; templateFormat?: "pdf" | "template" } => {
+  const templateFieldsFor = (
+    id: string | null,
+    snapshot: Record<string, unknown> | null
+  ): { templateConfig?: Record<string, unknown>; templateFormat?: "pdf" | "template" } => {
+    if (snapshot && typeof snapshot === "object") {
+      const snapshotConfig = snapshot.config && typeof snapshot.config === "object"
+        ? snapshot.config as Record<string, unknown>
+        : snapshot;
+
+      return {
+        templateConfig: snapshotConfig,
+        templateFormat: snapshot.format === "template" ? "template" : "pdf"
+      };
+    }
+
     const tpl = id ? templatesById.get(id) : undefined;
     return tpl ? { templateConfig: tpl.config, templateFormat: tpl.format } : {};
   };
@@ -561,7 +580,7 @@ export async function readSalesData(organizationId: string): Promise<SalesData> 
     ...mapSalesClientSnapshot(row.clients),
     ...mapSalesAmounts(row),
     total: Number(row.total_amount),
-    ...templateFieldsFor(row.sales_document_template_id)
+    ...templateFieldsFor(row.sales_document_template_id, row.sales_document_template_snapshot)
   }));
 
   const quotes: ArtificialSalesDocumentRow[] = (quotesResult.data ?? []).map((row) => ({
@@ -574,7 +593,7 @@ export async function readSalesData(organizationId: string): Promise<SalesData> 
     ...mapSalesClientSnapshot(row.clients),
     ...mapSalesAmounts(row),
     total: Number(row.total_amount),
-    ...templateFieldsFor(row.sales_document_template_id)
+    ...templateFieldsFor(row.sales_document_template_id, row.sales_document_template_snapshot)
   }));
 
   const orders: ArtificialSalesDocumentRow[] = (ordersResult.data ?? []).map((row) => ({
@@ -587,7 +606,7 @@ export async function readSalesData(organizationId: string): Promise<SalesData> 
     ...mapSalesClientSnapshot(row.clients),
     ...mapSalesAmounts(row),
     total: Number(row.total_amount),
-    ...templateFieldsFor(row.sales_document_template_id)
+    ...templateFieldsFor(row.sales_document_template_id, row.sales_document_template_snapshot)
   }));
 
   const deliveryNotes: ArtificialSalesDocumentRow[] = (deliveryNotesResult.data ?? []).map((row) => ({
@@ -600,7 +619,7 @@ export async function readSalesData(organizationId: string): Promise<SalesData> 
     ...mapSalesClientSnapshot(row.clients),
     ...mapSalesAmounts(row),
     total: Number(row.total_amount),
-    ...templateFieldsFor(row.sales_document_template_id)
+    ...templateFieldsFor(row.sales_document_template_id, row.sales_document_template_snapshot)
   }));
 
   const recurringInvoices: ArtificialSalesDocumentRow[] = (recurringInvoicesResult.data ?? []).map((row) => ({
@@ -613,7 +632,7 @@ export async function readSalesData(organizationId: string): Promise<SalesData> 
     ...mapSalesClientSnapshot(row.clients),
     ...mapSalesAmounts(row),
     total: Number(row.total_amount),
-    ...templateFieldsFor(row.sales_document_template_id)
+    ...templateFieldsFor(row.sales_document_template_id, row.sales_document_template_snapshot)
   }));
 
   const fiscalEntityClientIds = new Set((fiscalEntityClientsResult.data ?? []).map((row) => row.client_id));
